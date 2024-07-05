@@ -5,6 +5,8 @@ set(CMAKE_CXX_STANDARD 20)
 
 include_directories(include)
 
+find_package(gflags REQUIRED)
+
 add_subdirectory(micro-benchmarks)
 
 add_executable(grasshopper_db

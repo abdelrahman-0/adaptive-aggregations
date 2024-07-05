@@ -1,8 +1,12 @@
+#include <gflags/gflags.h>
+
 #include "network/network.h"
+#include "utils/stopwatch.h"
+#include "utils/utils.h"
+#include "storage/table.h"
 
-int main(void){
-    for(auto i=0u; i<1000; ++i){
+DEFINE_string(path, "", "path to input relation");
 
-    }
+int main(){
 
 }
