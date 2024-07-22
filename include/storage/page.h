@@ -68,7 +68,7 @@ struct alignas(page_size) Page {
         new (&(std::get<0>(columns)[num_tuples])) std::tuple(std::get<indexes>(page.columns)[row_idx]...);
     }
 
-    void clear() { memset(this, 0, sizeof(*this)); }
+    void clear() { memset(this, 0, page_size); }
 
     void fill_random() {
         std::apply([](auto&... args) { ((random_column(args)), ...); }, columns);

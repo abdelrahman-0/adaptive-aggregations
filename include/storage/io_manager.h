@@ -24,7 +24,7 @@ class IO_Manager {
     explicit IO_Manager() {
         auto res = io_uring_queue_init(local_io_depth, &ring, 0);
         if (res != 0) {
-            throw IOUringInitError{};
+            throw IOUringInitError{res};
         }
     }
 
@@ -32,8 +32,9 @@ class IO_Manager {
 
     template <std::size_t N>
     void register_file(const std::array<int, N>& fd) {
-        if (io_uring_register_files(&ring, &fd, N) != 0) {
-            throw IOUringRegisterFileError{};
+        int ret;
+        if ((ret = io_uring_register_files(&ring, &fd, N)) != 0) {
+            throw IOUringRegisterFileError{ret};
         }
     }
 

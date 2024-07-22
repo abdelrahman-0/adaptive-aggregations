@@ -1,27 +1,27 @@
 #pragma once
 
+#include <sys/sysinfo.h>
+
 class PolicyAlwaysSpill {
-public:
-    static bool spill() {
-        return true;
-    }
+  public:
+    static bool spill() { return true; }
 };
 
 class PolicyNeverSpill {
-public:
-    static bool spill() {
-        return false;
-    }
+  public:
+    static bool spill() { return false; }
 };
 
 static bool spilled = false;
-class PolicySpill {
-public:
+class PolicyMainMemoryFullSpill {
+  public:
     static bool spill() {
-        if(spilled){
+        if (spilled) {
             return true;
         }
-        if(/* TODO check condition */ true){
+        struct ::sysinfo mem_info {};
+        ::sysinfo(&mem_info);
+        if (mem_info.freeram < 1'000'000'000) {
             spilled = true;
             return true;
         }

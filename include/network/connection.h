@@ -2,6 +2,7 @@
 
 #include <arpa/inet.h>
 #include <cstring>
+#include <liburing.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -15,66 +16,140 @@
 static constexpr auto communication_port = defaults::port;
 static char ip_buffer[INET_ADDRSTRLEN];
 
+static auto get_connection_hints(bool use_ipv6 = false) {
+    ::addrinfo hints{};
+    ::memset(&hints, 0, sizeof(addrinfo));
+    hints.ai_family = use_ipv6 ? AF_INET6 : AF_INET; // use IPv4/IPv6
+    hints.ai_socktype = SOCK_STREAM;                 // TCP
+    hints.ai_flags = AI_PASSIVE | AI_NUMERICHOST;    // use my IP
+    return hints;
+}
+
 // template <custom_concepts::Can_Send_Recv T>
-class Connection {
-  private:
-    std::size_t num_receivers{0};
-    std::size_t num_senders{0};
+struct Connection {
+    std::size_t num_connections{0};
     std::vector<int> socket_fds{};
 
-  public:
-    static auto get_connection_hints() {
-        addrinfo hints{};
-        memset(&hints, 0, sizeof(addrinfo));
-        hints.ai_family = AF_INET;                    // use IPv4
-        hints.ai_socktype = SOCK_STREAM;              // TCP
-        hints.ai_flags = AI_PASSIVE | AI_NUMERICHOST; // use my IP
-        return hints;
-    }
-    explicit Connection(int num_receivers, int num_senders = 0u)
-        : num_receivers(num_receivers), num_senders(num_senders), socket_fds(num_receivers, -1) {}
+    Connection() = default;
+    explicit Connection(std::integral auto num_connections)
+        : num_connections(num_connections), socket_fds(num_connections, -1) {}
 
-    void setup() {
-        if (num_receivers == 0 && num_senders == 0)
+    // outgoing connections
+    void setup_egress() {
+        if (num_connections == 0)
             return;
-        int rv;
+        int ret;
         auto hints = get_connection_hints();
-        for (auto i = 0u; i < num_receivers; ++i) {
+        for (auto i = 0u; i < num_connections; ++i) {
+
             // setup connection structs
             auto receiver_ip = std::string{defaults::subnet} + std::to_string(defaults::receiver_host_base + i);
-            println<' '>("connecting to", receiver_ip, "...");
+            //            auto receiver_ip = "::1"s;
+            println("connecting to", receiver_ip, "...");
             addrinfo* peer;
-            if ((rv = getaddrinfo(receiver_ip.c_str(), communication_port, &hints, &peer)) != 0) {
-                throw NetworkPrepareAddressError(rv);
+            if ((ret = ::getaddrinfo(receiver_ip.c_str(), communication_port, &hints, &peer)) != 0) {
+                throw NetworkPrepareAddressError{ret};
             }
 
             // find first valid peer address
             for (auto rp = peer; rp != nullptr; rp = rp->ai_next) {
-                socket_fds[i] = socket(peer->ai_family, peer->ai_socktype, peer->ai_protocol);
+                socket_fds[i] = ::socket(peer->ai_family, peer->ai_socktype, peer->ai_protocol);
                 if (socket_fds[i] == -1) {
-                    close(socket_fds[i]);
+                    ::close(socket_fds[i]);
                     continue;
                 }
+
+                socklen_t size = sizeof(defaults::kernel_send_buffer_size);
+                if (::setsockopt(socket_fds[i], SOL_SOCKET, SO_RCVBUF, &defaults::kernel_recv_buffer_size, size) ==
+                    -1) {
+                    throw NetworkSocketOptError{};
+                }
+                println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+
+                auto double_kernel_send_buffer_size{0u};
+                ::getsockopt(socket_fds[i], SOL_SOCKET, SO_RCVBUF, &double_kernel_send_buffer_size, &size);
+                println("size of recv buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+
+                ::linger sl;
+                sl.l_onoff = 1; /* non-zero value enables linger option in kernel */
+                sl.l_linger = 2;
+                setsockopt(socket_fds[i], SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
+
                 break;
             }
 
             // connect to peer
-            if ((rv = connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen)) != 0) {
+            if ((ret = connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen)) != 0) {
                 auto* ipv4 = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
-                inet_ntop(peer->ai_family, &(ipv4->sin_addr), ip_buffer, sizeof(ip_buffer));
+                ::inet_ntop(peer->ai_family, &(ipv4->sin_addr), ip_buffer, sizeof(ip_buffer));
                 throw NetworkConnectionError(ip_buffer);
             }
 
             // free addrinfo linked list
-            freeaddrinfo(peer);
+            ::freeaddrinfo(peer);
         }
     }
 
-    [[nodiscard]] auto& get_socket_fds() const { return socket_fds; }
+    // incoming connections
+    void setup_ingress() {
+        int ret;
+        ::addrinfo* local;
+        auto hints = get_connection_hints();
+        if ((ret = ::getaddrinfo(nullptr, communication_port, &hints, &local)) != 0) {
+            throw NetworkPrepareAddressError{ret};
+        }
+        auto sock_fd = ::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
+        if (sock_fd == -1) {
+            throw NetworkSocketSetupError{};
+        }
+
+        int reuse = 1;
+        if (::setsockopt(sock_fd, SOL_SOCKET, SO_REUSEADDR, &reuse, sizeof(reuse)) == -1) {
+            throw NetworkSocketOptError{};
+        }
+
+        socklen_t size = sizeof(defaults::kernel_recv_buffer_size);
+        if (::setsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &defaults::kernel_recv_buffer_size, size) == -1) {
+            throw NetworkSocketOptError{};
+        }
+        println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+
+        auto double_kernel_recv_buffer_size{0u};
+        ::getsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &double_kernel_recv_buffer_size, &size);
+        println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
+
+        if (::bind(sock_fd, local->ai_addr, local->ai_addrlen) == -1) {
+            throw NetworkSocketBindError{};
+        }
+
+        if (::listen(sock_fd, defaults::listen_queue_depth) == -1) {
+            throw NetworkSocketListenError{};
+        }
+
+        // accept an incoming connection
+        char ip[INET_ADDRSTRLEN];
+        ::inet_ntop(local->ai_family, local->ai_addr, ip, sizeof(ip));
+//        println("Listening for connections on ", std::string(ip));
+
+        // listen loop
+        for (auto i = 0u; i < num_connections; ++i) {
+            ::sockaddr_storage ingress_addr{};
+            socklen_t addr_size = sizeof(ingress_addr);
+            auto ingress_fd = ::accept(sock_fd, (sockaddr*)&ingress_addr, &addr_size);
+            if (ingress_fd < 0) {
+                throw NetworkSocketAcceptError{};
+            }
+            socket_fds[i] = ingress_fd;
+            ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip, sizeof(ip));
+            println("accepted connection from ", std::string(ip));
+        }
+        ::freeaddrinfo(local);
+    }
 
     void close_connections() {
         for (auto i : socket_fds) {
-            ::close(i);
+            //            ::close(i);
+            ::shutdown(i, SHUT_RDWR);
         }
     }
 };

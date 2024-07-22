@@ -4,17 +4,44 @@
 #include <string>
 #include <system_error>
 
-class IOUringInitError : public std::runtime_error {
+class IOUringError : public std::runtime_error {
   public:
-    IOUringInitError() : std::runtime_error("Could not initialize io_uring") {}
+    explicit IOUringError(const std::string& msg) : std::runtime_error(msg) {}
+    IOUringError(const std::string& msg, int error) : std::runtime_error(msg + " -- " + strerror(-error)) {}
 };
 
-class IOUringRegisterFileError : public std::runtime_error {
-public:
-  IOUringRegisterFileError() : std::runtime_error("Error registering file") {}
+class IOUringInitError : public IOUringError {
+  public:
+    explicit IOUringInitError(int ret) : IOUringError("Could not initialize io_uring", ret) {}
 };
 
-class IOUringSubmissionQueueFullError : public std::runtime_error {
-public:
-  IOUringSubmissionQueueFullError() : std::runtime_error("Submission queue is full") {}
+class IOUringRegisterFileError : public IOUringError {
+  public:
+    explicit IOUringRegisterFileError(int ret) : IOUringError("Error registering file", ret) {}
+};
+
+class IOUringSubmissionQueueFullError : public IOUringError {
+  public:
+    IOUringSubmissionQueueFullError() : IOUringError("Submission queue is full") {}
+};
+
+class IOUringSubmissionError : public IOUringError {
+  public:
+    IOUringSubmissionError() : IOUringError("Submission error") {}
+};
+
+class IOUringSocketError : public IOUringError {
+  public:
+    IOUringSocketError() : IOUringError("Direct socket setup error") {}
+};
+
+class IOUringConnectError : public IOUringError {
+  public:
+    explicit IOUringConnectError(const char* ip_address)
+        : IOUringError("Error connecting to " + std::string{ip_address}) {}
+};
+
+class IOUringMultiShotRecvError : public IOUringError {
+  public:
+    explicit IOUringMultiShotRecvError(int error) : IOUringError("Error submitting multishot receive request", error) {}
 };
