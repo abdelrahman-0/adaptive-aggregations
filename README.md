@@ -5,7 +5,7 @@ sudo apt-get install libgflags-dev liburing2
 
 clone:
 ```shell
-git clone --recursive repo
+git clone repo
 ```
 
 startup TODO:

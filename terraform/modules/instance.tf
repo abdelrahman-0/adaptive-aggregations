@@ -2,10 +2,10 @@ module "ec2_instance" {
   version = ">= 4.66"
   source  = "terraform-aws-modules/ec2-instance/aws"
 
-  count                  = var.num_servers
-  subnet_id              = aws_subnet.public_subnet.id
+  count     = var.num_servers
+  subnet_id = aws_subnet.public_subnet.id
   vpc_security_group_ids = [aws_security_group.security_group.id]
-  
+
   # IPs 10.0.0.0 - 10.0.0.3 are reserved
   private_ip                  = "10.0.1.${count.index + 4}"
   associate_public_ip_address = true
@@ -16,6 +16,8 @@ module "ec2_instance" {
   spot_type                   = "persistent"
   key_name                    = var.ssh_key
   ami                         = "ami-00975bcf7116d087c"
+  user_data                   = count.index == 0 ? file("${path.module}/egress.sh") : file("${path.module}/ingress.sh")
+
 
   tags = {
     Name = "Node ${count.index} (Grasshopper DB)"
