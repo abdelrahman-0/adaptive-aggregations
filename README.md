@@ -1,6 +1,4 @@
-<p style="text-align:center">
-<img src="./logos/logo.png" alt="grasshopper-db" width="200"/>
-</p>
+<img src="./logos/logo.png" alt="grasshopper-db" width="60%"/>
 
 install dependencies:
 ```shell
