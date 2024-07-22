@@ -15,21 +15,22 @@
 #include "utils/utils.h"
 
 DEFINE_uint32(egress, 1, "number of egress nodes");
-DEFINE_uint32(threads, 1, "number of threads to use");
+DEFINE_uint32(threads, 12, "number of threads to use");
 DEFINE_uint32(depth, 256, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 1'000'000, "number of pages to send via egress traffic");
+DEFINE_uint32(pages, 100'000, "number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 
 int main() {
     Connection conn{FLAGS_egress};
     conn.setup_egress();
+    Logger logger{};
 
     std::atomic<uint64_t> pages_sent{0};
     std::atomic<uint64_t> tuples_sent{0};
     std::atomic<uint64_t> actual_pages_sent{0};
     {
-        Stopwatch _{};
+        Stopwatch _{logger};
         std::vector<std::thread> threads{};
         std::atomic<uint32_t> finished_threads{0};
         for (auto i = 0u; i < FLAGS_threads; ++i) {

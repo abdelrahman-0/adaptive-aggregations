@@ -2,6 +2,7 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <tbb/global_control.h>
 #include <tbb/parallel_for.h>
+#include <thread>
 
 #include "defaults.h"
 #include "network/connection.h"
@@ -23,11 +24,11 @@ using NetworkPage = PageCommunication<ResultTuple>;
 
 // cmd line params
 DEFINE_string(path, "data/random.tbl", "path to input relation");
-DEFINE_double(cache, 1.0, "percentage of table to cache in range [0,1]");
-DEFINE_int32(nodes, 2, "total number of num_receivers (only used if policy spills)");
+DEFINE_double(cache, 1.0, "percentage of table to cache in-memory in [0.0,1.0]");
+DEFINE_int32(nodes, 2, "total number of nodes to use (additional nodes are only used if policy spills)");
 DEFINE_bool(random, false, "randomize order of cached swips");
 
- auto g = tbb::global_control(tbb::global_control::max_allowed_parallelism, 1);
+// auto g = tbb::global_control(tbb::global_control::max_allowed_parallelism, 1);
 
 struct TLS {
     IO_Manager io{};
@@ -35,15 +36,17 @@ struct TLS {
     std::vector<TablePage> buffer{defaults::local_io_depth};
     ChunkedList<ResultPage> result{};
 
-    explicit TLS(std::integral auto num_receivers, const Connection& connection) : network(num_receivers, connection) {}
+    explicit TLS(const Connection& conn) : network(conn) {}
 };
 
 int main() {
 
-    // setup connection for spilling
-    auto num_receivers = FLAGS_nodes - 1;
-    Connection connection{num_receivers};
-    connection.setup();
+    using namespace std::chrono_literals;
+
+    // setup conn_egress for spilling
+    auto num_egress = FLAGS_nodes - 1;
+    Connection conn_egress{num_egress};
+    conn_egress.setup_egress();
 
     // prepare local IO
     Table table{File{FLAGS_path, FileMode::READ}};
@@ -56,10 +59,9 @@ int main() {
     Cache cache{num_pages_cache};
     table.populate_cache(cache, io, num_pages_cache, FLAGS_random);
 
-    auto sent_pages{0u};
     // TLS resources
     {
-    tbb::enumerable_thread_specific<TLS> tls{num_receivers, connection};
+        tbb::enumerable_thread_specific<TLS> tls{conn_egress};
         // multi-threaded processing
         Stopwatch _{};
 
@@ -72,7 +74,7 @@ int main() {
 
                 auto& thread_io = tls.local().io;
                 auto& thread_result = tls.local().result;
-                auto& thread_network = tls.local().network;
+                auto& thread_network = tls.local().network.traffic;
                 auto& thread_buffer = tls.local().buffer;
 
                 ResultPage* current_result_page{nullptr};
@@ -85,7 +87,7 @@ int main() {
                 // submit io requests
                 for (auto i = range.begin(); i < middle_idx; ++i) {
                     table.read_page(thread_io, swips[i].get_page_index(),
-                                    reinterpret_cast<std::byte*>(&*thread_buffer.begin() + (i - range.begin())));
+                                    reinterpret_cast<std::byte*>(thread_buffer.data() + i - range.begin()));
                 }
 
                 // policy check (could be once-per-morsel, once-per-page or once-per-tuple)
@@ -118,7 +120,8 @@ int main() {
                                 auto dst = murmur_hash(std::get<0>(page_to_process->columns)[j]) % FLAGS_nodes;
 
                                 // send or materialize into thread-local buffers
-                                if (dst == num_receivers) {
+                                // if (dst == num_egress) {
+                                if (false) {
                                     // last partition is local
                                     if (current_result_page->is_full()) {
                                         current_result_page = thread_result.get_new_page();
@@ -126,7 +129,7 @@ int main() {
                                     current_result_page->emplace_back_transposed(j, *page_to_process);
                                 } else {
                                     // send to receiver via NetworkManager
-                                    auto dst_page = thread_network.get_page<NetworkPage>(dst);
+                                    auto dst_page = thread_network.get_page<NetworkPage>(0);
                                     dst_page->emplace_back_transposed(j, *page_to_process);
                                 }
                             }
@@ -136,11 +139,13 @@ int main() {
             },
             defaults::shuffle_partitioner);
         // drain comm buffers
-        if (num_receivers) {
-            for (auto& thread_tls : tls.range()) {
-                thread_tls.network.flush_all<NetworkPage>();
+        if (num_egress) {
+            for (auto& thread_tls : tls) {
+                thread_tls.network.traffic.flush_all<NetworkPage>();
             }
         }
-        // TODO send 'done'
     }
+    println("Sent", sent_pages, "pages");
+    println("Sent", sent_tuples, "tuples");
+    println("Sent", sent_bytes, "bytes");
 }

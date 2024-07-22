@@ -1,4 +1,5 @@
 add_subdirectory(shuffle)
+add_subdirectory(protocol)
 
 add_executable(generate_data generate_data.cpp)
 
