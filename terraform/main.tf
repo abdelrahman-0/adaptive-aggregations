@@ -1,7 +1,7 @@
 module "cluster" {
   source = "./modules"
 
-  instance_type = "t2.micro"
-  max_price     = 0.0047
+  instance_type = "c6in.metal" # t2.micro c6in.metal
+  max_price     = 2.7760
   num_servers   = 2
 }
