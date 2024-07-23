@@ -10,7 +10,7 @@
 #include "utils/utils.h"
 
 DEFINE_int32(ingress, 1, "number of ingress nodes");
-DEFINE_uint32(depth, 256, "number of io_uring entries for network I/O");
+DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
 DEFINE_uint32(buffers, 128, "number of buffers to use for multishot receive");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -45,8 +45,6 @@ int main(int argc, char* argv[]) {
                               io_uring_buf_ring_mask(FLAGS_buffers), i);
     }
     io_uring_buf_ring_advance(buf_ring, FLAGS_buffers);
-
-    //////////////////////////////////////
 
     auto sqe = io_uring_get_sqe(&ring);
     io_uring_prep_recv_multishot(sqe, 0, buffers.data(), 0, 0);

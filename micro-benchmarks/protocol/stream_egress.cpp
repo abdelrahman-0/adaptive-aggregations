@@ -15,9 +15,9 @@
 #include "utils/utils.h"
 
 DEFINE_uint32(egress, 1, "number of egress nodes");
-DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(depth, 256, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 10'000, "number of pages to send via egress traffic");
+DEFINE_uint32(pages, 1'000, "number of pages to send via egress traffic");
+DEFINE_bool(sqpoll, true, "use submission queue polling");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -27,91 +27,77 @@ int main(int argc, char* argv[]) {
     conn.setup_egress();
     Logger logger{};
 
-    std::atomic<uint64_t> pages_sent{0};
-    std::atomic<uint64_t> tuples_sent{0};
-    std::atomic<uint64_t> actual_pages_sent{0};
+    uint64_t pages_sent{0};
+    uint64_t tuples_sent{0};
     {
         Stopwatch _{logger};
-        std::vector<std::thread> threads{};
-        std::atomic<uint32_t> finished_threads{0};
-        for (auto i = 0u; i < FLAGS_threads; ++i) {
-            threads.emplace_back([&, i]() {
-                io_uring ring{};
+        io_uring ring{};
 
-                int ret;
-                if ((ret = io_uring_queue_init(FLAGS_depth, &ring, 0))) {
-                    throw IOUringInitError{ret};
-                }
-
-                if ((ret = io_uring_register_files(&ring, conn.socket_fds.data(), conn.num_connections)) < 0) {
-                    throw IOUringRegisterFileError{ret};
-                }
-
-                NetworkPage page{};
-                page.num_tuples = NetworkPage::max_num_tuples_per_page;
-                while (pages_sent.fetch_add(1) < FLAGS_pages) {
-                    page.fill_random();
-                    auto* sqe = io_uring_get_sqe(&ring);
-                    io_uring_prep_send(sqe, 0, &page, defaults::network_page_size, 0);
-                    sqe->flags |= IOSQE_FIXED_FILE;
-                    ret = io_uring_submit_and_wait(&ring, 1);
-                    assert(ret == 1);
-                    io_uring_cqe* cqe;
-                    io_uring_peek_cqe(&ring, &cqe);
-                    if (cqe->res <= 0) {
-                        throw NetworkSendError{cqe->res};
-                    }
-                    assert(cqe->res <= defaults::network_page_size);
-                    auto bytes_sent = cqe->res;
-                    io_uring_cqe_seen(&ring, cqe);
-                    while (bytes_sent != defaults::network_page_size) {
-                        println("fragmented");
-                        sqe = io_uring_get_sqe(&ring);
-                        io_uring_prep_send(sqe, 0, reinterpret_cast<std::byte*>(&page) + bytes_sent,
-                                           defaults::network_page_size - bytes_sent, 0);
-                        sqe->flags |= IOSQE_FIXED_FILE;
-                        ret = io_uring_submit_and_wait(&ring, 1);
-                        assert(ret == 1);
-                        io_uring_cqe* cqe;
-                        io_uring_peek_cqe(&ring, &cqe);
-                        if (cqe->res <= 0) {
-                            throw NetworkSendError{cqe->res};
-                        }
-                        bytes_sent += cqe->res;
-                        io_uring_cqe_seen(&ring, cqe);
-                    }
-                    // TODO finish sending page if cqe->res < defaults::network_page_size
-                    actual_pages_sent++;
-                    tuples_sent += page.num_tuples;
-                }
-
-                if (finished_threads.fetch_add(1) == FLAGS_threads - 1) {
-                    // final threads sends an empty page
-                    println("thread", i, "sending empty page");
-                    page.clear();
-                    auto* sqe = io_uring_get_sqe(&ring);
-                    io_uring_prep_send(sqe, 0, &page, defaults::network_page_size, 0);
-                    sqe->flags |= IOSQE_FIXED_FILE;
-                    ret = io_uring_submit_and_wait(&ring, 1);
-                    assert(ret == 1);
-                    io_uring_cqe* cqe;
-                    io_uring_peek_cqe(&ring, &cqe);
-                    if (cqe->res <= 0) {
-                        throw NetworkSendError{cqe->res};
-                    }
-                    assert(cqe->res > 0);
-                    io_uring_cqe_seen(&ring, cqe);
-                }
-            });
+        int ret;
+        if ((ret = io_uring_queue_init(FLAGS_depth, &ring, FLAGS_sqpoll ? IORING_SETUP_SQPOLL : 0))) {
+            throw IOUringInitError{ret};
         }
 
-        for (auto& t : threads) {
-            t.join();
+        if ((ret = io_uring_register_files(&ring, conn.socket_fds.data(), conn.num_connections)) < 0) {
+            throw IOUringRegisterFileError{ret};
         }
+
+        NetworkPage page{};
+        page.num_tuples = NetworkPage::max_num_tuples_per_page;
+        while (pages_sent < FLAGS_pages) {
+            page.fill_random();
+            auto* sqe = io_uring_get_sqe(&ring);
+            io_uring_prep_send(sqe, 0, &page, defaults::network_page_size, 0);
+            sqe->flags |= IOSQE_FIXED_FILE;
+            ret = io_uring_submit_and_wait(&ring, 1);
+            assert(ret == 1);
+            io_uring_cqe* cqe;
+            io_uring_peek_cqe(&ring, &cqe);
+            if (cqe->res <= 0) {
+                throw NetworkSendError{cqe->res};
+            }
+            assert(cqe->res <= defaults::network_page_size);
+            auto bytes_sent = cqe->res;
+            io_uring_cqe_seen(&ring, cqe);
+            while (bytes_sent != defaults::network_page_size) {
+                println("fragmented");
+                sqe = io_uring_get_sqe(&ring);
+                io_uring_prep_send(sqe, 0, reinterpret_cast<std::byte*>(&page) + bytes_sent,
+                                   defaults::network_page_size - bytes_sent, 0);
+                sqe->flags |= IOSQE_FIXED_FILE;
+                ret = io_uring_submit_and_wait(&ring, 1);
+                assert(ret == 1);
+                io_uring_cqe* cqe;
+                io_uring_peek_cqe(&ring, &cqe);
+                if (cqe->res <= 0) {
+                    throw NetworkSendError{cqe->res};
+                }
+                bytes_sent += cqe->res;
+                io_uring_cqe_seen(&ring, cqe);
+            }
+            pages_sent++;
+            tuples_sent += page.num_tuples;
+        }
+
+        // final threads sends an empty page
+        println("sending empty page");
+        page.clear();
+        auto* sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_send(sqe, 0, &page, defaults::network_page_size, 0);
+        sqe->flags |= IOSQE_FIXED_FILE;
+        ret = io_uring_submit_and_wait(&ring, 1);
+        assert(ret == 1);
+        io_uring_cqe* cqe;
+        io_uring_peek_cqe(&ring, &cqe);
+        if (cqe->res <= 0) {
+            throw NetworkSendError{cqe->res};
+        }
+        assert(cqe->res > 0);
+        io_uring_cqe_seen(&ring, cqe);
     }
 
-    logger.log("threads", FLAGS_threads);
-    logger.log("pages", actual_pages_sent);
+    logger.log("sqpoll", FLAGS_sqpoll);
+    logger.log("pages", pages_sent);
     logger.log("tuples", tuples_sent);
 
     println("egress done");
