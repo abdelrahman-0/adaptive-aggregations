@@ -17,7 +17,7 @@
 DEFINE_uint32(egress, 1, "number of egress nodes");
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(depth, 256, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 100'000, "number of pages to send via egress traffic");
+DEFINE_uint32(pages, 10'000, "number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 

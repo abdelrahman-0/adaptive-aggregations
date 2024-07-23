@@ -25,6 +25,8 @@ int main(int argc, char* argv[]) {
     bool fragmented_once = false;
     io_uring ring{};
 
+    Logger logger{};
+
     int ret;
     if ((ret = io_uring_queue_init(FLAGS_depth, &ring, 0))) {
         throw IOUringInitError{ret};
@@ -62,7 +64,7 @@ int main(int argc, char* argv[]) {
     }
 
     {
-        Stopwatch _{};
+        Stopwatch _{logger};
         int res;
         while (true) {
             auto count = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
@@ -80,7 +82,6 @@ int main(int argc, char* argv[]) {
 
                 if (cqe->res < defaults::network_page_size) {
                     auto bytes_received = cqe->res;
-                    println("fragmentation", bytes_received);
                 }
 
                 io_uring_buf_ring_add(buf_ring, buffers.data() + idx, defaults::network_page_size, idx,
@@ -92,7 +93,9 @@ int main(int argc, char* argv[]) {
     done:;
     }
 
-    //    println("using", FLAGS_threads, "threads");
-    println("received", pages_received, "pages,", tuples_received, "tuples, (fragmented:", fragmented_once, ")");
-    println("ingress done");
+    logger.log("nodes", FLAGS_ingress);
+    logger.log("pages", pages_received);
+    logger.log("tuples", tuples_received);
+
+    println("ingress multishot done");
 }
