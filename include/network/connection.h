@@ -62,15 +62,15 @@ struct Connection {
                 }
 
                 socklen_t size = sizeof(defaults::kernel_send_buffer_size);
-                if (::setsockopt(socket_fds[i], SOL_SOCKET, SO_RCVBUF, &defaults::kernel_recv_buffer_size, size) ==
+                if (::setsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &defaults::kernel_send_buffer_size, size) ==
                     -1) {
                     throw NetworkSocketOptError{};
                 }
-                println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+                println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
 
                 auto double_kernel_send_buffer_size{0u};
-                ::getsockopt(socket_fds[i], SOL_SOCKET, SO_RCVBUF, &double_kernel_send_buffer_size, &size);
-                println("size of recv buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+                ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
+                println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
 
                 ::linger sl;
                 sl.l_onoff = 1; /* non-zero value enables linger option in kernel */

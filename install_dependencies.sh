@@ -1,3 +1,7 @@
+#!/bin/bash
+
+cd ~
+
 sudo apt-get -y update
 sudo apt-get -y install g++ make cmake libgflags-dev liburing-dev libboost-all-dev
 
@@ -13,6 +17,14 @@ $(
 )
 
 # install liburing from source (for multishot receive)
+cd ~
+https://github.com/axboe/liburing.git
+cd liburing
+./configure --cc=gcc --cxx=g++
+make -j$(nproc)
+sudo make install
+
+
 
 # install hwdata tool
 

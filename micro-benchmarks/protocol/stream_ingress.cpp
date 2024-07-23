@@ -16,8 +16,8 @@
 #include "utils/utils.h"
 
 DEFINE_int32(connections, 1, "number of ingress connections");
-DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
+DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
 
 using NetworkPage = PageCommunication<int64_t>;
 
