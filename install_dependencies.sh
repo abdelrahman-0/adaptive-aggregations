@@ -1,5 +1,5 @@
 sudo apt-get -y update
-sudo apt-get -y install make cmake libgflags-dev liburing-dev libboost-all-dev
+sudo apt-get -y install g++ make cmake libgflags-dev liburing-dev libboost-all-dev
 
 # oneTBB
 $(

@@ -39,7 +39,8 @@ struct TLS {
     explicit TLS(const Connection& conn) : network(conn) {}
 };
 
-int main() {
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     using namespace std::chrono_literals;
 

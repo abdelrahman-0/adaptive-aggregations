@@ -1,6 +1,6 @@
 .PHONY: all build install
 
-BUILD_DIR=build_debug
+BUILD_DIR=build-debug
 
 all: build
 

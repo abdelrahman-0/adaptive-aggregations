@@ -15,7 +15,8 @@ DEFINE_uint32(buffers, 128, "number of buffers to use for multishot receive");
 
 using NetworkPage = PageCommunication<int64_t>;
 
-int main() {
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
     Connection conn_ingress{FLAGS_ingress};
     conn_ingress.setup_ingress();
 

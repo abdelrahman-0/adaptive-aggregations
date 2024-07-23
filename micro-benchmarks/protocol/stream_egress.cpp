@@ -15,13 +15,14 @@
 #include "utils/utils.h"
 
 DEFINE_uint32(egress, 1, "number of egress nodes");
-DEFINE_uint32(threads, 12, "number of threads to use");
+DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(depth, 256, "number of io_uring entries for network I/O");
 DEFINE_uint32(pages, 100'000, "number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 
-int main() {
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
     Connection conn{FLAGS_egress};
     conn.setup_egress();
     Logger logger{};

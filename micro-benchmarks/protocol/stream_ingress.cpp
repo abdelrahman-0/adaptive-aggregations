@@ -21,7 +21,8 @@ DEFINE_uint32(threads, 1, "number of threads to use");
 
 using NetworkPage = PageCommunication<int64_t>;
 
-int main() {
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     Connection conn_ingress{FLAGS_ingress};
     conn_ingress.setup_ingress();

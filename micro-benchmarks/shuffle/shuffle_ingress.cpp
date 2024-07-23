@@ -40,7 +40,8 @@ std::atomic<unsigned> total_num_tuples_received{0u};
 std::atomic<unsigned> total_num_bytes_received{0u};
 
 // TODO output stats in CSV format
-int main() {
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
     // setup connection
     println("Num threads:", num_threads);
     Connection conn_ingress{FLAGS_ingress};

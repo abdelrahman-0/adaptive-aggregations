@@ -4,7 +4,9 @@
 
 install dependencies:
 ```shell
-sudo apt-get install libgflags-dev liburing2
+sudo apt-get -y update
+sudo apt-get install cmake libgflags-dev liburing2
+
 ```
 
 clone:
