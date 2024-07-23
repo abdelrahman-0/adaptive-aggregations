@@ -62,7 +62,7 @@ int main(int argc, char* argv[]) {
     }
 
     {
-        Stopwatch _{logger};
+        Stopwatch _{};
         int res;
         while (true) {
             auto count = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
@@ -94,6 +94,7 @@ int main(int argc, char* argv[]) {
     logger.log("nodes", FLAGS_ingress);
     logger.log("pages", pages_received);
     logger.log("tuples", tuples_received);
+    logger.log();
 
     println("ingress multishot done");
 }

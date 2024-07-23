@@ -13,7 +13,7 @@ module "ec2_instance" {
   create_spot_instance        = var.spot_instance
   instance_type               = var.instance_type
   spot_price                  = var.max_price
-  spot_type                   = "one-time"
+  spot_type                   = "persistent"
   key_name                    = var.ssh_key
   ami                         = "ami-07652eda1fbad7432"
   user_data                   = count.index == 0 ? file("${path.module}/egress.sh") : file("${path.module}/ingress.sh")

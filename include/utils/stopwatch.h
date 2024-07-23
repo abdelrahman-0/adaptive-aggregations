@@ -6,14 +6,17 @@
 #include "utils.h"
 
 struct Stopwatch {
-    Logger& logger;
-    std::chrono::time_point<std::chrono::high_resolution_clock> start;
+    std::chrono::time_point<std::chrono::high_resolution_clock> begin;
+    uint64_t time_ms{0};
 
-    explicit Stopwatch(Logger& logger) : logger(logger) { start = std::chrono::high_resolution_clock::now(); }
+    Stopwatch() = default;
 
-    ~Stopwatch() {
-        auto diff =
-            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - start);
-        logger.log("time (ms)", diff.count());
+    ~Stopwatch() = default;
+
+    void start() { begin = std::chrono::high_resolution_clock::now(); }
+    void stop() {
+        time_ms =
+            std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - begin)
+                .count();
     }
 };

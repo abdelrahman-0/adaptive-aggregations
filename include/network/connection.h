@@ -7,6 +7,7 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <utility>
 
 #include "defaults.h"
 #include "exceptions/exceptions_network.h"
@@ -25,14 +26,17 @@ static auto get_connection_hints(bool use_ipv6 = false) {
     return hints;
 }
 
-// template <custom_concepts::Can_Send_Recv T>
+// open multiple TCP connections to a particular destination
 struct Connection {
-    std::size_t num_connections{0};
+    int32_t num_connections{0};
+    std::string connection_ip{};
     std::vector<int> socket_fds{};
 
     Connection() = default;
-    explicit Connection(std::integral auto num_connections)
-        : num_connections(num_connections), socket_fds(num_connections, -1) {}
+
+    explicit Connection(int32_t num_connections, std::string connection_ip)
+        : num_connections(num_connections), connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {
+    }
 
     // outgoing connections
     void setup_egress() {
@@ -40,14 +44,12 @@ struct Connection {
             return;
         int ret;
         auto hints = get_connection_hints();
+        println("opening", num_connections, "connections to:", connection_ip, "...");
         for (auto i = 0u; i < num_connections; ++i) {
 
             // setup connection structs
-            auto receiver_ip = std::string{defaults::subnet} + std::to_string(defaults::receiver_host_base + i);
-            //            auto receiver_ip = "::1"s;
-            println("connecting to", receiver_ip, "...");
             addrinfo* peer;
-            if ((ret = ::getaddrinfo(receiver_ip.c_str(), communication_port, &hints, &peer)) != 0) {
+            if ((ret = ::getaddrinfo(connection_ip.c_str(), communication_port, &hints, &peer)) != 0) {
                 throw NetworkPrepareAddressError{ret};
             }
 
@@ -129,7 +131,7 @@ struct Connection {
         // accept an incoming connection
         char ip[INET_ADDRSTRLEN];
         ::inet_ntop(local->ai_family, local->ai_addr, ip, sizeof(ip));
-//        println("Listening for connections on ", std::string(ip));
+        //        println("Listening for connections on ", std::string(ip));
 
         // listen loop
         for (auto i = 0u; i < num_connections; ++i) {

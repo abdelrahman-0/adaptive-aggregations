@@ -12,4 +12,10 @@ $(
   sudo cmake --install .
 )
 
+# install liburing from source (for multishot receive)
+
+# install hwdata tool
+
+# sudo dpkg --remove linux-intel-iotg-tools-common
+
 make build
