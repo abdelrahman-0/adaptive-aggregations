@@ -18,7 +18,7 @@
 // DEFINE_uint32(egress, 1, "number of egress nodes");
 DEFINE_int32(connections, 10, "number of connections to use (1 thread per connection)");
 DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
+DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -50,7 +50,7 @@ int main(int argc, char* argv[]) {
     uint64_t cqes_seen{0};
 
     NetworkPage page{};
-    std::array<io_uring_cqe*, 256> cqes{};
+    std::vector<io_uring_cqe*> cqes(FLAGS_depth * 2, nullptr);
     page.num_tuples = NetworkPage::max_num_tuples_per_page;
     int next_conn{0};
 
