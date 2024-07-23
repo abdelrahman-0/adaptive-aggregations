@@ -9,7 +9,7 @@ sudo apt-get install libgflags-dev liburing2
 
 clone:
 ```shell
-git clone repo
+git clone https://github.com/abdelrahman-0/grasshopper-db.git
 ```
 
 startup TODO:

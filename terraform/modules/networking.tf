@@ -24,13 +24,13 @@ resource "aws_route_table" "route_table" {
   vpc_id = aws_vpc.main_vpc.id
 
   route {
-    cidr_block = "0.0.0.0/0"
-    gateway_id = aws_internet_gateway.internet_gateway.id
+    cidr_block = "10.0.0.0/16"
+    gateway_id = "local"
   }
 
   route {
-    cidr_block = "10.0.0.0/16"
-    gateway_id = "local"
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.internet_gateway.id
   }
 
   tags = {
@@ -60,6 +60,6 @@ resource "aws_vpc_security_group_ingress_rule" "allow_all_traffic_ipv4" {
 
 resource "aws_vpc_security_group_egress_rule" "allow_all_traffic_ipv4" {
   security_group_id = aws_security_group.security_group.id
-  cidr_ipv4         = "10.0.1.0/24"
+  cidr_ipv4         = "0.0.0.0/0"
   ip_protocol       = "-1" # semantically equivalent to all ports
 }
