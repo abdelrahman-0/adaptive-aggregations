@@ -17,14 +17,14 @@
 
 DEFINE_int32(connections, 1, "number of ingress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
-DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
+DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
 
 using NetworkPage = PageCommunication<int64_t>;
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    Connection conn_ingress{FLAGS_connections, ""};
+    Connection conn_ingress{FLAGS_connections};
     conn_ingress.setup_ingress();
 
     io_uring ring{};
@@ -64,7 +64,6 @@ int main(int argc, char* argv[]) {
             throw NetworkRecvError{res};
         }
         assert(res == defaults::network_page_size);
-        auto bytes_received = res;
         io_uring_cqe_seen(&ring, cqe);
         if (page.is_empty()) {
             println("finished consuming ingress");
