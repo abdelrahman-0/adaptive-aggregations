@@ -31,3 +31,8 @@ sudo make install
 # sudo dpkg --remove linux-intel-iotg-tools-common
 
 make build
+
+# increase read and write socket buffers
+sudo sysctl -w net.core.rmem_max=500000000
+sudo sysctl -w net.core.wmem_max=500000000
+sudo sysctl -p
