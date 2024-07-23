@@ -16,7 +16,7 @@
 #include "utils/utils.h"
 
 // DEFINE_uint32(egress, 1, "number of egress nodes");
-DEFINE_int32(connections, 10, "number of connections to use (1 thread per connection)");
+DEFINE_int32(connections, 1, "number of connections to use (1 thread per connection)");
 DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
 DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
