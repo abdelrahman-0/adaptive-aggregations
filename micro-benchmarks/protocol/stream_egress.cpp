@@ -61,9 +61,26 @@ int main(int argc, char* argv[]) {
                     if (cqe->res <= 0) {
                         throw NetworkSendError{cqe->res};
                     }
-                    assert(cqe->res == defaults::network_page_size);
-                    // TODO finish sending page if cqe->res < defaults::network_page_size
+                    assert(cqe->res <= defaults::network_page_size);
+                    auto bytes_sent = cqe->res;
                     io_uring_cqe_seen(&ring, cqe);
+                    while (bytes_sent != defaults::network_page_size) {
+                        println("fragmented");
+                        sqe = io_uring_get_sqe(&ring);
+                        io_uring_prep_send(sqe, 0, reinterpret_cast<std::byte*>(&page) + bytes_sent,
+                                           defaults::network_page_size - bytes_sent, 0);
+                        sqe->flags |= IOSQE_FIXED_FILE;
+                        ret = io_uring_submit_and_wait(&ring, 1);
+                        assert(ret == 1);
+                        io_uring_cqe* cqe;
+                        io_uring_peek_cqe(&ring, &cqe);
+                        if (cqe->res <= 0) {
+                            throw NetworkSendError{cqe->res};
+                        }
+                        bytes_sent += cqe->res;
+                        io_uring_cqe_seen(&ring, cqe);
+                    }
+                    // TODO finish sending page if cqe->res < defaults::network_page_size
                     actual_pages_sent++;
                     tuples_sent += page.num_tuples;
                 }
@@ -93,7 +110,9 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    println("using", FLAGS_threads, "threads");
-    println("sent", actual_pages_sent, "pages,", tuples_sent, "tuples");
+    logger.log("threads", FLAGS_threads);
+    logger.log("pages", actual_pages_sent);
+    logger.log("tuples", tuples_sent);
+
     println("egress done");
 }
