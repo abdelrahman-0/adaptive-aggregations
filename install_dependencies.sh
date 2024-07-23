@@ -11,3 +11,5 @@ $(
   cmake --build . &&
   sudo cmake --install .
 )
+
+make build
