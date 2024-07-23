@@ -1,8 +1,8 @@
-.PHONY: install
+.PHONY: all build install
 
 BUILD_DIR=build_debug
 
-all: install
+all: build
 
 install:
 	./install_dependencies
