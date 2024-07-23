@@ -7,7 +7,7 @@ module "ec2_instance" {
   vpc_security_group_ids = [aws_security_group.security_group.id]
 
   # IPs 10.0.0.0 - 10.0.0.3 are reserved
-  private_ip                  = "10.0.1.${count.index + 4}"
+  private_ip                  = "10.0.0.${count.index + 4}"
   associate_public_ip_address = true
   name                        = "grasshopper-db-cluster-node_${count.index}"
   create_spot_instance        = true
