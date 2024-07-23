@@ -4,6 +4,12 @@ variable "max_price" {
   default     = 0.8
 }
 
+variable "spot_instance" {
+  description = "Whether to use a spot instance or not"
+  type        = bool
+  default     = "true"
+}
+
 variable "instance_type" {
   description = "Type of EC2 instance"
   type        = string

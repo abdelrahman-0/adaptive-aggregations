@@ -10,10 +10,10 @@ module "ec2_instance" {
   private_ip                  = "10.0.0.${count.index + 4}"
   associate_public_ip_address = true
   name                        = "grasshopper-db-cluster-node_${count.index}"
-  create_spot_instance        = true
+  create_spot_instance        = var.spot_instance
   instance_type               = var.instance_type
   spot_price                  = var.max_price
-  spot_type                   = "persistent"
+  spot_type                   = "one-time"
   key_name                    = var.ssh_key
   ami                         = "ami-00975bcf7116d087c"
   user_data                   = count.index == 0 ? file("${path.module}/egress.sh") : file("${path.module}/ingress.sh")
