@@ -17,3 +17,4 @@ git clone https://github.com/abdelrahman-0/grasshopper-db.git
 startup TODO:
 
 set `/proc/sys/net/core/rmem_max` to be large enough (e.g. 1<<28)
+set `/proc/sys/net/core/wmem_max` to be large enough (e.g. 1<<28)
