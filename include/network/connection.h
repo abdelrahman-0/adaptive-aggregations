@@ -35,6 +35,7 @@ struct Connection {
     Connection() = default;
 
     explicit Connection(int32_t num_connections) : num_connections(num_connections), socket_fds(num_connections, -1) {}
+
     Connection(int32_t num_connections, std::string connection_ip)
         : num_connections(num_connections), connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {}
 

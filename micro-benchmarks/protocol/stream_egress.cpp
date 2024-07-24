@@ -15,11 +15,11 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-// DEFINE_uint32(egress, 1, "number of egress nodes");
 DEFINE_int32(connections, 1, "number of egress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
 DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
+DEFINE_uint32(pages, 1'000'000, "total number of pages to send via egress traffic");
+DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -61,10 +61,12 @@ int main(int argc, char* argv[]) {
         io_uring_prep_send(sqe, next_conn, &page, defaults::network_page_size, 0);
         sqe->flags |= IOSQE_FIXED_FILE;
         io_uring_submit(&ring);
-        auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), FLAGS_depth * 2);
+        auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
         for (auto i{0u}; i < peeked; ++i) {
             if (cqes[i]->res <= 0) {
                 throw NetworkSendError{cqes[i]->res};
+            } else if (cqes[i]->res < defaults::network_page_size) {
+                println(cqes[i]->res);
             }
             assert(cqes[i]->res == defaults::network_page_size);
         }
@@ -102,7 +104,10 @@ int main(int argc, char* argv[]) {
     swatch.stop();
 
     Logger logger{};
+    logger.log("traffic", "egress"s);
+    logger.log("implementation", "io_uring"s);
     logger.log("sqpoll", FLAGS_sqpoll);
+    logger.log("fixed fds", FLAGS_fixed);
     logger.log("connections", FLAGS_connections);
     logger.log("page_size", defaults::network_page_size);
     logger.log("pages", pages_sent);

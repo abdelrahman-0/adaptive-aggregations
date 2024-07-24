@@ -49,7 +49,7 @@ void println(const Ts&... args) {
 }
 
 template <char delimiter = ' ', typename... Ts>
-void __log(const Ts&... args) {
+void logln(const Ts&... args) {
     __print<delimiter>(std::cerr /* unbuffered */, args...);
     std::cerr << '\n';
 }

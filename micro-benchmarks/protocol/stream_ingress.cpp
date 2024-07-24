@@ -18,6 +18,7 @@
 DEFINE_int32(connections, 1, "number of ingress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
 DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
+DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -44,7 +45,7 @@ int main(int argc, char* argv[]) {
     NetworkPage page{};
 
     int32_t res;
-    io_uring_cqe* cqe{};
+    io_uring_cqe* cqe{nullptr};
     int32_t next_conn{0};
     uint32_t done_conn{0};
 
@@ -77,12 +78,15 @@ int main(int argc, char* argv[]) {
     swatch.stop();
 
     Logger logger{};
+    logger.log("traffic", "ingress"s);
+    logger.log("implementation", "io_uring"s);
     logger.log("sqpoll", FLAGS_sqpoll);
+    logger.log("fixed fds", FLAGS_fixed);
     logger.log("connections", FLAGS_connections);
     logger.log("page_size", defaults::network_page_size);
     logger.log("pages", pages_received);
     logger.log("tuples", tuples_received);
-    logger.log("time (s)", swatch.time_ms);
+    logger.log("time (ms)", swatch.time_ms);
     logger.log("bandwidth (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
 
     println("ingress done");
