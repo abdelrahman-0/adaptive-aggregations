@@ -3,7 +3,7 @@
 cd ~
 
 sudo apt-get -y update
-sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev
+sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf
 
 # oneTBB
 cd /tmp &&
