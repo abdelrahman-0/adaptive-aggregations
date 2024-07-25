@@ -18,7 +18,7 @@
 DEFINE_int32(connections, 1, "number of egress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
 DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 1'000'000, "total number of pages to send via egress traffic");
+DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
 DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -57,6 +57,7 @@ int main(int argc, char* argv[]) {
     // send loop
     swatch.start();
     while (pages_sent < FLAGS_pages) {
+        // TODO send multple pages and submit and wait
         auto* sqe = io_uring_get_sqe(&ring);
         io_uring_prep_send(sqe, next_conn, &page, defaults::network_page_size, 0);
         sqe->flags |= IOSQE_FIXED_FILE;
@@ -67,6 +68,7 @@ int main(int argc, char* argv[]) {
                 throw NetworkSendError{cqes[i]->res};
             } else if (cqes[i]->res < defaults::network_page_size) {
                 println(cqes[i]->res);
+                // TODO handle case
             }
             assert(cqes[i]->res == defaults::network_page_size);
         }

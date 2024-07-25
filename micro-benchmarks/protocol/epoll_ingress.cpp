@@ -95,6 +95,7 @@ int main(int argc, char* argv[]) {
             pages_received++;
             tuples_received += page.num_tuples;
         }
+        io_uring_cq_advance(&ring, peeked);
     }
     swatch.stop();
 

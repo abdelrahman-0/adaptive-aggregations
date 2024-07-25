@@ -1,0 +1,109 @@
+#include <gflags/gflags.h>
+#include <tbb/enumerable_thread_specific.h>
+#include <tbb/global_control.h>
+#include <tbb/parallel_for.h>
+#include <thread>
+
+#include "defaults.h"
+#include "network/connection.h"
+#include "network/network_manager.h"
+#include "storage/chunked_list.h"
+#include "storage/policy.h"
+#include "storage/table.h"
+#include "utils/hash.h"
+#include "utils/logger.h"
+#include "utils/stopwatch.h"
+#include "utils/utils.h"
+
+DEFINE_int32(connections, 1, "number of ingress connections");
+DEFINE_bool(sqpoll, true, "use submission queue polling");
+DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
+DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
+
+using NetworkPage = PageCommunication<int64_t>;
+
+int main(int argc, char* argv[]) {
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    Connection conn_ingress{FLAGS_connections};
+    conn_ingress.setup_ingress();
+
+    // thread-uring pool
+    std::vector<std::thread> threads{};
+    std::vector<io_uring> rings(FLAGS_connections);
+    std::atomic<bool> wait{true};
+    std::atomic<uint64_t> pages_received{0};
+    std::atomic<uint64_t> tuples_received{0};
+
+    // pre-register 1 socket fd per rig
+    for (auto i{0u}; i < FLAGS_connections; ++i) {
+        auto& ring = rings[i];
+        int ret;
+        if ((ret = io_uring_queue_init(FLAGS_depth, &ring, FLAGS_sqpoll ? IORING_SETUP_SQPOLL : 0))) {
+            throw IOUringInitError{ret};
+        }
+
+        if ((ret = io_uring_register_files(&ring, conn_ingress.socket_fds.data() + i, 1)) < 0) {
+            throw IOUringRegisterFileError{ret};
+        }
+
+        threads.emplace_back([&ring, &wait, &pages_received, &tuples_received]() {
+            NetworkPage page{};
+            uint64_t local_pages_received{0};
+            uint64_t local_tuples_received{0};
+            int32_t res;
+            io_uring_cqe* cqe{nullptr};
+
+            while (wait)
+                ;
+            // receiver loop
+            while (true) {
+                auto* sqe = io_uring_get_sqe(&ring);
+                io_uring_prep_recv(sqe, 0, &page, defaults::network_page_size, MSG_WAITALL);
+                sqe->flags |= IOSQE_FIXED_FILE;
+                io_uring_submit_and_wait(&ring, 1);
+                cqe = nullptr;
+                io_uring_peek_cqe(&ring, &cqe);
+                if (cqe == nullptr || (res = cqe->res) == 0) {
+                    break;
+                }
+                if (res < 0) {
+                    throw NetworkRecvError{res};
+                }
+                assert(res == defaults::network_page_size);
+                io_uring_cqe_seen(&ring, cqe);
+                if (page.is_empty()) {
+                    println("finished consuming ingress");
+                    break;
+                }
+                local_pages_received++;
+                local_tuples_received += page.num_tuples;
+            }
+            pages_received += local_pages_received;
+            tuples_received += local_tuples_received;
+        });
+    }
+
+    // track metrics
+    Stopwatch swatch{};
+    swatch.start();
+    wait = false;
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    swatch.stop();
+
+    Logger logger{};
+    logger.log("traffic", "ingress"s);
+    logger.log("implementation", "io_uring"s);
+    logger.log("sqpoll", FLAGS_sqpoll);
+    logger.log("fixed fds", FLAGS_fixed);
+    logger.log("connections", FLAGS_connections);
+    logger.log("page_size", defaults::network_page_size);
+    logger.log("pages", pages_received);
+    logger.log("tuples", tuples_received);
+    logger.log("time (ms)", swatch.time_ms);
+    logger.log("bandwidth (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
+
+    println("ingress done");
+}
