@@ -14,8 +14,8 @@ static auto shuffle_partitioner = tbb::affinity_partitioner();
 
 DEFAULTS_AUTO network_io_depth = 64ul;
 DEFAULTS_AUTO network_page_size = 1ul << 14;
-DEFAULTS_AUTO kernel_recv_buffer_size = 1u << 28;
-DEFAULTS_AUTO kernel_send_buffer_size = 1u << 28;
+DEFAULTS_AUTO kernel_recv_buffer_size = 1u << 29;
+DEFAULTS_AUTO kernel_send_buffer_size = 1u << 29;
 
 // 192.168.0.30
 DEFAULTS_AUTO subnet = "192.168.0.";

@@ -16,8 +16,8 @@
 #include "utils/utils.h"
 
 DEFINE_int32(connections, 1, "number of ingress connections");
-DEFINE_bool(sqpoll, true, "use submission queue polling");
-DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
+DEFINE_bool(sqpoll, false, "use submission queue polling");
+DEFINE_uint32(depth, 64, "number of io_uring entries for network I/O");
 DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -36,53 +36,75 @@ int main(int argc, char* argv[]) {
     std::atomic<uint64_t> tuples_received{0};
 
     // pre-register 1 socket fd per rig
-    for (auto i{0u}; i < FLAGS_connections; ++i) {
-        auto& ring = rings[i];
-        int ret;
-        if ((ret = io_uring_queue_init(FLAGS_depth, &ring, FLAGS_sqpoll ? IORING_SETUP_SQPOLL : 0))) {
-            throw IOUringInitError{ret};
+    //    for (auto i{0u}; i < FLAGS_connections; ++i) {
+    int i = 0;
+    auto& ring = rings[i];
+    int ret;
+    if ((ret = io_uring_queue_init(FLAGS_depth, &ring, FLAGS_sqpoll ? IORING_SETUP_SQPOLL : 0))) {
+        throw IOUringInitError{ret};
+    }
+
+    if ((ret = io_uring_register_files(&ring, conn_ingress.socket_fds.data() + i, 1)) < 0) {
+        throw IOUringRegisterFileError{ret};
+    }
+
+    threads.emplace_back([&ring, &wait, &pages_received, &tuples_received]() {
+        std::vector<NetworkPage> pages(FLAGS_depth);
+        for (auto& page : pages) {
+            page.num_tuples = NetworkPage::max_num_tuples_per_page;
         }
+        std::vector<uint64_t> free_pages(FLAGS_depth);
+        std::iota(free_pages.begin(), free_pages.end(), 0u);
+        uint64_t local_pages_received{0};
+        uint64_t local_tuples_received{0};
+        int32_t res{0};
+        std::vector<io_uring_cqe*> cqes(FLAGS_depth * 2, nullptr);
 
-        if ((ret = io_uring_register_files(&ring, conn_ingress.socket_fds.data() + i, 1)) < 0) {
-            throw IOUringRegisterFileError{ret};
-        }
+        while (wait)
+            ;
 
-        threads.emplace_back([&ring, &wait, &pages_received, &tuples_received]() {
-            NetworkPage page{};
-            uint64_t local_pages_received{0};
-            uint64_t local_tuples_received{0};
-            int32_t res;
-            io_uring_cqe* cqe{nullptr};
-
-            while (wait)
-                ;
-            // receiver loop
-            while (true) {
+        // receiver loop
+        bool cont = true;
+        while (cont) {
+            if (!free_pages.empty()) {
                 auto* sqe = io_uring_get_sqe(&ring);
-                io_uring_prep_recv(sqe, 0, &page, defaults::network_page_size, MSG_WAITALL);
+                auto page_idx = free_pages.back();
+                io_uring_prep_recv(sqe, 0, pages.data() + page_idx, defaults::network_page_size, MSG_WAITALL);
+                sqe->user_data = page_idx;
                 sqe->flags |= IOSQE_FIXED_FILE;
-                io_uring_submit_and_wait(&ring, 1);
-                cqe = nullptr;
-                io_uring_peek_cqe(&ring, &cqe);
-                if (cqe == nullptr || (res = cqe->res) == 0) {
-                    break;
+                io_uring_submit(&ring);
+                free_pages.pop_back();
+            }
+            auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+            for (auto i{0u}; i < peeked; ++i) {
+                if (cqes[i] == nullptr or (res = cqes[i]->res) == 0) {
+                    io_uring_cqe_seen(&ring, cqes[i]);
+                    println("weird cqe");
+                    continue;
                 }
                 if (res < 0) {
                     throw NetworkRecvError{res};
                 }
                 assert(res == defaults::network_page_size);
-                io_uring_cqe_seen(&ring, cqe);
+                auto page_idx = cqes[i]->user_data;
+                auto& page = pages[page_idx];
+                io_uring_cqe_seen(&ring, cqes[i]);
                 if (page.is_empty()) {
-                    println("finished consuming ingress");
-                    break;
+                    println("saw free page", page_idx, local_pages_received);
+                    cont = false;
+                    goto done;
+                    ;
                 }
                 local_pages_received++;
                 local_tuples_received += page.num_tuples;
+                free_pages.push_back(page_idx);
             }
-            pages_received += local_pages_received;
-            tuples_received += local_tuples_received;
-        });
-    }
+        }
+    done:;
+        pages_received += local_pages_received;
+        tuples_received += local_tuples_received;
+    });
+    //    }
 
     // track metrics
     Stopwatch swatch{};

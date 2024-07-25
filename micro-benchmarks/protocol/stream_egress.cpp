@@ -57,18 +57,20 @@ int main(int argc, char* argv[]) {
     // send loop
     swatch.start();
     while (pages_sent < FLAGS_pages) {
-        // TODO send multple pages and submit and wait
         auto* sqe = io_uring_get_sqe(&ring);
         io_uring_prep_send(sqe, next_conn, &page, defaults::network_page_size, 0);
         sqe->flags |= IOSQE_FIXED_FILE;
         io_uring_submit(&ring);
         auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+//        assert(peeked == 0);
         for (auto i{0u}; i < peeked; ++i) {
-            if (cqes[i]->res <= 0) {
+            if (cqes[i] == nullptr) {
+                throw NetworkSendError{};
+            } else if (cqes[i]->res == 0) {
                 throw NetworkSendError{cqes[i]->res};
             } else if (cqes[i]->res < defaults::network_page_size) {
-                println(cqes[i]->res);
-                // TODO handle case
+                // TODO short-writes
+                println("short-write");
             }
             assert(cqes[i]->res == defaults::network_page_size);
         }
@@ -79,9 +81,13 @@ int main(int argc, char* argv[]) {
         next_conn = (next_conn + 1) % FLAGS_connections;
     }
 
-    io_uring_wait_cqe_nr(&ring, cqes.data(), FLAGS_pages - cqes_seen);
+    auto res = io_uring_wait_cqe_nr(&ring, cqes.data(), FLAGS_pages - cqes_seen);
+    assert(res == 0);
     for (auto i{0u}; i < FLAGS_pages - cqes_seen; ++i) {
-        if (cqes[i]->res <= 0) {
+        if (cqes[i] == nullptr) {
+            logln(i);
+            throw NetworkSendError{};
+        } else if (cqes[i]->res <= 0) {
             throw NetworkSendError{cqes[i]->res};
         }
         assert(cqes[i]->res == defaults::network_page_size);
@@ -90,19 +96,20 @@ int main(int argc, char* argv[]) {
 
     // send empty page as end of stream
     page.clear();
-    for (auto i{0u}; i < FLAGS_connections; ++i) {
-        auto* sqe = io_uring_get_sqe(&ring);
-        io_uring_prep_send(sqe, i, &page, defaults::network_page_size, 0);
-        sqe->flags |= IOSQE_FIXED_FILE;
-    }
-    ret = io_uring_submit_and_wait(&ring, FLAGS_connections);
-    io_uring_peek_batch_cqe(&ring, cqes.data(), FLAGS_connections);
-    for (auto i{0u}; i < FLAGS_connections; ++i) {
-        if (cqes[i]->res <= 0) {
-            throw NetworkSendError{cqes[i]->res};
-        }
-        assert(cqes[i]->res == defaults::network_page_size);
-    }
+//    for (auto i{0u}; i < FLAGS_connections; ++i) {
+//        auto* sqe = io_uring_get_sqe(&ring);
+//        io_uring_prep_send(sqe, i, &page, defaults::network_page_size, 0);
+//        sqe->flags |= IOSQE_FIXED_FILE;
+//    }
+//    ret = io_uring_submit_and_wait(&ring, FLAGS_connections);
+//    auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), FLAGS_connections);
+//    assert(peeked == FLAGS_connections);
+//    for (auto i{0u}; i < FLAGS_connections; ++i) {
+//        if (cqes[i]->res <= 0) {
+//            throw NetworkSendError{cqes[i]->res};
+//        }
+//        assert(cqes[i]->res == defaults::network_page_size);
+//    }
     swatch.stop();
 
     Logger logger{};

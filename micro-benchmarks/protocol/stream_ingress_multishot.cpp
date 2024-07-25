@@ -9,23 +9,22 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(ingress, 1, "number of ingress nodes");
+DEFINE_int32(connections, 1, "number of ingress nodes");
 DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
-DEFINE_uint32(buffers, 128, "number of buffers to use for multishot receive");
+DEFINE_uint32(buffers, 512, "number of buffers to use for multishot receive");
 
 using NetworkPage = PageCommunication<int64_t>;
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
-    Connection conn_ingress{FLAGS_ingress};
+    Connection conn_ingress{FLAGS_connections};
     conn_ingress.setup_ingress();
 
     std::atomic<uint64_t> pages_received{0};
     std::atomic<uint64_t> tuples_received{0};
-    bool fragmented_once = false;
+    NetworkPage page{};
     io_uring ring{};
-
-    Logger logger{};
+    uint64_t bytes_received{0};
 
     int ret;
     if ((ret = io_uring_queue_init(FLAGS_depth, &ring, 0))) {
@@ -46,12 +45,12 @@ int main(int argc, char* argv[]) {
     }
     io_uring_buf_ring_advance(buf_ring, FLAGS_buffers);
 
+    // prepare multi-shot
     auto sqe = io_uring_get_sqe(&ring);
     io_uring_prep_recv_multishot(sqe, 0, buffers.data(), 0, 0);
     sqe->flags |= IOSQE_FIXED_FILE | IOSQE_BUFFER_SELECT;
     sqe->buf_group = 0;
     std::array<io_uring_cqe*, 128> cqes{};
-    auto i = 0u;
 
     auto num_submitted = io_uring_submit(&ring);
     assert(num_submitted == 1);
@@ -61,40 +60,57 @@ int main(int argc, char* argv[]) {
         throw IOUringMultiShotRecvError{cqe->res};
     }
 
-    {
-        Stopwatch _{};
-        int res;
-        while (true) {
-            auto count = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
-            for (i = 0; i < count; i++) {
-                cqe = cqes[i];
-                if (cqe->res < 0) {
-                    throw NetworkRecvError{cqe->res};
-                }
+    Stopwatch swatch{};
+    swatch.start();
+    int res;
+    while (true) {
+        auto count = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+        for (auto i{0u}; i < count; i++) {
+            // TODO add overflow check
+            cqe = cqes[i];
+            if (cqe->res < 0) {
+                throw NetworkRecvError{cqe->res};
+            }
+            if (cqe->res == 0) {
+                goto done;
+            }
 
-                if (!(cqe->flags & IORING_CQE_F_MORE) || cqe->res == 0) {
-                    goto done;
-                }
+            auto idx = cqe->flags >> 16;
 
-                auto idx = cqe->flags >> 16;
+            if (cqe->res <= defaults::network_page_size) {
+                bytes_received += cqe->res;
+            }
 
-                if (cqe->res < defaults::network_page_size) {
-                    auto bytes_received = cqe->res;
-                }
-
-                io_uring_buf_ring_add(buf_ring, buffers.data() + idx, defaults::network_page_size, idx,
-                                      io_uring_buf_ring_mask(FLAGS_buffers), 0);
-                io_uring_buf_ring_advance(buf_ring, 1);
-                io_uring_cq_advance(&ring, 1);
+            io_uring_buf_ring_add(buf_ring, buffers.data() + idx, defaults::network_page_size, idx,
+                                  io_uring_buf_ring_mask(FLAGS_buffers), 0);
+            io_uring_buf_ring_advance(buf_ring, 1);
+            io_uring_cqe_seen(&ring, cqe);
+            if (!(cqe->flags & IORING_CQE_F_MORE)) {
+                sqe = io_uring_get_sqe(&ring);
+                io_uring_prep_recv_multishot(sqe, 0, buffers.data(), 0, 0);
+                sqe->flags |= IOSQE_FIXED_FILE | IOSQE_BUFFER_SELECT;
+                sqe->buf_group = 0;
+                num_submitted = io_uring_submit(&ring);
+                assert(num_submitted == 1);
             }
         }
-    done:;
+        pages_received = bytes_received / defaults::network_page_size;
+        if(pages_received == 100000){
+            break;
+        }
     }
+done:
+    swatch.stop();
 
-    logger.log("nodes", FLAGS_ingress);
+    Logger logger{};
+    logger.log("traffic", "ingress"s);
+    logger.log("implementation", "io_uring_multishot"s);
+    logger.log("connections", FLAGS_connections);
+    logger.log("page_size", defaults::network_page_size);
     logger.log("pages", pages_received);
     logger.log("tuples", tuples_received);
-    logger.log();
+    logger.log("time (ms)", swatch.time_ms);
+    logger.log("bandwidth (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
 
     println("ingress multishot done");
 }

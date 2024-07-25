@@ -56,6 +56,7 @@ class NetworkSocketAcceptError : public NetworkGenericError {
 
 class NetworkSendError : public NetworkGenericError {
   public:
+    NetworkSendError() : NetworkGenericError("Error sending data"){};
     explicit NetworkSendError(int error) : NetworkGenericError("Error sending data", error){};
 };
 
