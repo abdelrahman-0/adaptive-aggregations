@@ -67,11 +67,14 @@ struct Connection {
                     -1) {
                     throw NetworkSocketOptError{};
                 }
-                println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
 
                 auto double_kernel_send_buffer_size{0u};
                 ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
-                println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+
+                if (i == 0) {
+                    println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+                    println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+                }
 
                 ::linger sl;
                 sl.l_onoff = 1; /* non-zero value enables linger option in kernel */
@@ -81,19 +84,16 @@ struct Connection {
                 break;
             }
 
-
-
             // connect to peer
             if ((ret = connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen)) != 0) {
                 throw NetworkConnectionError(ip_buffer);
             }
 
-            sockaddr_in sin{};
-            socklen_t len = sizeof(sin);
-            ::getsockname(socket_fds[i], (struct sockaddr *)&sin, &len);
-                //handle error
             auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
             ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
+            sockaddr_in sin{};
+            socklen_t len = sizeof(sin);
+            ::getsockname(socket_fds[i], (struct sockaddr*)&sin, &len);
             println("local address", std::string(ip_buffer), ":", ::ntohs(sin.sin_port), "...");
 
             // free addrinfo linked list

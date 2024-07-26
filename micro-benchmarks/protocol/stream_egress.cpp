@@ -18,7 +18,7 @@
 DEFINE_int32(connections, 1, "number of egress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
 DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
+DEFINE_uint32(pages, 1'000'000, "total number of pages to send via egress traffic");
 DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
