@@ -12,7 +12,8 @@ build: build-debug build-release
 
 build-debug:
 	mkdir -p $(BUILD_DIR_DEBUG)
-	cd $(BUILD_DIR_DEBUG) && cmake -DCMAKE_BUILD_TYPE=Debug ..
+	cd $(BUILD_DIR_DEBUG)
+	cmake -DCMAKE_BUILD_TYPE=Debug ..
 	make stream_egress
 	make stream_ingress
 	make epoll_ingress
@@ -24,7 +25,8 @@ build-debug:
 
 build-release:
 	mkdir -p $(BUILD_DIR_RELEASE)
-	cd $(BUILD_DIR_RELEASE) && cmake -DCMAKE_BUILD_TYPE=Release ..
+	cd $(BUILD_DIR_RELEASE)
+	cmake -DCMAKE_BUILD_TYPE=Release ..
 	make stream_egress
 	make stream_ingress
 	make epoll_ingress

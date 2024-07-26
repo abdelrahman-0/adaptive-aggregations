@@ -113,7 +113,7 @@ int main(int argc, char* argv[]) {
                 }
                 bytes_received += local_bytes_received;
                 local_bytes_received = 0;
-                if (bytes_received == 10'000) {
+                if (bytes_received / defaults::network_page_size == 10'000) {
                     break;
                 }
             }

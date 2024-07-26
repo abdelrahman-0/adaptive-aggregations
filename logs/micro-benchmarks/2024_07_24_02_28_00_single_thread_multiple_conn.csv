@@ -1,4 +1,4 @@
-sqpoll,connections,page_size,pages,tuples,time (s),bandwidth (Gb/s),traffic
+sqpoll,connections,page_size,pages,tuples,time (s),throughput (Gb/s),traffic
 0,1,16384,50000,102350000,686,9.553353,ingress
 0,2,16384,50000,102350000,343,19.106706,ingress
 0,3,16384,50000,102350000,228,28.743860,ingress

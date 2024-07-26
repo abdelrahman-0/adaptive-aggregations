@@ -81,12 +81,20 @@ struct Connection {
                 break;
             }
 
+
+
             // connect to peer
             if ((ret = connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen)) != 0) {
-                auto* ipv4 = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
-                ::inet_ntop(peer->ai_family, &(ipv4->sin_addr), ip_buffer, sizeof(ip_buffer));
                 throw NetworkConnectionError(ip_buffer);
             }
+
+            sockaddr_in sin{};
+            socklen_t len = sizeof(sin);
+            ::getsockname(socket_fds[i], (struct sockaddr *)&sin, &len);
+                //handle error
+            auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
+            ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
+            println("local address", std::string(ip_buffer), ":", ::ntohs(sin.sin_port), "...");
 
             // free addrinfo linked list
             ::freeaddrinfo(peer);
@@ -130,9 +138,8 @@ struct Connection {
         }
 
         // accept an incoming connection
-        char ip[INET_ADDRSTRLEN];
-        ::inet_ntop(local->ai_family, local->ai_addr, ip, sizeof(ip));
-        //        println("Listening for connections on ", std::string(ip));
+        ::inet_ntop(local->ai_family, local->ai_addr, ip_buffer, sizeof(ip_buffer));
+        println("listening for connections on", std::string(ip_buffer), ":", communication_port, "...");
 
         // listen loop
         for (auto i = 0u; i < num_connections; ++i) {
@@ -143,8 +150,8 @@ struct Connection {
                 throw NetworkSocketAcceptError{};
             }
             socket_fds[i] = ingress_fd;
-            ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip, sizeof(ip));
-            println("accepted connection from ", std::string(ip));
+            ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip_buffer, sizeof(ip_buffer));
+            println("accepted connection from ", std::string(ip_buffer));
         }
         ::freeaddrinfo(local);
     }
