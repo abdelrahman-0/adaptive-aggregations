@@ -15,8 +15,8 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 5, "number of egress connections");
-DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
+DEFINE_int32(connections, 1, "number of egress connections");
+DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -52,26 +52,24 @@ int main(int argc, char* argv[]) {
         tuples_sent += page.num_tuples;
         next_conn = (next_conn + 1) % FLAGS_connections;
     }
-    println(bytes_sent);
-    //    assert(bytes_sent == defaults::network_page_size * FLAGS_pages);
 
     // send empty page as end of stream
-        page.clear();
-        for (auto i{0u}; i < FLAGS_connections; ++i) {
-            auto ret = ::send(conn.socket_fds[next_conn], &page, defaults::network_page_size, 0);
-            assert(ret == defaults::network_page_size);
-        }
+    page.clear();
+    for (auto i{0u}; i < FLAGS_connections; ++i) {
+        auto ret = ::send(conn.socket_fds[next_conn], &page, defaults::network_page_size, 0);
+        assert(ret == defaults::network_page_size);
+    }
     swatch.stop();
 
     Logger logger{};
     logger.log("traffic", "egress"s);
-    logger.log("implementation", "io_uring"s);
+    logger.log("primitive", "send"s);
+    logger.log("implementation", "sync"s);
+    logger.log("threads", 1);
     logger.log("connections", FLAGS_connections);
     logger.log("page_size", defaults::network_page_size);
     logger.log("pages", pages_sent);
     logger.log("tuples", tuples_sent);
     logger.log("time (ms)", swatch.time_ms);
-    logger.log("bandwidth (Gb/s)", (pages_sent * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
-
-    println("egress done");
+    logger.log("throughput (Gb/s)", (pages_sent * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
 }

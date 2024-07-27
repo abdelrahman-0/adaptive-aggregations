@@ -15,8 +15,7 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 10, "number of ingress connections");
-DEFINE_uint32(buffers, 1, "number of buffer pages");
+DEFINE_int32(connections, 1, "number of ingress connections");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -38,10 +37,9 @@ int main(int argc, char* argv[]) {
     for (auto i{0u}; i < FLAGS_connections; ++i) {
 
         threads.emplace_back([i, &conn, &wait, &pages_received, &tuples_received]() {
-            std::vector<NetworkPage> pages(FLAGS_buffers);
+            NetworkPage page{};
             uint64_t local_pages_received{0};
             uint64_t local_tuples_received{0};
-            uint64_t unprocessed_bytes{0};
             ::ssize_t res{0};
 
             while (wait)
@@ -49,28 +47,16 @@ int main(int argc, char* argv[]) {
 
             // receiver loop
             while (true) {
-                unprocessed_bytes = 0;
-                do {
-                    res = ::recv(conn.socket_fds[i], reinterpret_cast<std::byte*>(pages.data()) + unprocessed_bytes,
-                                 defaults::network_page_size * FLAGS_buffers - unprocessed_bytes, MSG_WAITALL);
-                    if (res == -1) {
-                        throw NetworkRecvError{};
-                    }
-                    unprocessed_bytes += res;
-                    // read whole pages
-                } while (unprocessed_bytes % defaults::network_page_size != 0);
-                for (auto bytes_processed{0u}; bytes_processed < unprocessed_bytes;
-                     bytes_processed += defaults::network_page_size) {
-                    auto& page = pages[bytes_processed / defaults::network_page_size];
-                    if (page.num_tuples == 0) {
-                        goto done;
-                    }
-                    local_tuples_received += page.num_tuples;
-                    local_pages_received++;
+                res = ::recv(conn.socket_fds[i], &page, defaults::network_page_size, MSG_WAITALL);
+                if (res == -1) {
+                    throw NetworkRecvError{};
                 }
-                if (res == 0) {
+                if (page.is_empty() || res == 0) {
                     goto done;
                 }
+                assert(res == defaults::network_page_size);
+                local_pages_received++;
+                local_tuples_received += page.num_tuples;
             }
         done:;
             pages_received += local_pages_received;
@@ -98,6 +84,4 @@ int main(int argc, char* argv[]) {
     logger.log("tuples", tuples_received);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("bandwidth (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
-
-    println("ingress done");
 }

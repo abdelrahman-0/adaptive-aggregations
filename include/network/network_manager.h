@@ -7,9 +7,9 @@
 #include "exceptions/exceptions_io_uring.h"
 #include "storage/page.h"
 
-static std::atomic<std::size_t> sent_pages{0u};
-static std::atomic<std::size_t> sent_tuples{0u};
-static std::atomic<std::size_t> sent_bytes{0u};
+static std::atomic<std::size_t> pages_sent{0u};
+static std::atomic<std::size_t> tuples_sent{0u};
+static std::atomic<std::size_t> bytes_sent{0u};
 
 static constexpr auto num_pages_per_node = 10u;
 
@@ -77,7 +77,7 @@ struct Traffic {
                         (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples);
                 }
                 (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples = 0;
-                sent_bytes += cqes[i]->res;
+                bytes_sent += cqes[i]->res;
                 if (cqes[i]->res < 0) {
                     throw NetworkSendError{cqes[i]->res};
                 }
@@ -107,8 +107,8 @@ struct Traffic {
         io_uring_prep_send(sqe, destination, current_page, defaults::network_page_size, 0);
         sqe->flags |= IOSQE_FIXED_FILE;
         sqe->user_data = comm_current_page[destination];
-        sent_pages++;
-        sent_tuples += current_page->num_tuples;
+        pages_sent++;
+        tuples_sent += current_page->num_tuples;
         auto num_submitted = io_uring_submit(&ring);
         assert(num_submitted == 1);
         in_flight++;
@@ -127,7 +127,7 @@ struct Traffic {
         while (in_flight > 0) {
             io_uring_peek_cqe(&ring, cqes.data());
             assert(cqes[0]->res == defaults::network_page_size);
-            sent_bytes += cqes[0]->res;
+            bytes_sent += cqes[0]->res;
             io_uring_cqe_seen(&ring, cqes[0]);
             in_flight -= 1;
         }

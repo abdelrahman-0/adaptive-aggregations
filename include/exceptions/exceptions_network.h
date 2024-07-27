@@ -62,5 +62,6 @@ class NetworkSendError : public NetworkGenericError {
 
 class NetworkRecvError : public NetworkGenericError {
   public:
+    NetworkRecvError() : NetworkGenericError("Error receiving data"){};
     explicit NetworkRecvError(int error) : NetworkGenericError("Error receiving data", error){};
 };

@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    println("Sent", sent_pages, "pages");
-    println("Sent", sent_tuples, "tuples");
-    println("Sent", sent_bytes, "bytes");
+    println("Sent", pages_sent, "pages");
+    println("Sent", tuples_sent, "tuples");
+    println("Sent", bytes_sent, "bytes");
 }

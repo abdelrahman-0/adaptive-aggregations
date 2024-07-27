@@ -34,10 +34,14 @@ struct Connection {
 
     Connection() = default;
 
-    explicit Connection(int32_t num_connections) : num_connections(num_connections), socket_fds(num_connections, -1) {}
+    explicit Connection(int32_t num_connections) : num_connections(num_connections), socket_fds(num_connections, -1) {
+        println("opening", num_connections, "connections ...");
+    }
 
     Connection(int32_t num_connections, std::string connection_ip)
-        : num_connections(num_connections), connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {}
+        : num_connections(num_connections), connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {
+        println("opening", num_connections, "connections ...");
+    }
 
     // outgoing connections
     void setup_egress() {
@@ -47,7 +51,6 @@ struct Connection {
         auto hints = get_connection_hints();
         println("opening", num_connections, "connections to:", connection_ip, "...");
         for (auto i = 0u; i < num_connections; ++i) {
-
             // setup connection structs
             addrinfo* peer;
             if ((ret = ::getaddrinfo(connection_ip.c_str(), communication_port, &hints, &peer)) != 0) {

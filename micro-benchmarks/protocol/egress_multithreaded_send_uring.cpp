@@ -15,21 +15,24 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of egress connections");
-DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
+DEFINE_int32(connections, 10, "number of egress connections");
+DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 
-inline void send_page(NetworkPage& page, int dst_fd) {
+void send_page(NetworkPage& page, int dst_fd) {
     ::ssize_t page_bytes_sent = 0;
-    do {
-        page_bytes_sent += ::send(dst_fd, reinterpret_cast<std::byte*>(&page) + page_bytes_sent,
-                                  defaults::network_page_size - page_bytes_sent, 0);
-
-        if (page_bytes_sent == -1) {
-            throw NetworkSendError{};
-        }
-    } while (page_bytes_sent != defaults::network_page_size);
+    //    do {
+    //        page_bytes_sent += ::send(dst_fd, reinterpret_cast<std::byte*>(&page) + page_bytes_sent,
+    //                                  defaults::network_page_size - page_bytes_sent, 0);
+    //
+    //        if (page_bytes_sent == -1) {
+    //            throw NetworkSendError{};
+    //        }
+    //    } while (page_bytes_sent != defaults::network_page_size);
+    page_bytes_sent = ::send(dst_fd, reinterpret_cast<std::byte*>(&page) + page_bytes_sent,
+                             defaults::network_page_size - page_bytes_sent, MSG_WAITALL);
+    assert(page_bytes_sent == defaults::network_page_size);
 }
 
 int main(int argc, char* argv[]) {
@@ -42,21 +45,21 @@ int main(int argc, char* argv[]) {
 
     // thread pool
     std::vector<std::thread> threads{};
+    std::atomic<uint64_t> threads_done{0};
     std::atomic<bool> wait{true};
 
     // track metrics
     std::atomic<uint64_t> pages_sent{0};
-    std::atomic<uint64_t> pages_sent_actual{0};
+    std::atomic<uint64_t> actual_pages_sent{0};
     std::atomic<uint64_t> tuples_sent{0};
 
     for (auto i{0u}; i < FLAGS_connections; ++i) {
-        threads.emplace_back([&pages_sent_actual, &wait, &pages_sent, &tuples_sent, dst_fd = conn.socket_fds[i]]() {
+        threads.emplace_back([&actual_pages_sent, &wait, &pages_sent, &threads_done, dst_fd = conn.socket_fds[i]]() {
             NetworkPage page{};
             page.num_tuples = NetworkPage::max_num_tuples_per_page;
 
             // local metrics
             uint64_t local_pages_sent{0};
-            uint64_t local_tuples_sent{0};
 
             while (wait)
                 ;
@@ -64,13 +67,11 @@ int main(int argc, char* argv[]) {
             while (pages_sent.fetch_add(1) < FLAGS_pages) {
                 send_page(page, dst_fd);
                 local_pages_sent++;
-                local_tuples_sent += page.num_tuples;
             }
-            // send empty page to mark End-Of-Stream
+            actual_pages_sent += local_pages_sent;
             page.clear();
             send_page(page, dst_fd);
-            pages_sent_actual += local_pages_sent;
-            tuples_sent += local_tuples_sent;
+            threads_done++;
         });
     }
 
@@ -78,21 +79,22 @@ int main(int argc, char* argv[]) {
     Stopwatch swatch{};
     swatch.start();
     wait = false;
+    while (threads_done != FLAGS_connections)
+        ;
+    swatch.stop();
     for (auto& t : threads) {
         t.join();
     }
-    swatch.stop();
 
     Logger logger{};
     logger.log("traffic", "egress"s);
     logger.log("primitive", "send"s);
-    logger.log("implementation", "sync"s);
-    logger.log("threads", FLAGS_connections);
+    logger.log("threading", "multithreaded"s);
     logger.log("connections", FLAGS_connections);
     logger.log("page_size", defaults::network_page_size);
-    logger.log("pages", pages_sent_actual);
+    logger.log("pages", actual_pages_sent);
     logger.log("tuples", tuples_sent);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("throughput (Gb/s)",
-               (pages_sent_actual * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
+               (actual_pages_sent * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
 }
