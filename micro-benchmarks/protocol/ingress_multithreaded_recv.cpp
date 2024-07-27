@@ -15,7 +15,7 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of ingress connections");
+DEFINE_int32(connections, 10, "number of ingress connections");
 DEFINE_uint32(buffers, 1, "number of buffer pages");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -29,6 +29,8 @@ int main(int argc, char* argv[]) {
     // thread pool
     std::vector<std::thread> threads{};
     std::atomic<bool> wait{true};
+
+    // track metrics
     std::atomic<uint64_t> pages_received{0};
     std::atomic<uint64_t> tuples_received{0};
 
@@ -39,25 +41,35 @@ int main(int argc, char* argv[]) {
             std::vector<NetworkPage> pages(FLAGS_buffers);
             uint64_t local_pages_received{0};
             uint64_t local_tuples_received{0};
-            int64_t res{0};
+            uint64_t unprocessed_bytes{0};
+            ::ssize_t res{0};
 
             while (wait)
                 ;
 
             // receiver loop
             while (true) {
-                res =
-                    ::recv(conn.socket_fds[i], pages.data(), defaults::network_page_size * FLAGS_buffers, MSG_WAITALL);
-                if(res > 0 && res < defaults::network_page_size * FLAGS_buffers){
-                    println("short read", res);
-                }
-                for (auto j{0u}; j < FLAGS_buffers; ++j) {
-                    auto& page = pages[j];
-                    if (res == 0 || page.num_tuples == 0) {
+                unprocessed_bytes = 0;
+                do {
+                    res = ::recv(conn.socket_fds[i], reinterpret_cast<std::byte*>(pages.data()) + unprocessed_bytes,
+                                 defaults::network_page_size * FLAGS_buffers - unprocessed_bytes, MSG_WAITALL);
+                    if (res == -1) {
+                        throw NetworkRecvError{};
+                    }
+                    unprocessed_bytes += res;
+                    // read whole pages
+                } while (unprocessed_bytes % defaults::network_page_size != 0);
+                for (auto bytes_processed{0u}; bytes_processed < unprocessed_bytes;
+                     bytes_processed += defaults::network_page_size) {
+                    auto& page = pages[bytes_processed / defaults::network_page_size];
+                    if (page.num_tuples == 0) {
                         goto done;
                     }
                     local_tuples_received += page.num_tuples;
                     local_pages_received++;
+                }
+                if (res == 0) {
+                    goto done;
                 }
             }
         done:;
@@ -70,14 +82,16 @@ int main(int argc, char* argv[]) {
     Stopwatch swatch{};
     swatch.start();
     wait = false;
-    for (auto& thread : threads) {
-        thread.join();
+    for (auto& t : threads) {
+        t.join();
     }
     swatch.stop();
 
     Logger logger{};
     logger.log("traffic", "ingress"s);
-    logger.log("implementation", "io_uring"s);
+    logger.log("primitive", "recv"s);
+    logger.log("implementation", "sync"s);
+    logger.log("threads", FLAGS_connections);
     logger.log("connections", FLAGS_connections);
     logger.log("page_size", defaults::network_page_size);
     logger.log("pages", pages_received);
