@@ -15,7 +15,7 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of egress connections");
+DEFINE_int32(connections, 5, "number of egress connections");
 DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -56,11 +56,11 @@ int main(int argc, char* argv[]) {
     //    assert(bytes_sent == defaults::network_page_size * FLAGS_pages);
 
     // send empty page as end of stream
-    //    page.clear();
-    //    for (auto i{0u}; i < FLAGS_connections; ++i) {
-    //        auto ret = ::send(conn.socket_fds[next_conn], &page, defaults::network_page_size, 0);
-    //        assert(ret == defaults::network_page_size);
-    //    }
+        page.clear();
+        for (auto i{0u}; i < FLAGS_connections; ++i) {
+            auto ret = ::send(conn.socket_fds[next_conn], &page, defaults::network_page_size, 0);
+            assert(ret == defaults::network_page_size);
+        }
     swatch.stop();
 
     Logger logger{};

@@ -16,7 +16,7 @@
 #include "utils/utils.h"
 
 DEFINE_int32(connections, 1, "number of ingress connections");
-DEFINE_uint32(buffers, 1000, "number of buffer pages");
+DEFINE_uint32(buffers, 1, "number of buffer pages");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -26,7 +26,7 @@ int main(int argc, char* argv[]) {
     Connection conn{FLAGS_connections};
     conn.setup_ingress();
 
-    // thread-uring pool
+    // thread pool
     std::vector<std::thread> threads{};
     std::atomic<bool> wait{true};
     std::atomic<uint64_t> pages_received{0};
@@ -48,6 +48,9 @@ int main(int argc, char* argv[]) {
             while (true) {
                 res =
                     ::recv(conn.socket_fds[i], pages.data(), defaults::network_page_size * FLAGS_buffers, MSG_WAITALL);
+                if(res > 0 && res < defaults::network_page_size * FLAGS_buffers){
+                    println("short read", res);
+                }
                 for (auto j{0u}; j < FLAGS_buffers; ++j) {
                     auto& page = pages[j];
                     if (res == 0 || page.num_tuples == 0) {

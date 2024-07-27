@@ -15,10 +15,10 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of egress connections");
+DEFINE_int32(connections, 5, "number of egress connections");
 DEFINE_bool(sqpoll, false, "use submission queue polling");
-DEFINE_uint32(depth, 128, "number of io_uring entries for network I/O");
-DEFINE_uint32(pages, 1'000'000, "total number of pages to send via egress traffic");
+DEFINE_uint32(depth, 1024, "number of io_uring entries for network I/O");
+DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
 DEFINE_bool(fixed, true, "whether to pre-register connections file descriptors with io_uring");
 
 using NetworkPage = PageCommunication<int64_t>;
@@ -62,7 +62,6 @@ int main(int argc, char* argv[]) {
         sqe->flags |= IOSQE_FIXED_FILE;
         io_uring_submit(&ring);
         auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
-//        assert(peeked == 0);
         for (auto i{0u}; i < peeked; ++i) {
             if (cqes[i] == nullptr) {
                 throw NetworkSendError{};
@@ -81,7 +80,9 @@ int main(int argc, char* argv[]) {
         next_conn = (next_conn + 1) % FLAGS_connections;
     }
 
-    auto res = io_uring_wait_cqe_nr(&ring, cqes.data(), FLAGS_pages - cqes_seen);
+    int res = io_uring_wait_cqe_nr(&ring, cqes.data(), FLAGS_pages - cqes_seen);
+    println(res);
+    perror(strerror(-res));
     assert(res == 0);
     for (auto i{0u}; i < FLAGS_pages - cqes_seen; ++i) {
         if (cqes[i] == nullptr) {

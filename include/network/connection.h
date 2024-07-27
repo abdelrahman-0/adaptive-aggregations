@@ -76,21 +76,21 @@ struct Connection {
                     println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
                 }
 
-                ::linger sl;
+                ::linger sl{};
                 sl.l_onoff = 1; /* non-zero value enables linger option in kernel */
                 sl.l_linger = 2;
                 setsockopt(socket_fds[i], SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
 
                 break;
             }
+            auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
+            ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
 
             // connect to peer
-            if ((ret = connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen)) != 0) {
+            if (::connect(socket_fds[i], peer->ai_addr, peer->ai_addrlen) == -1) {
                 throw NetworkConnectionError(ip_buffer);
             }
 
-            auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
-            ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
             sockaddr_in sin{};
             socklen_t len = sizeof(sin);
             ::getsockname(socket_fds[i], (struct sockaddr*)&sin, &len);
