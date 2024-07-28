@@ -13,7 +13,7 @@ DEFAULTS_AUTO num_pages_on_chunk = 1ul << 5;
 static auto shuffle_partitioner = tbb::affinity_partitioner();
 
 DEFAULTS_AUTO network_io_depth = 64ul;
-DEFAULTS_AUTO network_page_size = 1ul << 16;
+DEFAULTS_AUTO network_page_size = 1ul << NETWORK_PAGE_SIZE_POWER;
 DEFAULTS_AUTO kernel_recv_buffer_size = 1u << 29;
 DEFAULTS_AUTO kernel_send_buffer_size = 1u << 29;
 

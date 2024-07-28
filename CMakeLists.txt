@@ -3,6 +3,11 @@ project(grasshopper_db)
 
 set(CMAKE_CXX_STANDARD 20)
 
+if(NOT DEFINED NETWORK_PAGE_SIZE_POWER)
+    set(NETWORK_PAGE_SIZE_POWER 18)
+endif()
+add_compile_definitions(NETWORK_PAGE_SIZE_POWER=${NETWORK_PAGE_SIZE_POWER})
+
 include_directories(include)
 
 find_package(gflags REQUIRED)
