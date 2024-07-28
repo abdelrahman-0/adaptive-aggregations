@@ -23,8 +23,16 @@ make -j$(nproc)
 sudo make install
 cd ~
 
-# install hwdata tool
+# install likwid
+VERSION=stable
+wget http://ftp.fau.de/pub/likwid/likwid-$VERSION.tar.gz
+tar -xaf likwid-$VERSION.tar.gz
+cd likwid-*
+vi config.mk # configure build, e.g. change installation prefix and architecture flags
+make
+sudo make install # sudo required to install the access daemon with proper permissions
 
+# install hwdata tool
 # sudo dpkg --remove linux-intel-iotg-tools-common
 
 # increase read and write socket buffers

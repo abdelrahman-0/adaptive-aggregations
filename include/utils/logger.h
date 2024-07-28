@@ -8,8 +8,8 @@
 
 class Logger {
   private:
-    std::string header{};
-    std::string row{};
+    std::vector<std::string> header{};
+    std::vector<std::string> row{};
 
   public:
     Logger() = default;
@@ -22,12 +22,11 @@ class Logger {
     template <typename T>
     requires std::is_same_v<std::string, T> or requires(T t) { std::to_string(t); }
     void log(const std::string& param, T&& val) {
-        header += (header.empty() ? "" : ",") + param;
-        row += (row.empty() ? "" : ",");
+        header.push_back(param);
         if constexpr (std::is_same_v<std::string, T>) {
-            row += std::string{val};
+            row.push_back(val);
         } else {
-            row += std::to_string(val);
+            row.push_back(std::to_string(val));
         }
     }
 };

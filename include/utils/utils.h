@@ -12,45 +12,56 @@
 
 static auto rng = std::mt19937{std::random_device{}()};
 
-// TODO no delimiter after last element (use std::forward_as_tuple() and std::get<>, std::apply and last element check)
-template <char delimiter = 0, typename... Ts>
-void __print(std::ostream& stream, const Ts&... args) {
-    (
-        [&]() {
-            if constexpr (custom_concepts::is_iterable<Ts>) {
-                for (const auto& el : args) {
-                    __print(stream, el);
-                }
-            } else if constexpr (custom_type_traits::is_tuple_v<Ts>) {
-                std::apply([&](const auto&... el) { (__print<' '>(stream, el), ...); }, args);
-            } else {
-                if constexpr (std::is_same_v<Ts, bool>) {
-                    stream << std::boolalpha << args << std::noboolalpha;
-                } else {
-                    stream << args;
-                }
-                if constexpr (delimiter) {
-                    stream << delimiter;
-                }
+template <char delimiter = 0, typename... Ts, size_t... indexes>
+void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence<indexes...>) {
+    (..., [&]() {
+        if constexpr (custom_concepts::is_iterable<Ts>) {
+            auto iter_idx = 0u;
+            for (auto&& el : std::get<indexes>(args)) {
+                __print(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)),
+                        std::make_index_sequence<1>{});
+                stream << ((iter_idx++ < std::get<indexes>(args).size() - 1) ? ","s : ""s);
             }
-        }(),
-        ...);
-}
-
-template <char delimiter = 0, typename... Ts>
-void print(const Ts&... args) {
-    __print<delimiter>(std::cout, args...);
+        } else if constexpr (custom_type_traits::is_tuple_v<Ts>) {
+            std::apply(
+                [&](auto el) {
+                    __print<','>(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)),
+                                 std::make_index_sequence<1>{});
+                },
+                std::get<indexes>(args));
+        } else {
+            stream << std::get<indexes>(args)
+                   << ((delimiter and indexes < sizeof...(Ts) - 1) ? std::string{delimiter} : ""s);
+        }
+    }());
 }
 
 template <char delimiter = ' ', typename... Ts>
-void println(const Ts&... args) {
-    __print<delimiter>(std::cout, args...);
+void println(Ts... args) {
+    __print<delimiter>(std::cout, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
     std::cout << '\n';
 }
 
+template <char delimiter = 0, typename... Ts>
+void print(Ts... args) {
+    __print<delimiter>(std::cout, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
+}
+
+// template <char delimiter = 0, typename... Ts>
+// void print(const Ts&... args) {
+//     __print<delimiter>(std::cout, args...);
+// }
+
+// template <char delimiter = ' ', typename... Ts>
+// void println(const Ts&... args) {
+//     __print<delimiter>(std::cout, args...);
+//     std::cout << '\n';
+// }
+
 template <char delimiter = ' ', typename... Ts>
-void logln(const Ts&... args) {
-    __print<delimiter>(std::cerr /* unbuffered */, args...);
+void logln(Ts... args) {
+    __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...),
+                       std::index_sequence_for<Ts...>{});
     std::cerr << '\n';
 }
 

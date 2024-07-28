@@ -49,7 +49,7 @@ struct Connection {
             return;
         int ret;
         auto hints = get_connection_hints();
-        println("opening", num_connections, "connections to:", connection_ip, "...");
+        println("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
         for (auto i = 0u; i < num_connections; ++i) {
             // setup connection structs
             addrinfo* peer;

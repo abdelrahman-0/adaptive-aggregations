@@ -20,8 +20,8 @@ DEFAULTS_AUTO kernel_send_buffer_size = 1u << 29;
 // 192.168.0.30
 DEFAULTS_AUTO subnet = "192.168.0.";
 DEFAULTS_AUTO receiver_host_base = 30u;
-// DEFAULTS_AUTO subnet = "10.0.0.";
-// DEFAULTS_AUTO receiver_host_base = 5u;
+//DEFAULTS_AUTO subnet = "10.0.0.";
+//DEFAULTS_AUTO receiver_host_base = 5u;
 DEFAULTS_AUTO sender_host_base = 4ul;
 DEFAULTS_AUTO port = "3500";
 DEFAULTS_AUTO listen_queue_depth = 100;

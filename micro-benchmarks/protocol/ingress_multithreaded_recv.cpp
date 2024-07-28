@@ -83,5 +83,5 @@ int main(int argc, char* argv[]) {
     logger.log("pages", pages_received);
     logger.log("tuples", tuples_received);
     logger.log("time (ms)", swatch.time_ms);
-    logger.log("bandwidth (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("throughput (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
 }
