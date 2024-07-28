@@ -15,7 +15,7 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of ingress connections");
+DEFINE_int32(connections, 10, "number of ingress connections");
 
 using NetworkPage = PageCommunication<int64_t>;
 

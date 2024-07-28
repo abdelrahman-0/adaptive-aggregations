@@ -40,8 +40,10 @@ struct Connection {
 
     Connection(int32_t num_connections, std::string connection_ip)
         : num_connections(num_connections), connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {
-        println("opening", num_connections, "connections ...");
+        println("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
     }
+
+    ~Connection() { close_connections(); }
 
     // outgoing connections
     void setup_egress() {

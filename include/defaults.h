@@ -17,7 +17,6 @@ DEFAULTS_AUTO network_page_size = 1ul << 16;
 DEFAULTS_AUTO kernel_recv_buffer_size = 1u << 29;
 DEFAULTS_AUTO kernel_send_buffer_size = 1u << 29;
 
-// 192.168.0.30
 //DEFAULTS_AUTO subnet = "192.168.0.";
 //DEFAULTS_AUTO receiver_host_base = 30u;
 DEFAULTS_AUTO subnet = "10.0.0.";

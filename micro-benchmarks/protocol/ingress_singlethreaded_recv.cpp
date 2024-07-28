@@ -15,7 +15,7 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of ingress connections");
+DEFINE_int32(connections, 10, "number of ingress connections");
 
 using NetworkPage = PageCommunication<int64_t>;
 
@@ -37,16 +37,22 @@ int main(int argc, char* argv[]) {
     swatch.start();
     while (end_pages < FLAGS_connections) {
         res = ::recv(conn.socket_fds[next_conn], &page, defaults::network_page_size, MSG_WAITALL);
+        next_conn = (next_conn + 1) % FLAGS_connections;
         if (res == -1) {
             throw NetworkRecvError{};
         }
-        if (page.is_empty() || res == 0) {
+        if (res > 0 && res < defaults::network_page_size) {
+            println("short read");
+        }
+        if (res == 0) {
+            continue;
+        }
+        if (page.is_empty()) {
             end_pages++;
             continue;
         }
         pages_received++;
         tuples_received += page.num_tuples;
-        next_conn = (next_conn + 1) % FLAGS_connections;
     }
 
     // track metrics

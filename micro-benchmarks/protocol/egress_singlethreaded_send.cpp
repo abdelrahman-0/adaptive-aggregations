@@ -15,8 +15,8 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
-DEFINE_int32(connections, 1, "number of egress connections");
-DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
+DEFINE_int32(connections, 10, "number of egress connections");
+DEFINE_uint32(pages, 1'000, "total number of pages to send via egress traffic");
 
 using NetworkPage = PageCommunication<int64_t>;
 
