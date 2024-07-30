@@ -14,7 +14,15 @@ install:
 build: build-debug build-release
 
 build-debug:
-	mkdir -p $(BUILD_DIR_DEB) && cd $(BUILD_DIR_DEB) && cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Debug .. && make $(TARGETS)
+	mkdir -p $(BUILD_DIR_DEB) && \
+	cd $(BUILD_DIR_DEB) && \
+	cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Debug .. && \
+	make $(TARGETS) && \
+	make $(addprefix likwid_,$(TARGETS))
 
 build-release:
-	mkdir -p $(BUILD_DIR_REL) && cd $(BUILD_DIR_REL) && cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Release .. && make $(TARGETS)
+	mkdir -p $(BUILD_DIR_REL) && \
+	cd $(BUILD_DIR_REL) && \
+	cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Release .. && \
+	make $(TARGETS) && \
+	make $(addprefix likwid_,$(TARGETS))

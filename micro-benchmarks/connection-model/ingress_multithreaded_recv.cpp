@@ -1,25 +1,24 @@
 #include <gflags/gflags.h>
+#include <likwid-marker.h>
+#include <sys/resource.h>
 #include <tbb/enumerable_thread_specific.h>
-#include <tbb/global_control.h>
-#include <tbb/parallel_for.h>
 #include <thread>
 
 #include "defaults.h"
+#include "exceptions/exceptions_misc.h"
 #include "network/connection.h"
 #include "network/network_manager.h"
 #include "storage/chunked_list.h"
-#include "storage/policy.h"
-#include "storage/table.h"
 #include "utils/hash.h"
 #include "utils/logger.h"
 #include "utils/stopwatch.h"
-#include "utils/utils.h"
 
 DEFINE_int32(connections, 10, "number of ingress connections");
 
 using NetworkPage = PageCommunication<int64_t>;
 
 int main(int argc, char* argv[]) {
+    LIKWID_MARKER_INIT;
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     Connection conn{FLAGS_connections};
@@ -32,11 +31,15 @@ int main(int argc, char* argv[]) {
     // track metrics
     std::atomic<uint64_t> pages_received{0};
     std::atomic<uint64_t> tuples_received{0};
+    Logger logger_thread{};
 
     // pre-register 1 socket fd per rig
     for (auto i{0u}; i < FLAGS_connections; ++i) {
 
-        threads.emplace_back([i, &conn, &wait, &pages_received, &tuples_received]() {
+        threads.emplace_back([i, &conn, &wait, &pages_received, &tuples_received, &logger_thread]() {
+            LIKWID_MARKER_THREADINIT;
+            LIKWID_MARKER_REGISTER("recv");
+
             NetworkPage page{};
             uint64_t local_pages_received{0};
             uint64_t local_tuples_received{0};
@@ -45,6 +48,11 @@ int main(int argc, char* argv[]) {
             while (wait)
                 ;
 
+            LIKWID_MARKER_START("recv");
+            ::rusage usage_start{};
+            if (::getrusage(RUSAGE_THREAD, &usage_start) == -1) {
+                throw GetResourceUsageError{};
+            }
             // receiver loop
             while (true) {
                 res = ::recv(conn.socket_fds[i], &page, defaults::network_page_size, MSG_WAITALL);
@@ -61,6 +69,22 @@ int main(int argc, char* argv[]) {
         done:;
             pages_received += local_pages_received;
             tuples_received += local_tuples_received;
+            ::rusage usage_stop{};
+            if (::getrusage(RUSAGE_THREAD, &usage_stop) == -1) {
+                throw GetResourceUsageError{};
+            }
+            LIKWID_MARKER_STOP("recv");
+            auto cpu_id = "Thread "s + std::to_string(sched_getcpu());
+            logger_thread.log(cpu_id + " - context switches (invol)", usage_stop.ru_nivcsw - usage_start.ru_nivcsw);
+            logger_thread.log(cpu_id + " - context switches (vol)", usage_stop.ru_nvcsw - usage_start.ru_nvcsw);
+            logger_thread.log(cpu_id + " - user time (ms)",
+                              ((usage_stop.ru_utime.tv_sec - usage_start.ru_utime.tv_sec) * 1'000'000 +
+                               usage_stop.ru_utime.tv_usec - usage_start.ru_utime.tv_usec) /
+                                  1000);
+            logger_thread.log(cpu_id + " - kernel time (ms)",
+                              ((usage_stop.ru_stime.tv_sec - usage_start.ru_stime.tv_sec) * 1'000'000 +
+                               usage_stop.ru_stime.tv_usec - usage_start.ru_stime.tv_usec) /
+                                  1000);
         });
     }
 
@@ -84,4 +108,6 @@ int main(int argc, char* argv[]) {
     logger.log("tuples", tuples_received);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("throughput (Gb/s)", (pages_received * defaults::network_page_size * 8 * 1000) / (1e9 * swatch.time_ms));
+
+    LIKWID_MARKER_CLOSE;
 }

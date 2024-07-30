@@ -1,5 +1,6 @@
 #pragma once
 
+#include <cstring>
 #include <exception>
 #include <netdb.h>
 #include <string>

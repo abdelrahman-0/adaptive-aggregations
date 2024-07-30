@@ -10,6 +10,7 @@ class Logger {
   private:
     std::vector<std::string> header{};
     std::vector<std::string> row{};
+    std::mutex mutex{};
 
   public:
     Logger() = default;
@@ -22,6 +23,7 @@ class Logger {
     template <typename T>
     requires std::is_same_v<std::string, T> or requires(T t) { std::to_string(t); }
     void log(const std::string& param, T&& val) {
+        std::unique_lock<std::mutex> _{mutex};
         header.push_back(param);
         if constexpr (std::is_same_v<std::string, T>) {
             row.push_back(val);
