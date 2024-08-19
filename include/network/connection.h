@@ -75,8 +75,8 @@ struct Connection {
         auto double_kernel_recv_buffer_size{0u};
         ::getsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &double_kernel_recv_buffer_size, &size);
 
-//        println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-//        println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
+        //        println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+        //        println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
 
         if (::bind(sock_fd, local->ai_addr, local->ai_addrlen) == -1) {
             throw NetworkSocketBindError{};
@@ -115,7 +115,7 @@ struct Connection {
         int ret;
         auto hints = get_connection_hints();
         auto thread_comm_port = std::to_string(communication_port_base + outgoing_node_id * nthreads + thread_id);
-//        println("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
+        //        println("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
         for (auto i = 0u; i < num_connections; ++i) {
             // setup connection structs
             addrinfo* peer;
@@ -141,8 +141,9 @@ struct Connection {
                 ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
 
                 if (i == 0) {
-//                    println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-//                    println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+                    //                    println("setting send buff (excl. kernel bookkeeping):",
+                    //                    defaults::kernel_recv_buffer_size); println("size of send buff (incl. kernel
+                    //                    bookkeeping):", double_kernel_send_buffer_size);
                 }
 
                 ::linger sl{};

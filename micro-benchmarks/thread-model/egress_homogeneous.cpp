@@ -37,7 +37,7 @@ int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     // setup connections
-    auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::receiver_host_base);
+    auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base);
     Connection conn{FLAGS_connections, destination_ip};
     conn.setup_egress();
 
