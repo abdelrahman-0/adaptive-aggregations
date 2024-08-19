@@ -15,7 +15,7 @@
 DEFINE_int32(connections, 10, "number of egress connections");
 DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");
 
-using NetworkPage = PageCommunication<int64_t>;
+using NetworkPage = PageNetwork<int64_t>;
 
 int main(int argc, char* argv[]) {
     LIKWID_MARKER_INIT;

@@ -6,7 +6,7 @@
 
 #include "defaults.h"
 #include "network/connection.h"
-#include "network/network_manager.h"
+#include "network/network_manager_old.h"
 #include "storage/chunked_list.h"
 #include "storage/policy.h"
 #include "storage/table.h"

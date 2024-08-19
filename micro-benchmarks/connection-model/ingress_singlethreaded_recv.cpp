@@ -6,7 +6,7 @@
 
 #include "defaults.h"
 #include "network/connection.h"
-#include "network/network_manager.h"
+#include "network/network_manager_old.h"
 #include "storage/chunked_list.h"
 #include "storage/policy.h"
 #include "storage/table.h"
@@ -17,7 +17,7 @@
 
 DEFINE_int32(connections, 10, "number of ingress connections");
 
-using NetworkPage = PageCommunication<int64_t>;
+using NetworkPage = PageNetwork<int64_t>;
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -47,7 +47,7 @@ int main(int argc, char* argv[]) {
         if (res == 0) {
             continue;
         }
-        if (page.is_empty()) {
+        if (page.empty()) {
             end_pages++;
             continue;
         }

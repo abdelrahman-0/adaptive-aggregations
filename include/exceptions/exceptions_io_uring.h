@@ -15,9 +15,14 @@ class IOUringInitError : public IOUringError {
     explicit IOUringInitError(int ret) : IOUringError("Could not initialize io_uring", ret) {}
 };
 
-class IOUringRegisterFileError : public IOUringError {
+class IOUringRegisterFilesError : public IOUringError {
   public:
-    explicit IOUringRegisterFileError(int ret) : IOUringError("Error registering file", ret) {}
+    explicit IOUringRegisterFilesError(int ret) : IOUringError("Error registering files", ret) {}
+};
+
+class IOUringRegisterBuffersError : public IOUringError {
+  public:
+    explicit IOUringRegisterBuffersError(int ret) : IOUringError("Error registering buffers", ret) {}
 };
 
 class IOUringSubmissionQueueFullError : public IOUringError {
@@ -44,4 +49,20 @@ class IOUringConnectError : public IOUringError {
 class IOUringMultiShotRecvError : public IOUringError {
   public:
     explicit IOUringMultiShotRecvError(int error) : IOUringError("Error submitting multishot receive request", error) {}
+};
+
+class IOUringRecvError : public IOUringError {
+  public:
+    explicit IOUringRecvError(int error) : IOUringError("Error receiving page", error) {}
+};
+
+
+class IOUringSendError : public IOUringError {
+  public:
+    explicit IOUringSendError(int error) : IOUringError("Error sending page", error) {}
+};
+
+class IOUringWaitError : public IOUringError {
+  public:
+    explicit IOUringWaitError(int error) : IOUringError("Error waiting for request results", error) {}
 };

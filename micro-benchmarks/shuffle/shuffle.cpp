@@ -6,7 +6,7 @@
 
 #include "defaults.h"
 #include "network/connection.h"
-#include "network/network_manager.h"
+#include "network/network_manager_old.h"
 #include "storage/chunked_list.h"
 #include "storage/policy.h"
 #include "storage/table.h"
@@ -20,21 +20,21 @@
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
-using NetworkPage = PageCommunication<ResultTuple>;
+using NetworkPage = PageNetwork<ResultTuple>;
 
 // cmd line params
 DEFINE_string(path, "data/random.tbl", "path to input relation");
 DEFINE_double(cache, 1.0, "percentage of table to cache in-memory in [0.0,1.0]");
-DEFINE_int32(nodes, 2, "total number of nodes to use (additional nodes are only used if policy spills)");
+DEFINE_int32(nodes, 2, "total number of num_nodes to use (additional num_nodes are only used if policy spills)");
 DEFINE_bool(random, false, "randomize order of cached swips");
 
 // auto g = tbb::global_control(tbb::global_control::max_allowed_parallelism, 1);
 
 struct TLS {
     IO_Manager io{};
-    NetworkManager network;
+    NetworkManagerOld network;
     std::vector<TablePage> buffer{defaults::local_io_depth};
-    ChunkedList<ResultPage> result{};
+    PageChunkedList<ResultPage> result{};
 
     explicit TLS(const Connection& conn) : network(conn) {}
 };
@@ -87,8 +87,8 @@ int main(int argc, char* argv[]) {
 
                 // submit io requests
                 for (auto i = range.begin(); i < middle_idx; ++i) {
-                    table.read_page(thread_io, swips[i].get_page_index(),
-                                    reinterpret_cast<std::byte*>(thread_buffer.data() + i - range.begin()));
+                    table.read_async(thread_io, swips[i].get_page_index(),
+                                     reinterpret_cast<std::byte*>(thread_buffer.data() + i - range.begin()));
                 }
 
                 // policy check (could be once-per-morsel, once-per-page or once-per-tuple)
@@ -110,7 +110,7 @@ int main(int argc, char* argv[]) {
                             // local
                             for (auto j = 0u; j < page_to_process->num_tuples; ++j) {
                                 // materialize into thread-local pages
-                                if (current_result_page->is_full()) {
+                                if (current_result_page->full()) {
                                     current_result_page = thread_result.get_new_page();
                                 }
                                 current_result_page->emplace_back_transposed(j, *page_to_process);
@@ -124,12 +124,12 @@ int main(int argc, char* argv[]) {
                                 // if (dst == num_egress) {
                                 if (false) {
                                     // last partition is local
-                                    if (current_result_page->is_full()) {
+                                    if (current_result_page->full()) {
                                         current_result_page = thread_result.get_new_page();
                                     }
                                     current_result_page->emplace_back_transposed(j, *page_to_process);
                                 } else {
-                                    // send to receiver via NetworkManager
+                                    // send to receiver via NetworkManagerOld
                                     auto dst_page = thread_network.get_page<NetworkPage>(0);
                                     dst_page->emplace_back_transposed(j, *page_to_process);
                                 }

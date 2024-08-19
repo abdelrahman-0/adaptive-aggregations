@@ -10,10 +10,27 @@
 #include "custom_concepts.h"
 #include "custom_type_traits.h"
 
+// need 64-bit system for pointer tagging
+static_assert(sizeof(std::size_t) == 8 and sizeof(uintptr_t) == 8);
+
+static constexpr uint64_t pointer_tag_mask = static_cast<uint64_t>(~0) >> 16;
+
+template <typename T>
+static inline constexpr auto get_pointer(uintptr_t tagged_ptr) {
+    return reinterpret_cast<T*>(tagged_ptr & pointer_tag_mask);
+}
+
+static inline constexpr uint16_t get_tag(uintptr_t tagged_ptr) { return tagged_ptr >> 48; }
+
+static inline constexpr auto tag_pointer(custom_concepts::pointer_type auto ptr, std::integral auto tag) {
+    return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(tag) << 48));
+}
+
 static auto rng = std::mt19937{std::random_device{}()};
 
 template <char delimiter = 0, typename... Ts, size_t... indexes>
 void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence<indexes...>) {
+    using namespace std::string_literals;
     (..., [&]() {
         if constexpr (custom_concepts::is_iterable<Ts>) {
             auto iter_idx = 0u;

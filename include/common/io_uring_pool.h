@@ -25,7 +25,7 @@
 //            }
 //
 //            if ((ret = io_uring_register_files(&ring, conn.socket_fds.data(), conn.num_connections)) < 0) {
-//                throw IOUringRegisterFileError{ret};
+//                throw IOUringRegisterFilesError{ret};
 //            }
 //        }
 //    }

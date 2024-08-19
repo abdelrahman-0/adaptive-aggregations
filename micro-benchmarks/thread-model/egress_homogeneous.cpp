@@ -11,11 +11,11 @@
 #include "utils/hash.h"
 #include "utils/stopwatch.h"
 
-DEFINE_int32(connections, 10, "number of egress connections");
+DEFINE_uint32(connections, 10, "number of egress connections");
 DEFINE_uint64(pages, 100'000, "total number of pages to send via egress traffic");
 DEFINE_uint64(batch, 10, "number of pages that each thread will process at once");
 
-using NetworkPage = PageCommunication<int64_t>;
+using NetworkPage = PageNetwork<int64_t>;
 
 inline void send_page(NetworkPage& page, int dst_fd) {
     ::ssize_t res;

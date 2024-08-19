@@ -6,11 +6,11 @@
 #include <tbb/parallel_for.h>
 #include <tbb/task_arena.h>
 
+#include "common/page.h"
 #include "network/connection.h"
-#include "network/network_manager.h"
+#include "network/network_manager_old.h"
 #include "network/pointer_ring.h"
 #include "storage/chunked_list.h"
-#include "storage/page.h"
 #include "utils/stopwatch.h"
 
 DEFINE_int32(ingress, 1, "number of sender nodes to accept requests from");
@@ -19,7 +19,7 @@ DEFINE_int32(ingress, 1, "number of sender nodes to accept requests from");
 
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
-using NetworkPage = PageCommunication<ResultTuple>;
+using NetworkPage = PageNetwork<ResultTuple>;
 
 // auto g = tbb::global_control(tbb::global_control::max_allowed_parallelism, 1);
 
@@ -29,8 +29,8 @@ static constexpr auto pages_per_thread = 10u;
 static constexpr auto pointer_ring_size = next_power_of_2(512u);
 
 struct TLS {
-    NetworkManager network;
-    ChunkedList<ResultPage> result{};
+    NetworkManagerOld network;
+    PageChunkedList<ResultPage> result{};
 
     explicit TLS(const Connection& conn) : network(conn) {}
 };
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
     // use local fd
     int ret;
     if ((ret = io_uring_register_files(&ring, conn_ingress.socket_fds.data(), conn_ingress.num_connections)) < 0) {
-        throw IOUringRegisterFileError{ret};
+        throw IOUringRegisterFilesError{ret};
     }
 
     // listen loop

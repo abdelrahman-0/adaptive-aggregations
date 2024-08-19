@@ -3,162 +3,206 @@
 #include <cassert>
 #include <liburing.h>
 
+#include "common/page.h"
 #include "connection.h"
 #include "exceptions/exceptions_io_uring.h"
-#include "storage/page.h"
 
-static std::atomic<std::size_t> pages_sent{0u};
-static std::atomic<std::size_t> tuples_sent{0u};
-static std::atomic<std::size_t> bytes_sent{0u};
+// Manages either ingress or egress traffic via a single uring instance
+template <custom_concepts::is_communication_page BufferPage>
+class NetworkManager {
+  protected:
+    io_uring ring{};
+    std::vector<BufferPage> buffers;
+    std::vector<uint32_t> free_pages;
+    std::vector<io_uring_cqe*> cqes;
+    uint32_t nwdepth;
 
-static constexpr auto num_pages_per_node = 10u;
-
-static constexpr auto network_io_depth = defaults::network_io_depth;
-
-enum TrafficType : bool { INGRESS, EGRESS };
-
-// traffic manager
-struct Traffic {
-    const Connection& conn;
-    io_uring& ring;
-    std::vector<std::array<std::byte, num_pages_per_node * defaults::network_page_size>> comm_buffers;
-    std::vector<std::size_t> comm_buffer_sizes;
-    std::vector<std::size_t> comm_current_page;
-    std::array<io_uring_cqe*, network_io_depth> cqes{};
-    uint64_t in_flight{0};
-
-    explicit Traffic(const Connection& conn, io_uring& ring) : conn(conn), ring(ring) {}
-
-    void init() {
-        comm_buffers.resize(conn.num_connections);
-        comm_buffer_sizes.resize(conn.num_connections, 1);
-        comm_current_page.resize(conn.num_connections, 0);
-    }
-
-    int register_socket_fds(io_uring* ring_ptr, std::size_t offset) {
-        // TODO if offset > 0
+    void init_ring(bool sqpoll) {
         int ret;
-        if ((ret = io_uring_register_files(ring_ptr, conn.socket_fds.data(), conn.num_connections)) < 0) {
-            throw IOUringRegisterFileError{ret};
+        if ((ret = io_uring_queue_init(next_power_of_2(nwdepth), &ring, sqpoll ? IORING_SETUP_SQPOLL : 0)) < 0) {
+            throw IOUringInitError{ret};
         }
-        assert(ret == 0);
-        return ret;
     }
 
-    template <typename PageOnBuffer>
-    auto get_page(std::size_t destination) {
-        auto current_page = get_current_page<PageOnBuffer>(destination);
-        if (current_page->is_full()) {
-            flush_current_page(destination, current_page);
-            return get_new_page<PageOnBuffer>(destination);
+    void register_sockets(const std::vector<int>& sockets) {
+        int ret;
+        if ((ret = io_uring_register_files(&ring, sockets.data(), sockets.size())) < 0) {
+            throw IOUringRegisterFilesError{ret};
         }
-        return current_page;
     }
 
-    template <typename PageOnBuffer>
-    auto get_current_page(std::size_t destination) {
-        return reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + comm_current_page[destination];
+    void register_buffers() {
+        int ret;
+        std::vector<::iovec> io_vecs;
+        for (auto& buf : buffers) {
+            io_vecs.emplace_back(&buf, sizeof(BufferPage));
+        }
+        if ((ret = io_uring_register_buffers(&ring, io_vecs.data(), io_vecs.size())) < 0) {
+            throw IOUringRegisterBuffersError{ret};
+        }
     }
 
-    template <typename PageOnBuffer>
-    auto get_new_page(std::size_t destination) {
-        if (comm_buffer_sizes[destination] == num_pages_per_node) {
-            unsigned num_cqes_peeked;
-            while ((num_cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.begin(), network_io_depth)) == 0)
-                ;
-            comm_current_page[destination] = cqes[0]->user_data;
-            for (auto i = 0u; i < num_cqes_peeked; ++i) {
-                auto page_idx = cqes[i]->user_data;
-                if ((reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples >
-                    (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)
-                        ->max_num_tuples_per_page) {
-                    println(
-                        "Sent",
-                        (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples);
-                }
-                (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples = 0;
-                bytes_sent += cqes[i]->res;
-                if (cqes[i]->res < 0) {
-                    throw NetworkSendError{cqes[i]->res};
-                }
-                io_uring_cq_advance(&ring, 1);
+    void init_buffers() {
+        //        register_buffers();
+        std::iota(free_pages.rbegin(), free_pages.rend(), 0u);
+    }
+
+  public:
+    explicit NetworkManager(uint32_t nwdepth, uint32_t nbuffers, bool sqpoll, const std::vector<int>& sockets)
+        : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers), cqes(next_power_of_2(nwdepth) * 2) {
+        init_ring(sqpoll);
+        register_sockets(sockets);
+        init_buffers();
+    }
+};
+
+template <custom_concepts::is_communication_page BufferPage>
+class IngressNetworkManager : public NetworkManager<BufferPage> {
+    // needed for dependent lookups
+    using NetworkManager<BufferPage>::ring;
+    using NetworkManager<BufferPage>::buffers;
+    using NetworkManager<BufferPage>::free_pages;
+    using NetworkManager<BufferPage>::cqes;
+    uint32_t cqes_processed{0};
+    uint32_t cqes_peeked{0};
+    uint64_t page_recv{0};
+
+  public:
+    IngressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
+                          const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets) {}
+
+    void post_recvs(uint16_t dst) {
+        assert(not free_pages.empty());
+        auto* sqe = io_uring_get_sqe(&ring);
+        auto buffer_idx = free_pages.back();
+        free_pages.pop_back();
+        // fixed buffers?
+        io_uring_prep_recv(sqe, dst, buffers.data() + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = buffers.data() + buffer_idx;
+        io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
+        sqe->flags |= IOSQE_FIXED_FILE; // | IOSQE_IO_LINK;
+        io_uring_submit(&ring);
+    }
+
+    std::tuple<BufferPage*, uint16_t> get_page() {
+        if (cqes_processed == cqes_peeked) {
+            cqes_processed = 0;
+            io_uring_cq_advance(&ring, cqes_peeked);
+            cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+            if (cqes_peeked == 0) {
+                return {nullptr, static_cast<uint16_t>(-1)};
             }
-            in_flight -= num_cqes_peeked;
-            comm_buffer_sizes[destination] -= (num_cqes_peeked - 1);
-        } else {
-            do {
-                comm_current_page[destination] = (comm_current_page[destination] + 1) % num_pages_per_node;
-            } while (get_current_page<PageOnBuffer>(destination)->is_full());
-            comm_buffer_sizes[destination]++;
+            for (auto i{0u}; i < cqes_peeked; ++i) {
+                if (cqes[i]->res != sizeof(BufferPage)) {
+                    throw IOUringRecvError(cqes[i]->res);
+                }
+            }
         }
-        return reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + comm_current_page[destination];
+        auto user_data = cqes[cqes_processed++]->user_data;
+        auto* result = get_pointer<BufferPage>(user_data);
+        page_recv++;
+        return {result, get_tag(user_data)};
     }
 
-    template <typename PageOnBuffer>
-    void flush_current_page(std::size_t destination, PageOnBuffer* current_page) {
+    void done_page(BufferPage* page) { free_pages.push_back(page - buffers.data()); }
+};
+
+template <custom_concepts::is_communication_page BufferPage>
+class EgressNetworkManager : public NetworkManager<BufferPage> {
+    // needed for dependent lookups
+    using NetworkManager<BufferPage>::ring;
+    using NetworkManager<BufferPage>::buffers;
+    using NetworkManager<BufferPage>::free_pages;
+    using NetworkManager<BufferPage>::cqes;
+    std::vector<BufferPage*> active_buffer;
+    uint32_t inflight_egress{0};
+    uint32_t total_submitted{0};
+    uint32_t total_retrieved{0};
+
+  public:
+    EgressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
+                         const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), active_buffer(npeers) {
+        for (auto peer{0u}; peer < npeers; ++peer) {
+            get_new_page(peer);
+        }
+    }
+
+    [[maybe_unused]] BufferPage* get_new_page(uint32_t dst) {
+        BufferPage* result;
+        if (free_pages.empty()) {
+            // peek
+            auto cqes_done = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+            if (cqes_done > 0) {
+                for (auto i{0u}; i < cqes_done - 1; ++i) {
+                    // get buffer idx from user_data and add to free pages
+                    assert(cqes[i]->res == sizeof(BufferPage));
+                    free_pages.push_back(get_pointer<BufferPage>(cqes[i]->user_data) - buffers.data());
+                }
+                // last cqes_done is reused immediately
+            } else {
+                int res = io_uring_wait_cqe(&ring, cqes.data());
+                assert(res == 0);
+                cqes_done = 1;
+            }
+            assert(cqes[cqes_done - 1]->res == sizeof(BufferPage));
+            result = get_pointer<BufferPage>(cqes[cqes_done - 1]->user_data);
+            io_uring_cq_advance(&ring, cqes_done);
+            inflight_egress -= cqes_done;
+            total_retrieved += cqes_done;
+        } else {
+            // get a free page
+            result = buffers.data() + free_pages.back();
+            free_pages.pop_back();
+        }
+        result->clear_tuples();
+        active_buffer[dst] = result;
+        return result;
+    }
+
+    BufferPage* get_page(uint32_t dst) {
+        if (!active_buffer[dst]->full()) {
+            return active_buffer[dst];
+        }
+        flush(dst);
+        return get_new_page(dst);
+    }
+
+    void flush(uint32_t dst) {
         auto* sqe = io_uring_get_sqe(&ring);
         if (sqe == nullptr) {
             throw IOUringSubmissionQueueFullError{};
         }
-        // compress page before sending?
-        if (current_page->num_tuples > current_page->max_num_tuples_per_page) {
-            println("Sent", current_page->num_tuples);
-        }
-        io_uring_prep_send(sqe, destination, current_page, defaults::network_page_size, 0);
-        sqe->flags |= IOSQE_FIXED_FILE;
-        sqe->user_data = comm_current_page[destination];
-        pages_sent++;
-        tuples_sent += current_page->num_tuples;
+        io_uring_prep_send(sqe, dst, active_buffer[dst], sizeof(BufferPage), MSG_WAITALL);
+        sqe->flags |= IOSQE_FIXED_FILE; // | IOSQE_IO_LINK;
+        io_uring_sqe_set_data(sqe, tag_pointer(active_buffer[dst], dst));
+        inflight_egress++;
         auto num_submitted = io_uring_submit(&ring);
         assert(num_submitted == 1);
-        in_flight++;
+        total_submitted++;
     }
 
-    template <typename PageOnBuffer>
     void flush_all() {
-        // check for non-free pages with tuples > 0
-        for (auto i = 0; i < comm_buffers.size(); ++i) {
-            auto page = get_current_page<PageOnBuffer>(i);
-            if (!page->is_empty()) {
-                flush_current_page(i, page);
-            }
-        }
-        // wait for inflight
-        while (in_flight > 0) {
-            io_uring_peek_cqe(&ring, cqes.data());
-            assert(cqes[0]->res == defaults::network_page_size);
-            bytes_sent += cqes[0]->res;
-            io_uring_cqe_seen(&ring, cqes[0]);
-            in_flight -= 1;
+        // loop through peers and flush
+        for (auto peer{0u}; peer < active_buffer.size(); ++peer) {
+            active_buffer[peer]->set_last_page();
+            flush(peer);
         }
     }
-};
 
-// Manages ingress and egress traffic via a single io_uring instance
-struct NetworkManager {
-    io_uring ring{};
-    //    Traffic<INGRESS> traffic_ingress;
-    Traffic traffic;
-
-    //    NetworkManager(const Connection& conn_ingress, const Connection& conn_egress)
-    //        : ring{}, traffic_ingress(conn_ingress, ring), traffic(conn_egress, ring) {
-    //        int ret;
-    //        if ((ret = io_uring_queue_init(network_io_depth, &ring, 0))) {
-    //            throw IOUringInitError{ret};
-    //        }
-    //        int num_registered{0};
-    //        traffic_ingress.init();
-    //        num_registered = traffic_ingress.register_socket_fds(&ring, 0);
-    //        traffic.init();
-    //        traffic.register_socket_fds(&ring, num_registered);
-    //    }
-
-    explicit NetworkManager(const Connection& conn) : ring{}, traffic(conn, ring) {
+    void wait_all() {
+        // wait for all inflight sends
         int ret;
-        if ((ret = io_uring_queue_init(network_io_depth, &ring, 0))) {
-            throw IOUringInitError{ret};
+        for (auto i{0u}; i < inflight_egress; ++i) {
+            if ((ret = io_uring_wait_cqe(&ring, cqes.data())) < 0) {
+                throw IOUringWaitError(ret);
+            }
+            if (cqes[0]->res != sizeof(BufferPage)) {
+                throw IOUringSendError{cqes[0]->res};
+            }
+            io_uring_cqe_seen(&ring, cqes[0]);
         }
-        traffic.init();
-        traffic.register_socket_fds(&ring, 0);
+        inflight_egress = 0;
     }
 };

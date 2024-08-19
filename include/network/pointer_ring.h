@@ -3,8 +3,8 @@
 #include <atomic>
 #include <vector>
 
+#include "common/page.h"
 #include "defaults.h"
-#include "storage/page.h"
 #include "utils/spinlock.h"
 
 template <uint64_t initial_ring_size>
