@@ -217,7 +217,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-//            println("finished all morsels, got", local_tuples_received, "tuples during morsel work");
+            //            println("finished all morsels, got", local_tuples_received, "tuples during morsel work");
 
             manager_send.flush_all();
             while (peers_done < npeers) {
@@ -249,8 +249,9 @@ int main(int argc, char* argv[]) {
     logger.log("implementation", "shuffle_homogeneous"s);
     logger.log("threads", FLAGS_threads);
     logger.log("page size", defaults::network_page_size);
+    logger.log("morsel size", FLAGS_morselsz);
     logger.log("nodes", FLAGS_nodes);
-    logger.log("morsel_size", FLAGS_morselsz);
+    logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("bandwidth (Gb/s)",
                ((tuples_received + tuples_processed) * sizeof(ResultTuple) * 8 * 1000) / (1e9 * swatch.time_ms));
