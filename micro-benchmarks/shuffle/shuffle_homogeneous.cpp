@@ -253,6 +253,7 @@ int main(int argc, char* argv[]) {
     logger.log("nodes", FLAGS_nodes);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
-    logger.log("bandwidth (Gb/s)",
+    logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / (1e9 * swatch.time_ms));
+    logger.log("throughput (Gb/s)",
                ((tuples_received + tuples_processed) * sizeof(ResultTuple) * 8 * 1000) / (1e9 * swatch.time_ms));
 }
