@@ -182,8 +182,6 @@ int main(int argc, char* argv[]) {
                 manager_recv.post_recvs(peer);
             }
 
-            println("starting morsel loop...");
-
             // spin barrier
             while (wait)
                 ;
@@ -219,7 +217,7 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            println("finished all morsels, got", local_tuples_received, "tuples during morsel work");
+//            println("finished all morsels, got", local_tuples_received, "tuples during morsel work");
 
             manager_send.flush_all();
             while (peers_done < npeers) {
@@ -255,6 +253,5 @@ int main(int argc, char* argv[]) {
     logger.log("morsel_size", FLAGS_morselsz);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("bandwidth (Gb/s)",
-               ((tuples_processed + tuples_received) * sizeof(ResultTuple) * 8 * 1000) / (1e9 * swatch.time_ms));
-
+               ((tuples_received + tuples_processed) * sizeof(ResultTuple) * 8 * 1000) / (1e9 * swatch.time_ms));
 }
