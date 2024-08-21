@@ -3,7 +3,7 @@
 BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
 
-TARGETS=ingress_singlethreaded_recv egress_singlethreaded_send ingress_multithreaded_recv egress_multithreaded_send
+TARGETS=shuffle_homogeneous generate_data
 NETWORK_PAGE_SIZE_POWER=18
 
 all: build
@@ -24,5 +24,10 @@ build-release:
 	mkdir -p $(BUILD_DIR_REL) && \
 	cd $(BUILD_DIR_REL) && \
 	cmake -DCMAKE_BUILD_TYPE=Release .. && \
-	make $(TARGETS) && \
-	make $(addprefix likwid_,$(TARGETS))
+	make $(TARGETS)
+
+build-relwithdebinfo:
+	mkdir -p $(BUILD_DIR_REL) && \
+	cd $(BUILD_DIR_REL) && \
+	cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
+	make $(TARGETS)
