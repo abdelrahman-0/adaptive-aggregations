@@ -25,15 +25,15 @@ using ResultPage = PageLocal<ResultTuple>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
-DEFINE_uint32(threads, 1, "number of threads to use");
+DEFINE_uint32(threads, 8, "number of threads to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
-DEFINE_uint32(buffersnw, 20, "number of communication buffer pages to use per traffic direction");
+DEFINE_uint32(buffersnw, 100, "number of communication buffer pages to use per traffic direction");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
-DEFINE_uint32(morselsz, 50, "number of pages to process in one morsel");
+DEFINE_uint32(morselsz, 100, "number of pages to process in one morsel");
 DEFINE_string(path, "data/random.tbl", "path to input relation");
-DEFINE_uint32(cache, 10, "percentage of table to cache in-memory in [0,100]");
+DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in [0,100]");
 DEFINE_bool(random, false, "randomize order of cached swips");
 
 int main(int argc, char* argv[]) {
@@ -42,6 +42,8 @@ int main(int argc, char* argv[]) {
     auto env_var = std::getenv("NODE_ID");
     uint32_t node_id = std::stoul(env_var ? env_var : "0");
 
+    println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
+    println("---------");
     /* ----------- DATA LOAD ----------- */
 
     // prepare local IO at node offset (adjusted for page boundaries)
@@ -62,15 +64,13 @@ int main(int argc, char* argv[]) {
     auto num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
     Cache<TablePage> cache{num_pages_cache};
     table.populate_cache(cache, io, num_pages_cache, FLAGS_random);
-
-    println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
-    println("---------");
     println("reading bytes:", offset_begin, "→", offset_end);
 
     /* ----------- THREAD SETUP ----------- */
 
     // control atomics
     std::atomic<bool> wait{true};
+    std::atomic<uint32_t> threads_ready{0};
     std::atomic<uint32_t> current_swip{0};
     std::atomic<uint64_t> tuples_processed{0};
     std::atomic<uint64_t> tuples_sent{0};
@@ -79,8 +79,8 @@ int main(int argc, char* argv[]) {
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([thread_id, node_id, &wait, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
-                              &tuples_received]() {
+        threads.emplace_back([thread_id, node_id, &wait, &threads_ready, &current_swip, &swips, &table,
+                              &tuples_processed, &tuples_sent, &tuples_received]() {
             /* ----------- NETWORK I/O ----------- */
 
             // setup connections to each node, forming a logical clique topology
@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 
             // connect to [node_id + 1, FLAGS_nodes)
             for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base + i);
+                auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base + 0);
                 Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(i);
                 socket_fds.emplace_back(conn.socket_fds[0]);
@@ -118,39 +118,43 @@ int main(int argc, char* argv[]) {
             /* ----------- BUFFERS ----------- */
 
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
-            PageChunkedList<ResultPage> chunked_list_result{};
-            auto* current_result_page = chunked_list_result.get_current_page();
+            //            PageChunkedList<ResultPage> chunked_list_result{};
+            //            auto* current_result_page = chunked_list_result.get_current_page();
 
             /* ----------- LAMBDAS ----------- */
 
             uint64_t local_tuples_processed{0};
             uint64_t local_tuples_sent{0};
             uint64_t local_tuples_received{0};
-            auto process_network_page = [&current_result_page, &chunked_list_result,
-                                         &local_tuples_received](const NetworkPage& page) {
+            //            auto process_network_page = [&current_result_page, &chunked_list_result,
+            //                                         &local_tuples_received](const NetworkPage& page) {
+            auto process_network_page = [&local_tuples_received](const NetworkPage& page) {
                 auto page_num_tuples = page.get_num_tuples();
                 for (auto i{0u}; i < page_num_tuples; ++i) {
-                    if (current_result_page->full()) {
-                        current_result_page = chunked_list_result.get_new_page();
-                    }
-                    current_result_page->emplace_back(i, page);
+                    //                    if (current_result_page->full()) {
+                    //                        current_result_page = chunked_list_result.get_new_page();
+                    //                    }
+                    //                    current_result_page->emplace_back(i, page);
                 }
                 local_tuples_received += page_num_tuples;
                 return page.is_last_page();
             };
 
-            auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,
-                                       &local_tuples_processed, &local_tuples_sent](const TablePage& page) {
+            //            auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,
+            //                                       &local_tuples_processed, &local_tuples_sent](const TablePage& page)
+            //                                       {
+            auto process_local_page = [node_id, &manager_send, &local_tuples_processed,
+                                       &local_tuples_sent](const TablePage& page) {
                 for (auto j = 0u; j < page.num_tuples; ++j) {
                     // hash tuple
                     auto dst = murmur_hash(std::get<0>(page.columns)[j]) % FLAGS_nodes;
 
                     // send or materialize into thread-local buffers
                     if (dst == node_id) {
-                        if (current_result_page->full()) {
-                            current_result_page = chunked_list_result.get_new_page();
-                        }
-                        current_result_page->emplace_back_transposed(j, page);
+                        //                        if (current_result_page->full()) {
+                        //                            current_result_page = chunked_list_result.get_new_page();
+                        //                        }
+                        //                        current_result_page->emplace_back_transposed(j, page);
                         local_tuples_processed++;
                     } else {
                         auto actual_dst = dst - (dst > node_id);
@@ -181,6 +185,8 @@ int main(int argc, char* argv[]) {
             for (auto peer{0u}; peer < npeers; ++peer) {
                 manager_recv.post_recvs(peer);
             }
+
+            threads_ready++;
 
             // spin barrier
             while (wait)
@@ -232,6 +238,9 @@ int main(int argc, char* argv[]) {
         });
     }
 
+    while (threads_ready != FLAGS_threads)
+        ;
+
     Stopwatch swatch{};
     swatch.start();
     wait = false;
@@ -253,7 +262,8 @@ int main(int argc, char* argv[]) {
     logger.log("nodes", FLAGS_nodes);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
-    logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / (1e9 * swatch.time_ms));
-    logger.log("throughput (Gb/s)",
+    logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
+    logger.log("node throughput (Gb/s)",
                ((tuples_received + tuples_processed) * sizeof(ResultTuple) * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("total throughput (Gb/s)", (table.get_file().get_total_size() * 8 * 1000) / (1e9 * swatch.time_ms));
 }

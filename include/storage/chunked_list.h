@@ -28,6 +28,8 @@ struct PageChunkedList {
     std::size_t current_chunk{0};
 
     PageChunkedList() {
+        chunk_ptrs.reserve(10);
+        pages_per_chunk.reserve(10);
         add_new_chunk();
         get_new_page();
     }

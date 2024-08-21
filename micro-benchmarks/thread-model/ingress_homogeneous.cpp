@@ -8,6 +8,7 @@
 #include "exceptions/exceptions_misc.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
+#include "network/page_communication.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
 #include "utils/logger.h"
@@ -15,7 +16,7 @@
 
 DEFINE_uint32(connections, 5, "number of ingress connections");
 
-using NetworkPage = PageNetwork<int64_t>;
+using NetworkPage = PageCommunication<int64_t>;
 
 int main(int argc, char* argv[]) {
     LIKWID_MARKER_INIT;
@@ -60,7 +61,7 @@ int main(int argc, char* argv[]) {
                     throw NetworkRecvError{};
                 }
                 if (page.empty() || res == 0) {
-//                    println(res);
+                    //                    println(res);
                     goto done;
                 }
                 assert(res == defaults::network_page_size);
