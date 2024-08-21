@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 
             // connect to [node_id + 1, FLAGS_nodes)
             for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base + 0);
+                auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base + i);
                 Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(i);
                 socket_fds.emplace_back(conn.socket_fds[0]);
