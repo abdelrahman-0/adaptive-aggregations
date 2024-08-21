@@ -17,8 +17,8 @@ module "ec2_instance" {
   spot_price = var.max_price
   spot_type  = "persistent"
   key_name   = var.ssh_key
-  ami        = "ami-07652eda1fbad7432" # "ami-09c78c91d944d3be1"
-  user_data = file("${path.module}/../../install_dependencies.sh")
+  ami = "ami-07652eda1fbad7432" # "ami-09c78c91d944d3be1"
+  user_data  = "${local.instance_user_data}export NODE_ID=${count.index}"
 
 
   tags = {
