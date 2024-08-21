@@ -2,6 +2,7 @@
 
 BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
+BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
 
 TARGETS=shuffle_homogeneous generate_data
 NETWORK_PAGE_SIZE_POWER=18
@@ -27,7 +28,7 @@ build-release:
 	make $(TARGETS)
 
 build-relwithdebinfo:
-	mkdir -p $(BUILD_DIR_REL) && \
-	cd $(BUILD_DIR_REL) && \
+	mkdir -p $(BUILD_DIR_RELWITHDEBINFO) && \
+	cd $(BUILD_DIR_RELWITHDEBINFO) && \
 	cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
 	make $(TARGETS)
