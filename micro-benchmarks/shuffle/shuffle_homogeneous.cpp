@@ -21,11 +21,12 @@
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using NetworkPage = PageCommunication<ResultTuple>;
-using ResultPage = PageLocal<ResultTuple>;
+using ResultPage = Page<(defaults::local_page_size >> 1), ResultTuple>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
-DEFINE_uint32(threads, 8, "number of threads to use");
+DEFINE_bool(local, true, "run benchmark using loop-back interface");
+DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
@@ -38,6 +39,9 @@ DEFINE_bool(random, false, "randomize order of cached swips");
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
+    auto port_base = FLAGS_local ? defaults::LOCAL_port_base : defaults::AWS_port_base;
 
     auto env_var = std::getenv("NODE_ID");
     uint32_t node_id = std::stoul(env_var ? env_var : "0");
@@ -79,8 +83,8 @@ int main(int argc, char* argv[]) {
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([thread_id, node_id, &wait, &threads_ready, &current_swip, &swips, &table,
-                              &tuples_processed, &tuples_sent, &tuples_received]() {
+        threads.emplace_back([thread_id, node_id, subnet, port_base, &wait, &threads_ready, &current_swip, &swips,
+                              &table, &tuples_processed, &tuples_sent, &tuples_received]() {
             /* ----------- NETWORK I/O ----------- */
 
             // setup connections to each node, forming a logical clique topology
@@ -96,7 +100,7 @@ int main(int argc, char* argv[]) {
 
             // connect to [node_id + 1, FLAGS_nodes)
             for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{defaults::subnet} + std::to_string(defaults::node_port_base + i);
+                auto destination_ip = std::string{subnet} + std::to_string(port_base + (FLAGS_local ? 0 : i));
                 Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(i);
                 socket_fds.emplace_back(conn.socket_fds[0]);
@@ -118,43 +122,38 @@ int main(int argc, char* argv[]) {
             /* ----------- BUFFERS ----------- */
 
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
-            //            PageChunkedList<ResultPage> chunked_list_result{};
-            //            auto* current_result_page = chunked_list_result.get_current_page();
+            PageChunkedList<ResultPage> chunked_list_result{};
+            auto* current_result_page = chunked_list_result.get_current_page();
 
             /* ----------- LAMBDAS ----------- */
 
             uint64_t local_tuples_processed{0};
             uint64_t local_tuples_sent{0};
             uint64_t local_tuples_received{0};
-            //            auto process_network_page = [&current_result_page, &chunked_list_result,
-            //                                         &local_tuples_received](const NetworkPage& page) {
-            auto process_network_page = [&local_tuples_received](const NetworkPage& page) {
+            auto process_network_page = [&current_result_page, &chunked_list_result,
+                                         &local_tuples_received](const NetworkPage& page) {
                 auto page_num_tuples = page.get_num_tuples();
                 for (auto i{0u}; i < page_num_tuples; ++i) {
-                    //                    if (current_result_page->full()) {
-                    //                        current_result_page = chunked_list_result.get_new_page();
-                    //                    }
-                    //                    current_result_page->emplace_back(i, page);
+                    if (current_result_page->full()) {
+                        current_result_page = chunked_list_result.get_new_page();
+                    }
+                    current_result_page->emplace_back(i, page);
                 }
                 local_tuples_received += page_num_tuples;
                 return page.is_last_page();
             };
 
-            //            auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,
-            //                                       &local_tuples_processed, &local_tuples_sent](const TablePage& page)
-            //                                       {
-            auto process_local_page = [node_id, &manager_send, &local_tuples_processed,
-                                       &local_tuples_sent](const TablePage& page) {
+            auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,
+                                       &local_tuples_processed, &local_tuples_sent](const TablePage& page) {
                 for (auto j = 0u; j < page.num_tuples; ++j) {
                     // hash tuple
                     auto dst = murmur_hash(std::get<0>(page.columns)[j]) % FLAGS_nodes;
-
                     // send or materialize into thread-local buffers
                     if (dst == node_id) {
-                        //                        if (current_result_page->full()) {
-                        //                            current_result_page = chunked_list_result.get_new_page();
-                        //                        }
-                        //                        current_result_page->emplace_back_transposed(j, page);
+                        if (current_result_page->full()) {
+                            current_result_page = chunked_list_result.get_new_page();
+                        }
+                        current_result_page->emplace_back_transposed(j, page);
                         local_tuples_processed++;
                     } else {
                         auto actual_dst = dst - (dst > node_id);
@@ -222,8 +221,6 @@ int main(int argc, char* argv[]) {
                     process_local_page(*page_to_process);
                 }
             }
-
-            //            println("finished all morsels, got", local_tuples_received, "tuples during morsel work");
 
             manager_send.flush_all();
             while (peers_done < npeers) {

@@ -2,6 +2,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <tbb/scalable_allocator.h>
 
 #include "common/page.h"
 
@@ -23,13 +24,14 @@ class PageChunk {
 
 template <custom_concepts::is_page PageOnChunk>
 struct PageChunkedList {
-    std::vector<std::unique_ptr<PageChunk<PageOnChunk>>> chunk_ptrs;
+    using Chunk = PageChunk<PageOnChunk>;
+//    tbb::scalable_allocator<Chunk> chunk_allocator;
+        std::allocator<Chunk> chunk_allocator{};
+    std::vector<Chunk*> chunk_ptrs;
     std::vector<std::size_t> pages_per_chunk{};
     std::size_t current_chunk{0};
 
     PageChunkedList() {
-        chunk_ptrs.reserve(10);
-        pages_per_chunk.reserve(10);
         add_new_chunk();
         get_new_page();
     }
@@ -41,7 +43,8 @@ struct PageChunkedList {
     }
 
     void add_new_chunk() {
-        chunk_ptrs.push_back(std::make_unique<PageChunk<PageOnChunk>>());
+        auto* ptr = chunk_allocator.allocate(sizeof(Chunk));
+        chunk_ptrs.push_back((ptr));
         pages_per_chunk.push_back(0);
     }
 

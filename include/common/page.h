@@ -39,17 +39,10 @@ struct alignas(page_size) Page {
     uint32_t num_tuples{0};
     std::tuple<std::array<Attributes, max_num_tuples_per_page>...> columns;
 
-    template <uint32_t other_page_size, typename... OtherAttributes,
-              typename Indices = std::index_sequence_for<OtherAttributes...>>
+    template <uint32_t other_page_size, typename... OtherAttributes>
+    requires(sizeof...(Attributes) == 1 and sizeof...(OtherAttributes) == 1)
     void emplace_back(std::size_t row_idx, const Page<other_page_size, OtherAttributes...>& page) {
-        emplace_back_helper(row_idx, page, Indices{});
-        num_tuples++;
-    }
-
-    template <uint32_t other_page_size, typename... OtherAttributes, std::size_t... indexes>
-    void emplace_back_helper(std::size_t row_idx, const Page<other_page_size, OtherAttributes...>& page,
-                             std::index_sequence<indexes...>) {
-        (((new (&(std::get<indexes>(columns)[num_tuples])) std::tuple(std::get<indexes>(page.columns)[row_idx])), ...));
+        std::get<0>(columns)[num_tuples++] = std::get<0>(page.columns)[row_idx];
     }
 
     template <uint32_t other_page_size, typename... OtherAttributes,
@@ -65,7 +58,7 @@ struct alignas(page_size) Page {
     template <uint32_t other_page_size, typename... OtherAttributes, std::size_t... indexes>
     void emplace_back_transposed_helper(std::size_t row_idx, const Page<other_page_size, OtherAttributes...>& page,
                                         std::index_sequence<indexes...>) {
-        new (&(std::get<0>(columns)[num_tuples])) std::tuple(std::get<indexes>(page.columns)[row_idx]...);
+        ((std::get<indexes>(std::get<0>(columns)[num_tuples]) = std::get<indexes>(page.columns)[row_idx]), ...);
     }
 
     void clear() { memset(this, 0, page_size); }

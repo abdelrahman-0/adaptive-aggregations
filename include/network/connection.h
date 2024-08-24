@@ -17,6 +17,8 @@
 static constexpr auto communication_port_base = defaults::port;
 static char ip_buffer[INET_ADDRSTRLEN];
 
+static std::mutex print_mtx{};
+
 static auto get_connection_hints(bool use_ipv6 = false) {
     ::addrinfo hints{};
     ::memset(&hints, 0, sizeof(addrinfo));
@@ -88,7 +90,10 @@ struct Connection {
 
         // accept an incoming connection
         ::inet_ntop(local->ai_family, local->ai_addr, ip_buffer, sizeof(ip_buffer));
-        println("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+        {
+            std::unique_lock lock{print_mtx};
+            println("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+        }
 
         // listen loop
         for (auto i = 0u; i < node_id; ++i) {
@@ -166,7 +171,10 @@ struct Connection {
             sockaddr_in sin{};
             socklen_t len = sizeof(sin);
             ::getsockname(socket_fds[i], (struct sockaddr*)&sin, &len);
-            println("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+            {
+                std::unique_lock lock{print_mtx};
+                println("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+            }
 
             // free addrinfo linked list
             ::freeaddrinfo(peer);
