@@ -17,10 +17,10 @@ DEFAULTS_AUTO network_page_size = 1ul << 16;
 DEFAULTS_AUTO kernel_recv_buffer_size = 1u << 28;
 DEFAULTS_AUTO kernel_send_buffer_size = 1u << 28;
 
-DEFAULTS_AUTO subnet = "10.0.0.";
-DEFAULTS_AUTO node_port_base = 4u;
-//DEFAULTS_AUTO subnet = "192.168.0.";
-//DEFAULTS_AUTO node_port_base = 30u;
+DEFAULTS_AUTO AWS_subnet = "10.0.0.";
+DEFAULTS_AUTO AWS_port_base = 4u;
+DEFAULTS_AUTO LOCAL_subnet = "192.168.0.";
+DEFAULTS_AUTO LOCAL_port_base = 30u;
 DEFAULTS_AUTO port = 3500;
 DEFAULTS_AUTO listen_queue_depth = 100;
 
