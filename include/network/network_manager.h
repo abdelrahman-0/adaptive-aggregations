@@ -73,6 +73,9 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
         : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets) {}
 
     void post_recvs(uint16_t dst) {
+        if (free_pages.empty()) {
+            println("no free pages");
+        }
         assert(not free_pages.empty());
         auto* sqe = io_uring_get_sqe(&ring);
         auto buffer_idx = free_pages.back();
