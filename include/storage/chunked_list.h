@@ -46,6 +46,7 @@ struct PageChunkedList {
     void add_new_chunk() {
 //        auto* ptr = chunk_allocator.allocate(sizeof(Chunk));
         auto* ptr = reinterpret_cast<Chunk*>(rpmalloc(sizeof(Chunk)));
+        assert(ptr);
         ptr->get_page(0)->clear_tuples();
         chunk_ptrs.push_back(ptr);
         //        chunk_ptrs.push_back(std::unique_ptr<Chunk>(chunk_allocator.allocate(sizeof(Chunk))));
