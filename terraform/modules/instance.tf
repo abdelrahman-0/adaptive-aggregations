@@ -2,7 +2,7 @@ module "ec2_instance" {
   version = ">= 4.66"
   source  = "terraform-aws-modules/ec2-instance/aws"
 
-  count     = var.num_servers
+  count     = var.num_nodes
   subnet_id = aws_subnet.public_subnet.id
   vpc_security_group_ids = [aws_security_group.security_group.id]
 

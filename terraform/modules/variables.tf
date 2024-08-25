@@ -16,7 +16,7 @@ variable "instance_type" {
   default     = "i3en.6xlarge"
 }
 
-variable "num_servers" {
+variable "num_nodes" {
   description = "Number of instances"
   type        = number
   default     = 1
