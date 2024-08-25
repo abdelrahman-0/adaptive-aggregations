@@ -21,7 +21,7 @@
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using NetworkPage = PageCommunication<ResultTuple>;
-using ResultPage = PageLocal<ResultTuple>;
+using ResultPage = Page<(defaults::local_page_size << 1), ResultTuple>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
