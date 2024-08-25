@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
-    auto port_base = FLAGS_local ? defaults::LOCAL_port_base : defaults::AWS_port_base;
+    auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
 
     auto env_var = std::getenv("NODE_ID");
     uint32_t node_id = std::stoul(env_var ? env_var : "0");
@@ -83,7 +83,7 @@ int main(int argc, char* argv[]) {
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([thread_id, node_id, subnet, port_base, &wait, &threads_ready, &current_swip, &swips,
+        threads.emplace_back([thread_id, node_id, subnet, host_base, &wait, &threads_ready, &current_swip, &swips,
                               &table, &tuples_processed, &tuples_sent, &tuples_received]() {
             /* ----------- NETWORK I/O ----------- */
 
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
 
             // connect to [node_id + 1, FLAGS_nodes)
             for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{subnet} + std::to_string(port_base + (FLAGS_local ? 0 : i));
+                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
                 Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(i);
                 socket_fds.emplace_back(conn.socket_fds[0]);
