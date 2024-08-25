@@ -13,6 +13,8 @@ include_directories(include)
 find_package(gflags REQUIRED)
 find_package(TBB REQUIRED)
 
+add_library(rpmalloc include/allocators/rpmalloc/rpmalloc.c)
+
 add_subdirectory(micro-benchmarks)
 
 add_executable(grasshopper_db

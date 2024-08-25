@@ -3,7 +3,7 @@
 cd ~
 
 sudo apt-get -y update
-sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid
+sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws
 
 # oneTBB
 cd /tmp &&

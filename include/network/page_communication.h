@@ -12,7 +12,7 @@ struct PageCommunication : public Page<defaults::network_page_size, Attributes..
   public:
     void set_last_page() { num_tuples |= highest_bit_mask_32; }
 
-    [[nodiscard]] bool is_last_page() const { return num_tuples & highest_bit_mask_32; }
+    void clear_last_page() { num_tuples &= ~highest_bit_mask_32; }
 
-    [[nodiscard]] auto get_num_tuples() const { return num_tuples & ~highest_bit_mask_32; }
+    [[nodiscard]] bool is_last_page() const { return num_tuples & highest_bit_mask_32; }
 };

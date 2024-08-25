@@ -21,7 +21,7 @@
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using NetworkPage = PageCommunication<ResultTuple>;
-using ResultPage = Page<(defaults::local_page_size), ResultTuple>;
+using ResultPage = Page<(defaults::local_page_size >> 1), ResultTuple>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
@@ -131,16 +131,17 @@ int main(int argc, char* argv[]) {
             uint64_t local_tuples_sent{0};
             uint64_t local_tuples_received{0};
             auto process_network_page = [&current_result_page, &chunked_list_result,
-                                         &local_tuples_received](const NetworkPage& page) {
-                auto page_num_tuples = page.get_num_tuples();
-                for (auto i{0u}; i < page_num_tuples; ++i) {
+                                         &local_tuples_received](NetworkPage& page) {
+                bool last_page = page.is_last_page();
+                page.clear_last_page();
+                for (auto i{0u}; i < page.num_tuples; ++i) {
                     if (current_result_page->full()) {
                         current_result_page = chunked_list_result.get_new_page();
                     }
                     current_result_page->emplace_back(i, page);
                 }
-                local_tuples_received += page_num_tuples;
-                return page.is_last_page();
+                local_tuples_received += page.num_tuples;
+                return last_page;
             };
 
             auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,

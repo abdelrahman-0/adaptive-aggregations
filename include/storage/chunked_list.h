@@ -4,6 +4,7 @@
 #include <memory>
 #include <tbb/scalable_allocator.h>
 
+#include "allocators/rpmalloc/rpmalloc.h"
 #include "common/page.h"
 
 static constexpr std::size_t chunk_size = defaults::num_pages_on_chunk;
@@ -17,7 +18,7 @@ class PageChunk {
     PageChunk() = default;
     ~PageChunk() = default;
 
-    PageOnChunk* get_page(std::size_t index) { return page_array.begin() + index; }
+    PageOnChunk* get_page(std::size_t index) { return page_array.data() + index; }
 
     bool page_full(std::size_t index) { return page_array[index].full(); }
 };
@@ -25,9 +26,9 @@ class PageChunk {
 template <custom_concepts::is_page PageOnChunk>
 struct PageChunkedList {
     using Chunk = PageChunk<PageOnChunk>;
-//    tbb::scalable_allocator<Chunk> chunk_allocator;
-        std::allocator<Chunk> chunk_allocator{};
-    std::vector<std::unique_ptr<Chunk>> chunk_ptrs;
+//        tbb::scalable_allocator<Chunk> chunk_allocator{};
+//    std::allocator<Chunk> chunk_allocator{};
+    std::vector<Chunk*> chunk_ptrs;
     std::vector<std::size_t> pages_per_chunk{};
     std::size_t current_chunk{0};
 
@@ -43,11 +44,20 @@ struct PageChunkedList {
     }
 
     void add_new_chunk() {
-        chunk_ptrs.push_back(std::unique_ptr<Chunk>(chunk_allocator.allocate(sizeof(Chunk))));
+//        auto* ptr = chunk_allocator.allocate(sizeof(Chunk));
+        auto* ptr = reinterpret_cast<Chunk*>(rpmalloc(sizeof(Chunk)));
+        ptr->get_page(0)->clear_tuples();
+        chunk_ptrs.push_back(ptr);
+        //        chunk_ptrs.push_back(std::unique_ptr<Chunk>(chunk_allocator.allocate(sizeof(Chunk))));
         pages_per_chunk.push_back(0);
     }
 
-    ~PageChunkedList() = default;
+    ~PageChunkedList() {
+        for (auto* chunk_ptr : chunk_ptrs) {
+            rpfree(chunk_ptr);
+//            chunk_allocator.deallocate(chunk_ptr, sizeof(Chunk));
+        }
+    };
 
     PageOnChunk* get_current_page() { return chunk_ptrs[current_chunk]->get_page(pages_per_chunk[current_chunk] - 1); }
 
@@ -56,7 +66,9 @@ struct PageChunkedList {
             add_new_chunk();
             current_chunk++;
         }
-        return chunk_ptrs[current_chunk]->get_page(pages_per_chunk[current_chunk]++);
+        auto* new_page = chunk_ptrs[current_chunk]->get_page(pages_per_chunk[current_chunk]++);
+        new_page->clear_tuples();
+        return new_page;
     }
 
     [[nodiscard]] bool current_page_full() const {
