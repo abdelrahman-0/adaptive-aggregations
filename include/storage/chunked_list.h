@@ -27,7 +27,7 @@ struct PageChunkedList {
     using Chunk = PageChunk<PageOnChunk>;
 //    tbb::scalable_allocator<Chunk> chunk_allocator;
         std::allocator<Chunk> chunk_allocator{};
-    std::vector<Chunk*> chunk_ptrs;
+    std::vector<std::unique_ptr<Chunk>> chunk_ptrs;
     std::vector<std::size_t> pages_per_chunk{};
     std::size_t current_chunk{0};
 
@@ -43,8 +43,7 @@ struct PageChunkedList {
     }
 
     void add_new_chunk() {
-        auto* ptr = chunk_allocator.allocate(sizeof(Chunk));
-        chunk_ptrs.push_back((ptr));
+        chunk_ptrs.push_back(std::unique_ptr<Chunk>(chunk_allocator.allocate(sizeof(Chunk))));
         pages_per_chunk.push_back(0);
     }
 
