@@ -16,8 +16,8 @@ class Logger {
     Logger() = default;
 
     ~Logger() {
-        logln(header);
-        logln(row);
+        logln<','>(header);
+        logln<','>(row);
     }
 
     template <typename T>

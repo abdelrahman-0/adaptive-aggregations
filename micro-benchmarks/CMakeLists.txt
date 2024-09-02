@@ -1,4 +1,5 @@
 add_subdirectory(shuffle)
+add_subdirectory(send-recv)
 add_subdirectory(connection-model)
 add_subdirectory(thread-model)
 

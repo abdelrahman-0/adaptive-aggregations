@@ -15,13 +15,13 @@ class NetworkError : public std::runtime_error {
 
 class NetworkPrepareAddressError : public NetworkError {
   public:
-    explicit NetworkPrepareAddressError(int val) : NetworkError("getaddrinfo: "s + gai_strerror(val)){};
+    explicit NetworkPrepareAddressError(int val) : NetworkError("getaddrinfo: "s + gai_strerror(val)) {};
 };
 
 class NetworkConnectionError : public NetworkError {
   public:
     explicit NetworkConnectionError(const char* ip_address)
-        : NetworkError("Error connecting to " + std::string{ip_address}){};
+        : NetworkError("Error connecting to " + std::string{ip_address}) {};
 };
 
 class NetworkGenericError : public NetworkError {
@@ -32,37 +32,39 @@ class NetworkGenericError : public NetworkError {
 
 class NetworkSocketSetupError : public NetworkGenericError {
   public:
-    explicit NetworkSocketSetupError() : NetworkGenericError("Error during socket setup"){};
+    explicit NetworkSocketSetupError() : NetworkGenericError("Error during socket setup") {};
 };
 
 class NetworkSocketOptError : public NetworkGenericError {
   public:
-    explicit NetworkSocketOptError() : NetworkGenericError("Error setting socket options"){};
+    explicit NetworkSocketOptError() : NetworkGenericError("Error setting socket options") {};
 };
 
 class NetworkSocketBindError : public NetworkGenericError {
   public:
-    explicit NetworkSocketBindError() : NetworkGenericError("Error binding socket"){};
+    explicit NetworkSocketBindError() : NetworkGenericError("Error binding socket") {};
 };
 
 class NetworkSocketListenError : public NetworkGenericError {
   public:
-    explicit NetworkSocketListenError() : NetworkGenericError("Error listening on socket"){};
+    explicit NetworkSocketListenError() : NetworkGenericError("Error listening on socket") {};
 };
 
 class NetworkSocketAcceptError : public NetworkGenericError {
   public:
-    explicit NetworkSocketAcceptError() : NetworkGenericError("Error accepting connection"){};
+    explicit NetworkSocketAcceptError() : NetworkGenericError("Error accepting connection") {};
 };
 
 class NetworkSendError : public NetworkGenericError {
   public:
-    NetworkSendError() : NetworkGenericError("Error sending data"){};
-    explicit NetworkSendError(int error) : NetworkGenericError("Error sending data", error){};
+    NetworkSendError() : NetworkGenericError("Error sending data") {};
+    explicit NetworkSendError(const std::string& msg) : NetworkGenericError("Error sending data " + msg) {};
+    explicit NetworkSendError(int error) : NetworkGenericError("Error sending data", error) {};
 };
 
 class NetworkRecvError : public NetworkGenericError {
   public:
-    NetworkRecvError() : NetworkGenericError("Error receiving data"){};
-    explicit NetworkRecvError(int error) : NetworkGenericError("Error receiving data", error){};
+    NetworkRecvError() : NetworkGenericError("Error receiving data") {};
+    explicit NetworkRecvError(const std::string& msg) : NetworkGenericError("Error receiving data " + msg) {};
+    explicit NetworkRecvError(int error) : NetworkGenericError("Error receiving data", error) {};
 };

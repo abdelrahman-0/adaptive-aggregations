@@ -18,8 +18,7 @@ build-debug:
 	mkdir -p $(BUILD_DIR_DEB) && \
 	cd $(BUILD_DIR_DEB) && \
 	cmake -DCMAKE_BUILD_TYPE=Debug .. && \
-	make $(TARGETS) && \
-	make $(addprefix likwid_,$(TARGETS))
+	make $(TARGETS)
 
 build-release:
 	mkdir -p $(BUILD_DIR_REL) && \

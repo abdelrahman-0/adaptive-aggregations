@@ -4,8 +4,7 @@
 #include <cstdint>
 #include <functional>
 
-template <std::integral T>
-inline uint64_t murmur_hash(T k) {
+inline uint64_t murmur_hash(std::integral auto k) {
     const uint64_t m = 0xc6a4a7935bd1e995ull;
     const int r = 47;
     uint64_t h = 0x8445d61a4e774912ull ^ (8 * m);
@@ -19,6 +18,15 @@ inline uint64_t murmur_hash(T k) {
     h ^= h >> r;
     return h;
 }
+
+inline uint64_t char_hash(unsigned char k) {
+    return k & 1;
+}
+
+inline uint64_t uint32_hash(uint32_t k) {
+    return k & 1;
+}
+
 
 // Effectively implements Boost's hash_combine using WYHash as hash function:
 // https://www.boost.org/doc/libs/1_36_0/boost/functional/hash/hash.hpp

@@ -1,0 +1,11 @@
+add_executable(send send.cpp)
+add_executable(recv recv.cpp)
+add_executable(send_uring send_uring.cpp)
+add_executable(recv_uring recv_uring.cpp)
+add_executable(send_recv_uring send_recv_uring.cpp)
+
+target_link_libraries(send TBB::tbb gflags -luring)
+target_link_libraries(recv TBB::tbb gflags -luring)
+target_link_libraries(send_uring TBB::tbb gflags -luring)
+target_link_libraries(recv_uring TBB::tbb gflags -luring)
+target_link_libraries(send_recv_uring TBB::tbb gflags -luring)

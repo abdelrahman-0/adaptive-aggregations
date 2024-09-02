@@ -4,9 +4,12 @@
 #include <string>
 #include <system_error>
 
+using namespace std::string_literals;
+
 class IOUringError : public std::runtime_error {
   public:
     explicit IOUringError(const std::string& msg) : std::runtime_error(msg) {}
+    explicit IOUringError(int error) : std::runtime_error("Generic uring error"s + " -- " + strerror(-error)) {}
     IOUringError(const std::string& msg, int error) : std::runtime_error(msg + " -- " + strerror(-error)) {}
 };
 
@@ -55,7 +58,6 @@ class IOUringRecvError : public IOUringError {
   public:
     explicit IOUringRecvError(int error) : IOUringError("Error receiving page", error) {}
 };
-
 
 class IOUringSendError : public IOUringError {
   public:

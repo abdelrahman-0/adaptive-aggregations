@@ -14,15 +14,18 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
+using namespace std::chrono_literals;
+
 /* ----------- SCHEMA ----------- */
 
-#define SCHEMA int64_t, int64_t, int32_t, std::array<unsigned char, 4>
+#define SCHEMA uint64_t, uint32_t, uint32_t, std::array<char, 4>
 
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using NetworkPage = PageCommunication<ResultTuple>;
-using ResultPage = Page<(defaults::local_page_size >> 1), ResultTuple>;
+using ResultPage = PageLocal<ResultTuple>;
 
+static_assert(sizeof(NetworkPage) == defaults::network_page_size);
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
@@ -30,12 +33,65 @@ DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
-DEFINE_uint32(buffersnw, 100, "number of communication buffer pages to use per traffic direction");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 DEFINE_uint32(morselsz, 100, "number of pages to process in one morsel");
 DEFINE_string(path, "data/random.tbl", "path to input relation");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in [0,100]");
 DEFINE_bool(random, false, "randomize order of cached swips");
+
+/* ----------- FUNCTIONS ----------- */
+
+[[nodiscard]] uint32_t consume_ingress(IngressNetworkManager<NetworkPage>& manager_recv,
+                                       ResultPage*& current_result_page,
+                                       PageChunkedList<ResultPage>& chunked_list_result,
+                                       uint64_t& local_tuples_received) {
+    uint32_t peers_done{0};
+    auto [network_page, peer] = manager_recv.get_page();
+    while (network_page) {
+        //        for (auto i{0u}; i < network_page->get_num_tuples(); ++i) {
+        //            if (current_result_page->full()) {
+        //                current_result_page = chunked_list_result.get_new_page();
+        //            }
+        //            current_result_page->emplace_back(i, *network_page);
+        //        }
+        bool last_page = network_page->is_last_page();
+        peers_done += last_page;
+        local_tuples_received += network_page->get_num_tuples();
+        manager_recv.done_page(network_page);
+        if (!last_page) {
+            // still more pages
+            manager_recv.post_recvs(peer);
+        }
+        std::tie(network_page, peer) = manager_recv.get_page();
+    }
+    return peers_done;
+}
+
+void process_local_page(uint32_t node_id, ResultPage*& current_result_page,
+                        PageChunkedList<ResultPage>& chunked_list_result,
+                        EgressNetworkManager<NetworkPage>& manager_send, uint64_t& local_tuples_processed,
+                        uint64_t& local_tuples_sent, const TablePage& page) {
+    for (auto j = 0u; j < page.num_tuples; ++j) {
+        // hash tuple
+        auto dst = std::hash<uint32_t>{}(std::get<0>(page.columns)[j]) % FLAGS_nodes;
+
+        // send or materialize into thread-local buffers
+        if (dst == node_id) {
+            //            if (current_result_page->full()) {
+            //                current_result_page = chunked_list_result.get_new_page();
+            //            }
+            //            current_result_page->emplace_back_transposed(j, page);
+            local_tuples_processed++;
+        } else {
+            auto actual_dst = dst - (dst > node_id);
+            auto dst_page = manager_send.get_page(actual_dst);
+            dst_page->emplace_back_transposed(j, page);
+            local_tuples_sent++;
+        }
+    }
+}
+
+/* ----------- MAIN ----------- */
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -47,7 +103,8 @@ int main(int argc, char* argv[]) {
     uint32_t node_id = std::stoul(env_var ? env_var : "0");
 
     println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
-    println("---------");
+    println("--------------");
+
     /* ----------- DATA LOAD ----------- */
 
     // prepare local IO at node offset (adjusted for page boundaries)
@@ -64,11 +121,12 @@ int main(int argc, char* argv[]) {
     auto& swips = table.get_swips();
 
     // prepare cache
-    IO_Manager io{64, false};
+    IO_Manager io{FLAGS_depthio, false};
     auto num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
     Cache<TablePage> cache{num_pages_cache};
     table.populate_cache(cache, io, num_pages_cache, FLAGS_random);
-    println("reading bytes:", offset_begin, "→", offset_end);
+    println("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
+            "pages");
 
     /* ----------- THREAD SETUP ----------- */
 
@@ -107,10 +165,8 @@ int main(int argc, char* argv[]) {
             }
 
             auto npeers = FLAGS_nodes - 1;
-            IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, FLAGS_buffersnw, FLAGS_sqpoll,
-                                                            socket_fds};
-            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, FLAGS_buffersnw, FLAGS_sqpoll,
-                                                           socket_fds};
+            IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
+            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
             uint32_t peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
@@ -124,63 +180,9 @@ int main(int argc, char* argv[]) {
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
             PageChunkedList<ResultPage> chunked_list_result{};
             auto* current_result_page = chunked_list_result.get_current_page();
-
-            /* ----------- LAMBDAS ----------- */
-
             uint64_t local_tuples_processed{0};
             uint64_t local_tuples_sent{0};
             uint64_t local_tuples_received{0};
-            auto process_network_page = [&current_result_page, &chunked_list_result,
-                                         &local_tuples_received](NetworkPage& page) {
-                bool last_page = page.is_last_page();
-                page.clear_last_page();
-                for (auto i{0u}; i < page.num_tuples; ++i) {
-                    if (current_result_page->full()) {
-                        current_result_page = chunked_list_result.get_new_page();
-                    }
-                    current_result_page->emplace_back(i, page);
-                }
-                local_tuples_received += page.num_tuples;
-                return last_page;
-            };
-
-            auto process_local_page = [node_id, &current_result_page, &chunked_list_result, &manager_send,
-                                       &local_tuples_processed, &local_tuples_sent](const TablePage& page) {
-                for (auto j = 0u; j < page.num_tuples; ++j) {
-                    // hash tuple
-                    auto dst = murmur_hash(std::get<0>(page.columns)[j]) % FLAGS_nodes;
-                    // send or materialize into thread-local buffers
-                    if (dst == node_id) {
-                        if (current_result_page->full()) {
-                            current_result_page = chunked_list_result.get_new_page();
-                        }
-                        current_result_page->emplace_back_transposed(j, page);
-                        local_tuples_processed++;
-                    } else {
-                        auto actual_dst = dst - (dst > node_id);
-                        auto dst_page = manager_send.get_page(actual_dst);
-                        dst_page->emplace_back_transposed(j, page);
-                        local_tuples_sent++;
-                    }
-                }
-            };
-
-            auto consume_ingress = [npeers, &peers_done, &manager_recv, &process_network_page]() {
-                if (peers_done == npeers) {
-                    return;
-                }
-                auto [network_page, peer] = manager_recv.get_page();
-                while (network_page) {
-                    bool last_page = process_network_page(*network_page);
-                    peers_done += last_page;
-                    if (!last_page) {
-                        // still more pages
-                        manager_recv.post_recvs(peer);
-                    }
-                    manager_recv.done_page(network_page);
-                    std::tie(network_page, peer) = manager_recv.get_page();
-                }
-            };
 
             for (auto peer{0u}; peer < npeers; ++peer) {
                 manager_recv.post_recvs(peer);
@@ -200,7 +202,10 @@ int main(int argc, char* argv[]) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<uint32_t>(swips.size()));
 
                 // handle ingress communication
-                consume_ingress();
+                if (peers_done < npeers) {
+                    peers_done +=
+                        consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
                 auto swizzled_idx = std::stable_partition(swips.data() + morsel_begin, swips.data() + morsel_end,
@@ -215,22 +220,36 @@ int main(int argc, char* argv[]) {
                 TablePage* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
-                    process_local_page(*page_to_process);
+                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send,
+                                       local_tuples_processed, local_tuples_sent, *page_to_process);
                 }
                 while (thread_io.has_inflight_requests()) {
                     page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
-                    process_local_page(*page_to_process);
+                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send,
+                                       local_tuples_processed, local_tuples_sent, *page_to_process);
                 }
             }
 
+            println("flushing all...");
             manager_send.flush_all();
             while (peers_done < npeers) {
-                consume_ingress();
+                peers_done +=
+                    consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
             }
+            println("waiting all...");
             manager_send.wait_all();
+
             tuples_sent += local_tuples_sent;
             tuples_processed += local_tuples_processed;
             tuples_received += local_tuples_received;
+
+            for (auto fd : socket_fds) {
+                int ret = ::shutdown(fd, SHUT_RDWR);
+                //                int ret = ::close(fd);
+                if (ret != 0) {
+                    println("un-orderly shutdown !!");
+                }
+            }
 
             /* ----------- END ----------- */
         });
@@ -252,7 +271,7 @@ int main(int argc, char* argv[]) {
     println("tuples processed:", tuples_processed.load());
 
     Logger logger{};
-    logger.log("traffic", "ingress"s);
+    logger.log("traffic", "both"s);
     logger.log("implementation", "shuffle_homogeneous"s);
     logger.log("threads", FLAGS_threads);
     logger.log("page size", defaults::network_page_size);

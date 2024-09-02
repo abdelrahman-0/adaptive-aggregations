@@ -18,5 +18,6 @@ struct Stopwatch {
         time_ms =
             std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::high_resolution_clock::now() - begin)
                 .count();
+        time_ms = std::max(time_ms, 1ul);
     }
 };

@@ -7,8 +7,10 @@
 #include "utils/stopwatch.h"
 #include "utils/utils.h"
 
+#define SCHEMA uint64_t, uint32_t, uint32_t, std::array<char, 4>
+
 DEFINE_string(path, "data/random.tbl", "path to output destination");
-DEFINE_int64(num_tuples, 50'000'000, "number of tuples to generate");
+DEFINE_int64(ntuples, 10'000'000, "number of tuples to generate");
 
 template <typename... Attributes>
 void generate_data() {
@@ -19,12 +21,12 @@ void generate_data() {
     auto offset = 0u;
     {
         Stopwatch _{};
-        auto remaining_tuples = FLAGS_num_tuples;
+        auto remaining_tuples = FLAGS_ntuples;
         while (remaining_tuples > 0) {
             p.clear();
             p.fill_random();
             p.num_tuples = remaining_tuples >= p.max_num_tuples_per_page ? p.max_num_tuples_per_page : remaining_tuples;
-            //            p.print_contents();
+//            p.print_contents();
             io.sync_io<WRITE>(file.get_file_descriptor(), offset, p);
             offset += defaults::local_page_size;
             remaining_tuples -= p.max_num_tuples_per_page;
@@ -39,6 +41,6 @@ int main(int argc, char* argv[]) {
         println("example usage: ./generate_data --path=path/to/output --num_tuples=10000");
         exit(1);
     }
-    generate_data<int64_t, int64_t, int32_t, std::array<unsigned char, 4>>();
-    //    generate_data<std::tuple<int64_t, int64_t, int32_t, std::array<unsigned char, 4>>>();
+    println("generating", FLAGS_ntuples, "random tuples");
+    generate_data<SCHEMA>();
 }
