@@ -52,7 +52,9 @@ class NetworkManager {
     explicit NetworkManager(uint32_t nwdepth, uint32_t nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers), cqes(next_power_of_2(nwdepth) * 2) {
         init_ring(sqpoll);
-        register_sockets(sockets);
+        if (not sockets.empty()) {
+            register_sockets(sockets);
+        }
         init_buffers();
     }
 };
