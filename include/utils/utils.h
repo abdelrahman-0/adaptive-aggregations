@@ -90,26 +90,32 @@ void logln(Ts... args) {
 }
 
 template <typename T>
-void random(T& t) {
+T random() {
     if constexpr (std::is_same_v<unsigned char, T> or std::is_same_v<char, T>) {
         std::uniform_int_distribution<T> dist(33 /* ! */, 126 /* ~ */);
-        t = dist(rng);
-        //        t = '0';
+        return dist(rng);
     } else if constexpr (std::is_integral_v<T>) {
         std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
-        t = dist(rng);
+        return dist(rng);
     } else if constexpr (std::is_floating_point_v<T>) {
         std::uniform_real_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
-        t = dist(rng);
+        return dist(rng);
     } else if constexpr (custom_type_traits::is_array_v<T>) {
-        for (auto& el : t)
-            random(el);
+        T arr{};
+        for (auto& el : arr)
+            el = random<typename T::value_type>();
+        return arr;
     } else if constexpr (custom_type_traits::is_tuple_v<T>) {
-        std::apply([](auto&... el) { ((random(el)), ...); }, t);
+        T tup{};
+        std::apply([](auto& el) { el = random<decltype(el)>(); }, tup);
+        return tup;
     } else {
-        throw std::runtime_error("cannot generate random value for this type");
+        logln("cannot generate random value for this type:", boost::core::demangle(typeid(T).name()));
+        throw std::runtime_error("unsupported type");
     }
 }
+
+static_assert(custom_type_traits::is_tuple_v<std::tuple<u32,u32>>);
 
 constexpr auto next_power_of_2(std::integral auto val) -> decltype(auto)
 requires(sizeof(val) <= sizeof(unsigned long long) and std::is_unsigned_v<decltype(val)>)

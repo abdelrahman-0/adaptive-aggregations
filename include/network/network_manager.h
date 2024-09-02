@@ -14,7 +14,6 @@ class NetworkManager {
     io_uring ring{};
     std::vector<BufferPage> buffers{};
     std::vector<uint32_t> free_pages;
-    std::vector<io_uring_cqe*> cqes;
 
     uint32_t nwdepth;
 
@@ -50,7 +49,7 @@ class NetworkManager {
 
   public:
     explicit NetworkManager(uint32_t nwdepth, uint32_t nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers), cqes(next_power_of_2(nwdepth) * 2) {
+        : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers) {
         init_ring(sqpoll);
         if (not sockets.empty()) {
             register_sockets(sockets);
@@ -65,7 +64,7 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
     using NetworkManager<BufferPage>::free_pages;
-    using NetworkManager<BufferPage>::cqes;
+    std::vector<io_uring_cqe*> cqes;
     uint32_t cqes_processed{0};
     uint32_t cqes_peeked{0};
     uint64_t page_recv{0};
@@ -73,27 +72,27 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
   public:
     IngressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
                           const std::vector<int>& sockets)
-        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets) {}
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2) {}
 
-    void post_recvs(uint16_t dst) {
+    void post_recvs(u16 dst) {
         auto* sqe = io_uring_get_sqe(&ring);
         auto buffer_idx = free_pages.back();
         free_pages.pop_back();
         // fixed buffers?
         assert(sizeof(BufferPage) == defaults::network_page_size);
-        io_uring_prep_recv(sqe, dst, &buffers[buffer_idx], sizeof(BufferPage), MSG_WAITALL);
-        auto* user_data = &buffers[buffer_idx];
+        io_uring_prep_recv(sqe, dst, buffers.data() + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = buffers.data() + buffer_idx;
         io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
         sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
         io_uring_submit(&ring);
     }
 
-    std::tuple<BufferPage*, uint16_t> get_page() {
+    std::tuple<BufferPage*, u16> get_page() {
         if (cqes_processed == cqes_peeked) {
             cqes_processed = 0;
             cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
             if (cqes_peeked == 0) {
-                return {nullptr, static_cast<uint16_t>(-1)};
+                return {nullptr, static_cast<u16>(-1)};
             }
             for (auto i{0u}; i < cqes_peeked; ++i) {
                 if (cqes[i]->res != sizeof(BufferPage)) {
@@ -113,13 +112,71 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
 };
 
 template <custom_concepts::is_communication_page BufferPage>
+class MultishotIngressNetworkManager : public NetworkManager<BufferPage> {
+    // needed for dependent lookups
+    using NetworkManager<BufferPage>::ring;
+    using NetworkManager<BufferPage>::buffers;
+    using NetworkManager<BufferPage>::free_pages;
+    std::vector<io_uring_cqe*> cqes;
+    uint32_t cqes_processed{0};
+    uint32_t cqes_peeked{0};
+    uint64_t page_recv{0};
+
+  public:
+    MultishotIngressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
+                          const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2) {}
+
+    void post_recvs(u16 dst) {
+        // TODO add registered buffers
+        // TODO add recv mshot
+        auto* sqe = io_uring_get_sqe(&ring);
+        auto buffer_idx = free_pages.back();
+        free_pages.pop_back();
+        // fixed buffers?
+        assert(sizeof(BufferPage) == defaults::network_page_size);
+        io_uring_prep_recv(sqe, dst, buffers.data() + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = buffers.data() + buffer_idx;
+        io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+        io_uring_submit(&ring);
+    }
+
+    std::tuple<BufferPage*, u16> get_page() {
+        // TODO get tuples -> returns (begin, end , buff_idx, peer)
+        // TODO copy pages
+        if (cqes_processed == cqes_peeked) {
+            cqes_processed = 0;
+            cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+            if (cqes_peeked == 0) {
+                return {nullptr, static_cast<u16>(-1)};
+            }
+            for (auto i{0u}; i < cqes_peeked; ++i) {
+                if (cqes[i]->res != sizeof(BufferPage)) {
+                    throw IOUringRecvError(cqes[i]->res);
+                }
+            }
+        }
+        page_recv++;
+        auto user_data = io_uring_cqe_get_data(cqes[cqes_processed++]);
+        return {get_pointer<BufferPage>(user_data), get_tag(user_data)};
+    }
+
+    void done_page(BufferPage* page) {
+        // advance buffers cqe and re-register buffer
+        free_pages.push_back(page - buffers.data());
+        io_uring_cq_advance(&ring, 1);
+    }
+};
+
+template <custom_concepts::is_communication_page BufferPage>
 class EgressNetworkManager : public NetworkManager<BufferPage> {
     // needed for dependent lookups
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
     using NetworkManager<BufferPage>::free_pages;
-    io_uring_cqe* cqe{nullptr};
     std::vector<BufferPage*> active_buffer;
+    io_uring_cqe* cqe{nullptr};
     uint32_t inflight_egress{0};
     uint32_t total_submitted{0};
     uint32_t total_retrieved{0};
@@ -143,7 +200,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
             if (cqe->res != sizeof(BufferPage)) {
                 throw IOUringSendError{cqe->res};
             }
-            result = get_pointer<BufferPage>(cqe->user_data);
+            result = get_pointer<BufferPage>(io_uring_cqe_get_data(cqe));
             io_uring_cq_advance(&ring, 1);
             result->clear_tuples();
             inflight_egress--;
