@@ -18,14 +18,13 @@ using namespace std::chrono_literals;
 
 /* ----------- SCHEMA ----------- */
 
-#define SCHEMA uint64_t, uint32_t, uint32_t, std::array<char, 4>
+#define SCHEMA u64, u32, u32, std::array<char, 4>
 
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using NetworkPage = PageCommunication<ResultTuple>;
 using ResultPage = PageLocal<ResultTuple>;
 
-static_assert(sizeof(NetworkPage) == defaults::network_page_size);
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
@@ -41,11 +40,9 @@ DEFINE_bool(random, false, "randomize order of cached swips");
 
 /* ----------- FUNCTIONS ----------- */
 
-[[nodiscard]] uint32_t consume_ingress(IngressNetworkManager<NetworkPage>& manager_recv,
-                                       ResultPage*& current_result_page,
-                                       PageChunkedList<ResultPage>& chunked_list_result,
-                                       uint64_t& local_tuples_received) {
-    uint32_t peers_done{0};
+[[nodiscard]] u32 consume_ingress(IngressNetworkManager<NetworkPage>& manager_recv, ResultPage*& current_result_page,
+                                  PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received) {
+    u32 peers_done{0};
     auto [network_page, peer] = manager_recv.get_page();
     while (network_page) {
         //        for (auto i{0u}; i < network_page->get_num_tuples(); ++i) {
@@ -67,13 +64,14 @@ DEFINE_bool(random, false, "randomize order of cached swips");
     return peers_done;
 }
 
-void process_local_page(uint32_t node_id, ResultPage*& current_result_page,
-                        PageChunkedList<ResultPage>& chunked_list_result,
-                        EgressNetworkManager<NetworkPage>& manager_send, uint64_t& local_tuples_processed,
-                        uint64_t& local_tuples_sent, const TablePage& page) {
+void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result,
+                        EgressNetworkManager<NetworkPage>& manager_send, u64& local_tuples_processed,
+                        u64& local_tuples_sent, const TablePage& page) {
+    u64 page_local_tuples_processed{0};
+    u64 page_local_tuples_sent{0};
     for (auto j = 0u; j < page.num_tuples; ++j) {
         // hash tuple
-        auto dst = std::hash<uint32_t>{}(std::get<0>(page.columns)[j]) % FLAGS_nodes;
+        auto dst = std::hash<u64>{}(std::get<0>(page.columns)[j]) % FLAGS_nodes;
 
         // send or materialize into thread-local buffers
         if (dst == node_id) {
@@ -81,14 +79,16 @@ void process_local_page(uint32_t node_id, ResultPage*& current_result_page,
             //                current_result_page = chunked_list_result.get_new_page();
             //            }
             //            current_result_page->emplace_back_transposed(j, page);
-            local_tuples_processed++;
+            page_local_tuples_processed++;
         } else {
             auto actual_dst = dst - (dst > node_id);
             auto dst_page = manager_send.get_page(actual_dst);
             dst_page->emplace_back_transposed(j, page);
-            local_tuples_sent++;
+            page_local_tuples_sent++;
         }
     }
+    local_tuples_processed += page_local_tuples_processed;
+    local_tuples_sent += page_local_tuples_sent;
 }
 
 /* ----------- MAIN ----------- */
@@ -100,7 +100,7 @@ int main(int argc, char* argv[]) {
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
 
     auto env_var = std::getenv("NODE_ID");
-    uint32_t node_id = std::stoul(env_var ? env_var : "0");
+    u32 node_id = std::stoul(env_var ? env_var : "0");
 
     println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
     println("--------------");
@@ -132,11 +132,11 @@ int main(int argc, char* argv[]) {
 
     // control atomics
     std::atomic<bool> wait{true};
-    std::atomic<uint32_t> threads_ready{0};
-    std::atomic<uint32_t> current_swip{0};
-    std::atomic<uint64_t> tuples_processed{0};
-    std::atomic<uint64_t> tuples_sent{0};
-    std::atomic<uint64_t> tuples_received{0};
+    std::atomic<u32> threads_ready{0};
+    std::atomic<u32> current_swip{0};
+    std::atomic<u64> tuples_processed{0};
+    std::atomic<u64> tuples_sent{0};
+    std::atomic<u64> tuples_received{0};
 
     // create threads
     std::vector<std::thread> threads{};
@@ -167,7 +167,7 @@ int main(int argc, char* argv[]) {
             auto npeers = FLAGS_nodes - 1;
             IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
             EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
-            uint32_t peers_done = 0;
+            u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
 
@@ -180,9 +180,9 @@ int main(int argc, char* argv[]) {
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
             PageChunkedList<ResultPage> chunked_list_result{};
             auto* current_result_page = chunked_list_result.get_current_page();
-            uint64_t local_tuples_processed{0};
-            uint64_t local_tuples_sent{0};
-            uint64_t local_tuples_received{0};
+            u64 local_tuples_processed{0};
+            u64 local_tuples_sent{0};
+            u64 local_tuples_received{0};
 
             for (auto peer{0u}; peer < npeers; ++peer) {
                 manager_recv.post_recvs(peer);
@@ -197,9 +197,9 @@ int main(int argc, char* argv[]) {
             /* ----------- BEGIN ----------- */
 
             // morsel loop
-            uint32_t morsel_begin, morsel_end;
+            u32 morsel_begin, morsel_end;
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<uint32_t>(swips.size()));
+                morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
                 // handle ingress communication
                 if (peers_done < npeers) {
@@ -230,26 +230,16 @@ int main(int argc, char* argv[]) {
                 }
             }
 
-            println("flushing all...");
             manager_send.flush_all();
             while (peers_done < npeers) {
                 peers_done +=
                     consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
             }
-            println("waiting all...");
             manager_send.wait_all();
 
             tuples_sent += local_tuples_sent;
             tuples_processed += local_tuples_processed;
             tuples_received += local_tuples_received;
-
-            for (auto fd : socket_fds) {
-                int ret = ::shutdown(fd, SHUT_RDWR);
-                //                int ret = ::close(fd);
-                if (ret != 0) {
-                    println("un-orderly shutdown !!");
-                }
-            }
 
             /* ----------- END ----------- */
         });

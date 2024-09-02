@@ -12,6 +12,8 @@
 DEFINE_string(path, "data/random.tbl", "path to output destination");
 DEFINE_int64(ntuples, 10'000'000, "number of tuples to generate");
 
+static_assert(sizeof(std::tuple<SCHEMA>) == 24);
+
 template <typename... Attributes>
 void generate_data() {
     File file{FLAGS_path, FileMode::WRITE};
