@@ -4,6 +4,11 @@
 
 #define DEFAULTS_AUTO static constexpr auto
 
+using s32 = int32_t;
+using u32 = uint32_t;
+using s64 = uint64_t;
+using u64 = uint64_t;
+
 namespace defaults {
 
 DEFAULTS_AUTO local_page_size = 1ul << 12;
