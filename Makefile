@@ -5,7 +5,6 @@ BUILD_DIR_REL=build-release
 BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
 
 TARGETS=shuffle_homogeneous generate_data
-NETWORK_PAGE_SIZE_POWER=18
 
 all: build
 
