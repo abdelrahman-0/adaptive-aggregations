@@ -1,5 +1,6 @@
 #pragma once
 
+#include <boost/core/demangle.hpp>
 #include <exception>
 #include <iostream>
 #include <limits>
@@ -115,7 +116,7 @@ T random() {
     }
 }
 
-static_assert(custom_type_traits::is_tuple_v<std::tuple<u32,u32>>);
+static_assert(custom_type_traits::is_tuple_v<std::tuple<u32, u32>>);
 
 constexpr auto next_power_of_2(std::integral auto val) -> decltype(auto)
 requires(sizeof(val) <= sizeof(unsigned long long) and std::is_unsigned_v<decltype(val)>)
