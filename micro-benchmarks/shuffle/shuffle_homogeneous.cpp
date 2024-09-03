@@ -35,7 +35,7 @@ DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 DEFINE_uint32(morselsz, 100, "number of pages to process in one morsel");
 DEFINE_string(path, "data/random.tbl", "path to input relation");
-DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in [0,100]");
+DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100]");
 DEFINE_bool(random, false, "randomize order of cached swips");
 
 /* ----------- FUNCTIONS ----------- */
@@ -121,10 +121,9 @@ int main(int argc, char* argv[]) {
     auto& swips = table.get_swips();
 
     // prepare cache
-    IO_Manager io{FLAGS_depthio, false};
     u32 num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
     Cache<TablePage> cache{num_pages_cache};
-    table.populate_cache(cache, io, num_pages_cache, FLAGS_random);
+    table.populate_cache(cache, num_pages_cache, FLAGS_random);
     println("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
             "pages");
 
@@ -261,12 +260,13 @@ int main(int argc, char* argv[]) {
     println("tuples processed:", tuples_processed.load());
 
     Logger logger{};
+    logger.log("node id", node_id);
+    logger.log("nodes", FLAGS_nodes);
     logger.log("traffic", "both"s);
     logger.log("implementation", "shuffle_homogeneous"s);
     logger.log("threads", FLAGS_threads);
     logger.log("page size", defaults::network_page_size);
     logger.log("morsel size", FLAGS_morselsz);
-    logger.log("nodes", FLAGS_nodes);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
