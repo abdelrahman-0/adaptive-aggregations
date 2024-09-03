@@ -25,7 +25,7 @@ class IO_Manager {
   public:
     explicit IO_Manager(uint32_t sqdepth, bool sqpoll) {
         int ret;
-        if ((ret = io_uring_queue_init(next_power_of_2(sqdepth), &ring, sqpoll ? IORING_SETUP_SQPOLL : 0)) < 0) {
+        if ((ret = io_uring_queue_init(sqdepth, &ring, sqpoll ? IORING_SETUP_SQPOLL : 0)) < 0) {
             throw IOUringInitError{ret};
         }
     }

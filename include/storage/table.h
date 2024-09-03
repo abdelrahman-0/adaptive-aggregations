@@ -40,7 +40,7 @@ class Table {
     }
 
     template <custom_concepts::is_page CachePage>
-    void populate_cache(Cache<CachePage>& cache, IO_Manager& io, u32 num_pages_cache, bool randomize) {
+    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool randomize) {
         auto swip_indexes = std::vector<std::size_t>(swips.size());
         std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
         if (randomize) {
@@ -52,6 +52,7 @@ class Table {
         std::atomic<u32> current_swip{0u};
         for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
             threads.emplace_back([&]() {
+                IO_Manager io{256, false};
                 u32 local_swip, end_swip, batch_sz{100};
                 while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
                     end_swip = std::min(num_pages_cache, local_swip + batch_sz);
