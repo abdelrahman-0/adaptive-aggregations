@@ -34,9 +34,13 @@ DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 DEFINE_uint32(morselsz, 100, "number of pages to process in one morsel");
-DEFINE_string(path, "data/random.tbl", "path to input relation");
-DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100]");
-DEFINE_bool(random, false, "randomize order of cached swips");
+DEFINE_string(path, "data/random.tbl",
+              "path to input relation (if empty random pages will be generated instead, see "
+              "flag 'npages')");
+DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicable if 'random' flag is set)");
+DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
+DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
+DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -107,25 +111,33 @@ int main(int argc, char* argv[]) {
 
     /* ----------- DATA LOAD ----------- */
 
-    // prepare local IO at node offset (adjusted for page boundaries)
-    File file{FLAGS_path, FileMode::READ};
-    auto offset_begin =
-        (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
-    auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) *
-                      defaults::local_page_size;
-    if (node_id == FLAGS_nodes - 1) {
-        offset_end = file.get_total_size();
+    bool random_table = FLAGS_random;
+    Table table{random_table};
+    if (random_table) {
+        table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
+    } else {
+        // prepare local IO at node offset (adjusted for page boundaries)
+        File file{FLAGS_path, FileMode::READ};
+        auto offset_begin =
+            (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
+        auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) *
+                          defaults::local_page_size;
+        if (node_id == FLAGS_nodes - 1) {
+            offset_end = file.get_total_size();
+        }
+        file.set_offset(offset_begin, offset_end);
+        table.bind_file(std::move(file));
+        table.prepare_file_swips();
+        println("reading bytes:", offset_begin, "→", offset_end,
+                (offset_end - offset_begin) / defaults::local_page_size, "pages");
     }
-    file.set_offset(offset_begin, offset_end);
-    Table table{std::move(file)};
+
     auto& swips = table.get_swips();
 
     // prepare cache
-    u32 num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
+    u32 num_pages_cache = random_table ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
     Cache<TablePage> cache{num_pages_cache};
-    table.populate_cache(cache, num_pages_cache, FLAGS_random);
-    println("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
-            "pages");
+    table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
     /* ----------- THREAD SETUP ----------- */
 
@@ -172,7 +184,9 @@ int main(int argc, char* argv[]) {
 
             // setup local uring manager
             IO_Manager thread_io{FLAGS_depthio, FLAGS_sqpoll};
-            thread_io.register_files({table.get_file().get_file_descriptor()});
+            if (not FLAGS_path.empty()) {
+                thread_io.register_files({table.get_file().get_file_descriptor()});
+            }
 
             /* ----------- BUFFERS ----------- */
 
@@ -259,6 +273,9 @@ int main(int argc, char* argv[]) {
     println("tuples sent:", tuples_sent.load());
     println("tuples processed:", tuples_processed.load());
 
+    u64 local_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size / FLAGS_nodes : table.get_file().get_size();
+    u64 total_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size : table.get_file().get_total_size();
+
     Logger logger{};
     logger.log("node id", node_id);
     logger.log("nodes", FLAGS_nodes);
@@ -270,6 +287,6 @@ int main(int argc, char* argv[]) {
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
-    logger.log("node throughput (Gb/s)", (table.get_file().get_size() * 8 * 1000) / (1e9 * swatch.time_ms));
-    logger.log("total throughput (Gb/s)", (table.get_file().get_total_size() * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("node throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("total throughput (Gb/s)", (total_sz * 8 * 1000) / (1e9 * swatch.time_ms));
 }
