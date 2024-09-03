@@ -69,7 +69,7 @@ void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunk
                         u64& local_tuples_sent, const TablePage& page) {
     u64 page_local_tuples_processed{0};
     u64 page_local_tuples_sent{0};
-    for (auto j = 0u; j < page.num_tuples; ++j) {
+    for (auto j{0u}; j < page.num_tuples; ++j) {
         // hash tuple
         auto dst = std::hash<u64>{}(std::get<0>(page.columns)[j]) % FLAGS_nodes;
 

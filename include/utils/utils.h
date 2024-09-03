@@ -45,7 +45,7 @@ void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence
             for (auto&& el : std::get<indexes>(args)) {
                 __print(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)),
                         std::make_index_sequence<1>{});
-                stream << ((iter_idx++ < std::get<indexes>(args).size() - 1) ? " " : "");
+                stream << ((iter_idx++ < std::get<indexes>(args).size() - 1) ? std::string{delimiter} : "");
             }
         } else if constexpr (custom_type_traits::is_tuple_v<Ts>) {
             std::apply(
