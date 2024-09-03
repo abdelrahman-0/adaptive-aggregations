@@ -40,18 +40,33 @@ class Table {
     }
 
     template <custom_concepts::is_page CachePage>
-    void populate_cache(Cache<CachePage>& cache, IO_Manager& io, std::size_t num_pages_cache, bool randomize) {
+    void populate_cache(Cache<CachePage>& cache, IO_Manager& io, u32 num_pages_cache, bool randomize) {
         auto swip_indexes = std::vector<std::size_t>(swips.size());
         std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
         if (randomize) {
             std::shuffle(swip_indexes.begin(), swip_indexes.end(), rng);
         }
-        for (auto i = 0u; i < num_pages_cache; ++i) {
-            assert(swips[swip_indexes[i]].is_page_idx());
-            auto page_offset = swips[swip_indexes[i]].get_page_index() * defaults::local_page_size;
-            io.sync_io<READ>(file.get_file_descriptor(), page_offset, cache.get_page(i));
-            // swizzle pointer
-            swips[swip_indexes[i]].set_pointer(&cache.get_page(i));
+
+        // populate cache using all available threads
+        std::vector<std::thread> threads;
+        std::atomic<u32> current_swip{0u};
+        for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
+            threads.emplace_back([&]() {
+                u32 local_swip, end_swip, batch_sz{100};
+                while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
+                    end_swip = std::min(num_pages_cache, local_swip + batch_sz);
+                    for (; local_swip < end_swip; ++local_swip) {
+                        assert(swips[swip_indexes[local_swip]].is_page_idx());
+                        auto page_offset = swips[swip_indexes[local_swip]].get_page_index() * defaults::local_page_size;
+                        io.sync_io<READ>(file.get_file_descriptor(), page_offset, cache.get_page(local_swip));
+                        // swizzle pointer
+                        swips[swip_indexes[local_swip]].set_pointer(&cache.get_page(local_swip));
+                    }
+                }
+            });
+        }
+        for (auto& t : threads) {
+            t.join();
         }
     }
 

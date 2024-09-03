@@ -122,7 +122,7 @@ int main(int argc, char* argv[]) {
 
     // prepare cache
     IO_Manager io{FLAGS_depthio, false};
-    auto num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
+    u32 num_pages_cache = (FLAGS_cache * swips.size()) / 100u;
     Cache<TablePage> cache{num_pages_cache};
     table.populate_cache(cache, io, num_pages_cache, FLAGS_random);
     println("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
