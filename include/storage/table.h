@@ -20,51 +20,74 @@ class Table {
   private:
     std::vector<Swip> swips;
     File file;
+    bool random_contents;
 
-    void prepare_swips() {
+  public:
+    int segment_id;
+
+    explicit Table(bool random) : random_contents(random) { segment_id = global_segment_id.fetch_add(1); };
+
+    ~Table() = default;
+
+    void bind_file(File&& table_file) { file = std::move(table_file); }
+
+    void prepare_swips() {}
+
+    void prepare_file_swips() {
         swips.resize((file.get_size() + defaults::local_page_size - 1) / defaults::local_page_size);
         auto first_page = file.get_offset_begin() / defaults::local_page_size;
         std::iota(swips.begin(), swips.end(), first_page);
     }
 
-  public:
-    int segment_id;
+    void prepare_random_swips(u32 npages) { swips.resize(npages); }
 
-    explicit Table(File&& file) : file(std::move(file)) { segment_id = global_segment_id.fetch_add(1); }
-
-    ~Table() = default;
-
-    auto& get_swips() {
-        prepare_swips();
-        return swips;
-    }
+    auto& get_swips() { return swips; }
 
     template <custom_concepts::is_page CachePage>
-    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool randomize) {
-        auto swip_indexes = std::vector<std::size_t>(swips.size());
-        std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
-        if (randomize) {
-            std::shuffle(swip_indexes.begin(), swip_indexes.end(), rng);
-        }
-
-        // populate cache using all available threads
+    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io) {
         std::vector<std::thread> threads;
         std::atomic<u32> current_swip{0u};
-        for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
-            threads.emplace_back([&]() {
-                IO_Manager io{256, false};
-                u32 local_swip, end_swip, batch_sz{100};
-                while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
-                    end_swip = std::min(num_pages_cache, local_swip + batch_sz);
-                    for (; local_swip < end_swip; ++local_swip) {
-                        assert(swips[swip_indexes[local_swip]].is_page_idx());
-                        auto page_offset = swips[swip_indexes[local_swip]].get_page_index() * defaults::local_page_size;
-                        io.sync_io<READ>(file.get_file_descriptor(), page_offset, cache.get_page(local_swip));
-                        // swizzle pointer
-                        swips[swip_indexes[local_swip]].set_pointer(&cache.get_page(local_swip));
+        if (random_contents) {
+            // populate cache using all available threads
+            for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
+                threads.emplace_back([&]() {
+                    u32 local_swip, end_swip, batch_sz{100};
+                    while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
+                        end_swip = std::min(num_pages_cache, local_swip + batch_sz);
+                        for (; local_swip < end_swip; ++local_swip) {
+                            auto& page = cache.get_page(local_swip);
+                            page.num_tuples = CachePage::max_num_tuples_per_page;
+                            page.fill_random();
+                            swips[local_swip].set_pointer(&page);
+                        }
                     }
-                }
-            });
+                });
+            }
+        } else {
+            auto swip_indexes = std::vector<std::size_t>(swips.size());
+            std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
+            if (not sequential_io) {
+                std::shuffle(swip_indexes.begin(), swip_indexes.end(), rng);
+            }
+
+            // populate cache using all available threads
+            for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
+                threads.emplace_back([&]() {
+                    IO_Manager io{256, false};
+                    u32 local_swip, end_swip, batch_sz{100};
+                    while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
+                        end_swip = std::min(num_pages_cache, local_swip + batch_sz);
+                        for (; local_swip < end_swip; ++local_swip) {
+                            assert(swips[swip_indexes[local_swip]].is_page_idx());
+                            auto page_offset =
+                                swips[swip_indexes[local_swip]].get_page_index() * defaults::local_page_size;
+                            io.sync_io<READ>(file.get_file_descriptor(), page_offset, cache.get_page(local_swip));
+                            // swizzle pointer
+                            swips[swip_indexes[local_swip]].set_pointer(&cache.get_page(local_swip));
+                        }
+                    }
+                });
+            }
         }
         for (auto& t : threads) {
             t.join();

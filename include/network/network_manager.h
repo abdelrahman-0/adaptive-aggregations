@@ -243,7 +243,6 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
             active_buffer[peer]->set_last_page();
             flush(peer);
         }
-        println("total pages sent", total_submitted);
     }
 
     void wait_all() {

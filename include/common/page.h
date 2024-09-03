@@ -55,9 +55,8 @@ struct alignas(page_size) Page {
     template <u64 other_page_size, typename... OtherAttributes, std::size_t... indexes>
     void emplace_back_transposed_helper(std::size_t row_idx, const Page<other_page_size, OtherAttributes...>& page,
                                         std::index_sequence<indexes...>) {
-        // TODO
-        std::get<0>(columns)[num_tuples] = std::tuple(std::get<indexes>(page.columns)[row_idx]...);
-        //        new (&(std::get<0>(columns)[num_tuples])) std::tuple(std::get<indexes>(page.columns)[row_idx]...);
+        //        std::get<0>(columns)[num_tuples] = std::tuple(std::get<indexes>(page.columns)[row_idx]...);
+        new (&(std::get<0>(columns)[num_tuples])) std::tuple(std::get<indexes>(page.columns)[row_idx]...);
     }
 
     void clear() { memset(this, 0, page_size); }

@@ -61,7 +61,7 @@ struct Swip {
 
 template <custom_concepts::is_page CachePage>
 struct Cache {
-    std::vector<CachePage> pages{};
+    std::vector<CachePage> pages;
 
     explicit Cache(std::size_t num_pages_cache) { pages.resize(num_pages_cache); };
 
