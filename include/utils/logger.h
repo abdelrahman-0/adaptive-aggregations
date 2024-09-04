@@ -10,13 +10,16 @@ class Logger {
   private:
     std::vector<std::string> header{};
     std::vector<std::string> row{};
+    bool print_header{};
     std::mutex mutex{};
 
   public:
-    Logger() = default;
+    explicit Logger(bool print_header) : print_header(print_header) {};
 
     ~Logger() {
-        logln<','>(header);
+        if (print_header) {
+            logln<','>(header);
+        }
         logln<','>(row);
     }
 
