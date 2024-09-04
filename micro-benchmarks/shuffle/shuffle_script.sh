@@ -1,4 +1,4 @@
-TARGET_PATH='./build-release/micro-benchmarks/shuffle/shuffle_homogeneous'
+TARGET_PATH='../../build-release/micro-benchmarks/shuffle/shuffle_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 NODES=8
