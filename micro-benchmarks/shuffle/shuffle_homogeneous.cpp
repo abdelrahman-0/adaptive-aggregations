@@ -41,6 +41,7 @@ DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicab
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
+DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -276,7 +277,7 @@ int main(int argc, char* argv[]) {
     u64 local_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size / FLAGS_nodes : table.get_file().get_size();
     u64 total_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size : table.get_file().get_total_size();
 
-    Logger logger{};
+    Logger logger{FLAGS_print_header};
     logger.log("node id", node_id);
     logger.log("nodes", FLAGS_nodes);
     logger.log("traffic", "both"s);
