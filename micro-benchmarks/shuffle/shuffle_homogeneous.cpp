@@ -8,7 +8,6 @@
 #include "network/page_communication.h"
 #include "storage/chunked_list.h"
 #include "storage/page_local.h"
-#include "storage/policy.h"
 #include "storage/table.h"
 #include "utils/hash.h"
 #include "utils/stopwatch.h"
@@ -33,7 +32,7 @@ DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
-DEFINE_uint32(morselsz, 100, "number of pages to process in one morsel");
+DEFINE_uint32(morselsz, 10, "number of pages to process in one morsel");
 DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
