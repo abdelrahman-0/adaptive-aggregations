@@ -13,13 +13,14 @@ class NetworkManager {
   protected:
     io_uring ring{};
     std::vector<BufferPage> buffers{};
-    std::vector<uint32_t> free_pages;
+    std::vector<u32> free_pages;
 
-    uint32_t nwdepth;
+    u32 nwdepth;
 
     void init_ring(bool sqpoll) {
         int ret;
-        if ((ret = io_uring_queue_init(next_power_of_2(nwdepth), &ring, sqpoll ? IORING_SETUP_SQPOLL : 0)) < 0) {
+        if ((ret = io_uring_queue_init(next_power_of_2(nwdepth), &ring,
+                                       IORING_SETUP_SINGLE_ISSUER | (sqpoll ? IORING_SETUP_SQPOLL : 0))) < 0) {
             throw IOUringInitError{ret};
         }
     }
@@ -42,37 +43,42 @@ class NetworkManager {
         }
     }
 
-    void init_buffers() {
-        //        register_buffers();
+    void init_buffers(bool register_bufs) {
+        if (register_bufs) {
+            register_buffers();
+        }
         std::iota(free_pages.rbegin(), free_pages.rend(), 0u);
     }
 
   public:
-    explicit NetworkManager(uint32_t nwdepth, uint32_t nbuffers, bool sqpoll, const std::vector<int>& sockets)
+    explicit NetworkManager(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
+                            bool register_bufs = false)
         : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers) {
         init_ring(sqpoll);
         if (not sockets.empty()) {
             register_sockets(sockets);
         }
-        init_buffers();
+        init_buffers(register_bufs);
     }
 };
 
 template <custom_concepts::is_communication_page BufferPage>
 class IngressNetworkManager : public NetworkManager<BufferPage> {
+  private:
     // needed for dependent lookups
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
     using NetworkManager<BufferPage>::free_pages;
     std::vector<io_uring_cqe*> cqes;
-    uint32_t cqes_processed{0};
-    uint32_t cqes_peeked{0};
-    uint64_t page_recv{0};
+    u32 cqes_processed{0};
+    u32 cqes_peeked{0};
+    u64 pages_recv{0};
 
   public:
-    IngressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
-                          const std::vector<int>& sockets)
+    IngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2) {}
+
+    auto get_pages_recv() const { return pages_recv; }
 
     void post_recvs(u16 dst) {
         auto* sqe = io_uring_get_sqe(&ring);
@@ -100,7 +106,7 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
                 }
             }
         }
-        page_recv++;
+        pages_recv++;
         auto user_data = io_uring_cqe_get_data(cqes[cqes_processed++]);
         return {get_pointer<BufferPage>(user_data), get_tag(user_data)};
     }
@@ -113,59 +119,76 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
 
 template <custom_concepts::is_communication_page BufferPage>
 class MultishotIngressNetworkManager : public NetworkManager<BufferPage> {
+  private:
     // needed for dependent lookups
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
-    using NetworkManager<BufferPage>::free_pages;
+    std::vector<io_uring_buf_ring*> buf_rings;
     std::vector<io_uring_cqe*> cqes;
-    uint32_t cqes_processed{0};
-    uint32_t cqes_peeked{0};
-    uint64_t page_recv{0};
+    u64 page_recv{0};
+    u32 cqes_processed{0};
+    u32 cqes_peeked{0};
+    u32 nbuffers_per_peer;
+
+    void setup_buf_rings(u32 nbuffers) {
+        assert(nbuffers == next_power_of_2(nbuffers));
+        int ret;
+        for (auto i{0u}; i < buf_rings.size(); ++i) {
+            auto* buf_ring = io_uring_setup_buf_ring(&ring, nbuffers * 2, i, 0, &ret);
+            if (not buf_ring) {
+                throw IOUringSetupBufRingError{ret};
+            }
+            for (auto j{0u}; j < nbuffers; j++) {
+                io_uring_buf_ring_add(buf_ring, buffers.data() + i * nbuffers + j, sizeof(BufferPage), j,
+                                      io_uring_buf_ring_mask(nbuffers), j);
+            }
+            io_uring_buf_ring_advance(buf_ring, nbuffers);
+            buf_rings[i] = buf_ring;
+        }
+    }
 
   public:
-    MultishotIngressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
-                          const std::vector<int>& sockets)
-        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2) {}
+    MultishotIngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers * npeers, sqpoll, sockets), cqes(nwdepth * 2), buf_rings(npeers),
+          nbuffers_per_peer(nbuffers) {
+        setup_buf_rings(nbuffers);
+    }
 
     void post_recvs(u16 dst) {
-        // TODO add registered buffers
-        // TODO add recv mshot
-        auto* sqe = io_uring_get_sqe(&ring);
-        auto buffer_idx = free_pages.back();
-        free_pages.pop_back();
-        // fixed buffers?
-        assert(sizeof(BufferPage) == defaults::network_page_size);
-        io_uring_prep_recv(sqe, dst, buffers.data() + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
-        auto* user_data = buffers.data() + buffer_idx;
-        io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
-        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
-        io_uring_submit(&ring);
+        // prepare multi-shot
+        auto sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_recv_multishot(sqe, dst, nullptr, 0, 0);
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_BUFFER_SELECT;
+        sqe->buf_group = dst;
+        sqe->user_data = dst;
+        auto num_submitted = io_uring_submit(&ring);
+        assert(num_submitted == 1);
     }
 
-    std::tuple<BufferPage*, u16> get_page() {
-        // TODO get tuples -> returns (begin, end , buff_idx, peer)
-        // TODO copy pages
-        if (cqes_processed == cqes_peeked) {
-            cqes_processed = 0;
-            cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
-            if (cqes_peeked == 0) {
-                return {nullptr, static_cast<u16>(-1)};
-            }
-            for (auto i{0u}; i < cqes_peeked; ++i) {
-                if (cqes[i]->res != sizeof(BufferPage)) {
-                    throw IOUringRecvError(cqes[i]->res);
-                }
-            }
+    std::tuple<void*, void*, u16, u16> get_page() {
+        // TODO handle short recvs with copy
+        auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), 1);
+        if (peeked == 0) {
+            return {nullptr, nullptr, 0, 0};
         }
-        page_recv++;
-        auto user_data = io_uring_cqe_get_data(cqes[cqes_processed++]);
-        return {get_pointer<BufferPage>(user_data), get_tag(user_data)};
+        auto buf_idx = cqes[0]->flags >> IORING_CQE_BUFFER_SHIFT;
+        auto* begin = reinterpret_cast<std::byte*>(buffers.data() + buf_idx);
+        auto* end = reinterpret_cast<std::byte*>(buffers.data() + buf_idx) + cqes[0]->res;
+        println("Got", cqes[0]->res, "bytes");
+        if (cqes[0]->res < 0) {
+            throw IOUringMultiShotRecvError{cqes[0]->res};
+        }
+        println("user data", cqes[0]->user_data);
+        assert(cqes[0]->flags & IORING_CQE_F_MORE);
+
+        return {begin, end, buf_idx, cqes[0]->user_data};
     }
 
-    void done_page(BufferPage* page) {
+    void done_page(u16 dst, u16 buf_idx) {
         // advance buffers cqe and re-register buffer
-        free_pages.push_back(page - buffers.data());
-        io_uring_cq_advance(&ring, 1);
+        io_uring_buf_ring_add(buf_rings[dst], buffers.data() + buf_idx, sizeof(BufferPage), buf_idx,
+                              io_uring_buf_ring_mask(nbuffers_per_peer), 0);
+        io_uring_buf_ring_cq_advance(&ring, buf_rings[dst], 1);
     }
 };
 
@@ -177,20 +200,19 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     using NetworkManager<BufferPage>::free_pages;
     std::vector<BufferPage*> active_buffer;
     io_uring_cqe* cqe{nullptr};
-    uint32_t inflight_egress{0};
-    uint32_t total_submitted{0};
-    uint32_t total_retrieved{0};
+    u32 inflight_egress{0};
+    u32 total_submitted{0};
+    u32 total_retrieved{0};
 
   public:
-    EgressNetworkManager(uint32_t npeers, uint32_t nwdepth, uint32_t nbuffers, bool sqpoll,
-                         const std::vector<int>& sockets)
+    EgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), active_buffer(npeers, nullptr) {
         for (auto peer{0u}; peer < npeers; ++peer) {
             get_new_page(peer);
         }
     }
 
-    [[maybe_unused]] BufferPage* get_new_page(uint32_t dst) {
+    [[maybe_unused]] BufferPage* get_new_page(u32 dst) {
         BufferPage* result{nullptr};
         if (free_pages.empty()) {
             int res = io_uring_wait_cqe(&ring, &cqe);
@@ -200,14 +222,14 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
             if (cqe->res != sizeof(BufferPage)) {
                 throw IOUringSendError{cqe->res};
             }
-            result = get_pointer<BufferPage>(io_uring_cqe_get_data(cqe));
+            result = reinterpret_cast<BufferPage*>(io_uring_cqe_get_data(cqe));
             io_uring_cq_advance(&ring, 1);
             result->clear_tuples();
             inflight_egress--;
             total_retrieved++;
         } else {
             // get a free page
-            uint32_t page_idx = free_pages.back();
+            u32 page_idx = free_pages.back();
             free_pages.pop_back();
             result = buffers.data() + page_idx;
         }
@@ -215,7 +237,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
         return result;
     }
 
-    BufferPage* get_page(uint32_t dst) {
+    BufferPage* get_page(u32 dst) {
         if (not active_buffer[dst]->full()) {
             return active_buffer[dst];
         }
@@ -223,14 +245,14 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
         return get_new_page(dst);
     }
 
-    void flush(uint32_t dst) {
+    void flush(u32 dst) {
         auto* sqe = io_uring_get_sqe(&ring);
         if (sqe == nullptr) {
             throw IOUringSubmissionQueueFullError{};
         }
         io_uring_prep_send(sqe, dst, active_buffer[dst], sizeof(BufferPage), MSG_WAITALL);
         sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
-        io_uring_sqe_set_data(sqe, tag_pointer(active_buffer[dst], dst));
+        io_uring_sqe_set_data(sqe, active_buffer[dst]);
         inflight_egress++;
         auto num_submitted = io_uring_submit(&ring);
         assert(num_submitted == 1);

@@ -148,12 +148,13 @@ int main(int argc, char* argv[]) {
     std::atomic<u64> tuples_processed{0};
     std::atomic<u64> tuples_sent{0};
     std::atomic<u64> tuples_received{0};
+    std::atomic<u64> pages_recv{0};
 
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([thread_id, node_id, subnet, host_base, &wait, &threads_ready, &current_swip, &swips,
-                              &table, &tuples_processed, &tuples_sent, &tuples_received]() {
+                              &table, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv]() {
             /* ----------- NETWORK I/O ----------- */
 
             // setup connections to each node, forming a logical clique topology
@@ -177,7 +178,7 @@ int main(int argc, char* argv[]) {
 
             auto npeers = FLAGS_nodes - 1;
             IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
-            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
+            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers * 4, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
@@ -254,6 +255,8 @@ int main(int argc, char* argv[]) {
             tuples_processed += local_tuples_processed;
             tuples_received += local_tuples_received;
 
+            pages_recv += manager_recv.get_pages_recv();
+
             /* ----------- END ----------- */
         });
     }
@@ -274,6 +277,7 @@ int main(int argc, char* argv[]) {
     println("tuples processed:", tuples_processed.load());
 
     u64 local_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size / FLAGS_nodes : table.get_file().get_size();
+    u64 recv_sz = pages_recv * defaults::network_page_size;
     u64 total_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size : table.get_file().get_total_size();
 
     Logger logger{FLAGS_print_header};
@@ -288,5 +292,6 @@ int main(int argc, char* argv[]) {
     logger.log("time (ms)", swatch.time_ms);
     logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
     logger.log("node throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms));
     logger.log("total throughput (Gb/s)", (total_sz * 8 * 1000) / (1e9 * swatch.time_ms));
 }

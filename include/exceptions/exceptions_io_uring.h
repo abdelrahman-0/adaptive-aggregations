@@ -49,6 +49,11 @@ class IOUringConnectError : public IOUringError {
         : IOUringError("Error connecting to " + std::string{ip_address}) {}
 };
 
+class IOUringSetupBufRingError : public IOUringError {
+  public:
+    explicit IOUringSetupBufRingError(int error) : IOUringError("Error setting up buffer ring", error) {}
+};
+
 class IOUringMultiShotRecvError : public IOUringError {
   public:
     explicit IOUringMultiShotRecvError(int error) : IOUringError("Error submitting multishot receive request", error) {}
