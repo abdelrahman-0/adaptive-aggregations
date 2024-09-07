@@ -7,7 +7,7 @@ PRINT_HEADER='--print_header'
 
 for THREADS in 1 2 4 8 16 32 64;
  do
-  for MORSEL_SZ in 1 10 100;
+  for MORSEL_SZ in 10;
    do
     $TARGET_PATH $PRINT_HEADER $FLAGS --threads=$THREADS --morselsz=$MORSEL_SZ > /dev/null
     sleep 1s
