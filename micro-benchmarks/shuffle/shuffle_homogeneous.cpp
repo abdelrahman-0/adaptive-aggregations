@@ -37,6 +37,7 @@ DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
 DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicable if 'random' flag is set)");
+DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
@@ -178,7 +179,8 @@ int main(int argc, char* argv[]) {
 
             auto npeers = FLAGS_nodes - 1;
             IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
-            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers * 4, FLAGS_sqpoll, socket_fds};
+            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer,
+                                                           FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
