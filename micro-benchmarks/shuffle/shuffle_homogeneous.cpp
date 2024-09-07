@@ -259,6 +259,9 @@ int main(int argc, char* argv[]) {
 
             pages_recv += manager_recv.get_pages_recv();
 
+            for (auto i : socket_fds) {
+                ::shutdown(i, SHUT_RD);
+            }
             /* ----------- END ----------- */
         });
     }
@@ -278,7 +281,8 @@ int main(int argc, char* argv[]) {
     println("tuples sent:", tuples_sent.load());
     println("tuples processed:", tuples_processed.load());
 
-    u64 pages_local = (tuples_processed + ResultPage::max_num_tuples_per_page - 1) / ResultPage::max_num_tuples_per_page;
+    u64 pages_local =
+        (tuples_processed + ResultPage::max_num_tuples_per_page - 1) / ResultPage::max_num_tuples_per_page;
     u64 local_sz = pages_local * defaults::local_page_size;
     u64 recv_sz = pages_recv * defaults::network_page_size;
 
