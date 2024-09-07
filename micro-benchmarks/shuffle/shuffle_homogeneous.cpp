@@ -276,9 +276,9 @@ int main(int argc, char* argv[]) {
     println("tuples sent:", tuples_sent.load());
     println("tuples processed:", tuples_processed.load());
 
-    u64 local_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size / FLAGS_nodes : table.get_file().get_size();
+    u64 pages_local = (tuples_processed + ResultPage::max_num_tuples_per_page - 1) / ResultPage::max_num_tuples_per_page;
+    u64 local_sz = pages_local * defaults::local_page_size;
     u64 recv_sz = pages_recv * defaults::network_page_size;
-    u64 total_sz = FLAGS_random ? FLAGS_npages * defaults::local_page_size : table.get_file().get_total_size();
 
     Logger logger{FLAGS_print_header};
     logger.log("node id", node_id);
@@ -290,8 +290,7 @@ int main(int argc, char* argv[]) {
     logger.log("morsel size", FLAGS_morselsz);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
-    logger.log("throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
-    logger.log("node throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms));
+    logger.log("tuple throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
+    logger.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms));
     logger.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms));
-    logger.log("total throughput (Gb/s)", (total_sz * 8 * 1000) / (1e9 * swatch.time_ms));
 }
