@@ -26,7 +26,7 @@ using ResultPage = PageLocal<ResultTuple>;
 /* ----------- NETWORK ----------- */
 using NetworkPage = PageCommunication<ResultTuple>;
 using IngressManager = IngressNetworkManager<NetworkPage>;
-using EgressManager = SimpleEgressNetworkManager<NetworkPage>;
+using EgressManager = EgressNetworkManager<NetworkPage>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
