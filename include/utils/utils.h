@@ -30,7 +30,7 @@ static inline uint16_t get_tag(void* tagged_ptr) { return reinterpret_cast<uintp
 
 static inline uint16_t get_tag(uintptr_t tagged_ptr) { return tagged_ptr >> 48; }
 
-static inline constexpr auto tag_pointer(custom_concepts::pointer_type auto ptr, std::integral auto tag) {
+static inline auto tag_pointer(custom_concepts::pointer_type auto ptr, std::integral auto tag) {
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(tag) << 48));
 }
 
