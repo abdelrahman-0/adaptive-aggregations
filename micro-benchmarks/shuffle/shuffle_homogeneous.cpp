@@ -21,8 +21,12 @@ using namespace std::chrono_literals;
 
 using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
-using NetworkPage = PageCommunication<ResultTuple>;
 using ResultPage = PageLocal<ResultTuple>;
+
+/* ----------- NETWORK ----------- */
+using NetworkPage = PageCommunication<ResultTuple>;
+using IngressManager = IngressNetworkManager<NetworkPage>;
+using EgressManager = SimpleEgressNetworkManager<NetworkPage>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
@@ -37,7 +41,7 @@ DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
 DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicable if 'random' flag is set)");
-DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
+DEFINE_uint32(bufs_per_peer, 5, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
@@ -45,7 +49,7 @@ DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
 
-[[nodiscard]] u32 consume_ingress(IngressNetworkManager<NetworkPage>& manager_recv, ResultPage*& current_result_page,
+[[nodiscard]] u32 consume_ingress(IngressManager& manager_recv, ResultPage*& current_result_page,
                                   PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received) {
     u32 peers_done{0};
     auto [network_page, peer] = manager_recv.get_page();
@@ -70,8 +74,8 @@ DEFINE_bool(print_header, true, "whether to print metrics header");
 }
 
 void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result,
-                        EgressNetworkManager<NetworkPage>& manager_send, u64& local_tuples_processed,
-                        u64& local_tuples_sent, const TablePage& page) {
+                        EgressManager& manager_send, u64& local_tuples_processed, u64& local_tuples_sent,
+                        const TablePage& page) {
     u64 page_local_tuples_processed{0};
     u64 page_local_tuples_sent{0};
     for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -109,6 +113,11 @@ int main(int argc, char* argv[]) {
 
     println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
     println("--------------");
+
+    if (not(std::is_same_v<EgressManager, EgressNetworkManager<NetworkPage>> or FLAGS_bufs_per_peer == 1)) {
+        println("invalid combination of options!");
+        std::exit(0);
+    }
 
     /* ----------- DATA LOAD ----------- */
 
@@ -178,9 +187,8 @@ int main(int argc, char* argv[]) {
             }
 
             auto npeers = FLAGS_nodes - 1;
-            IngressNetworkManager<NetworkPage> manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
-            EgressNetworkManager<NetworkPage> manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer,
-                                                           FLAGS_sqpoll, socket_fds};
+            IngressManager manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
+            EgressManager manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
@@ -250,6 +258,9 @@ int main(int argc, char* argv[]) {
             while (peers_done < npeers) {
                 peers_done +=
                     consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                if constexpr (std::is_same_v<EgressManager, EgressNetworkManager<NetworkPage>>) {
+                    manager_send.try_drain_pending();
+                }
             }
             manager_send.wait_all();
 
@@ -259,9 +270,6 @@ int main(int argc, char* argv[]) {
 
             pages_recv += manager_recv.get_pages_recv();
 
-            for (auto i : socket_fds) {
-                ::shutdown(i, SHUT_RD);
-            }
             /* ----------- END ----------- */
         });
     }
