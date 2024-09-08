@@ -2,7 +2,7 @@ TARGET_PATH='../../build-release/micro-benchmarks/shuffle/shuffle_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 NODES=4
-FLAGS="--nolocal --random --npages=500000 --nodes=${NODES}"
+FLAGS="--nolocal --random --npages=500000 --nodes=${NODES} --bufs_per_peer=2"
 PRINT_HEADER='--print_header'
 
 for THREADS in 1 2 4 8 16 32 64;
