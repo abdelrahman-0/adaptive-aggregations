@@ -350,8 +350,9 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     }
 
     BufferPage* get_page(u32 dst) {
-        if (not active_buffer[dst]->full()) {
-            return active_buffer[dst];
+        auto* active_buf = active_buffer[dst];
+        if (not active_buf->full()) {
+            return active_buf;
         }
         flush(dst);
         return get_new_page(dst);
@@ -372,17 +373,18 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     }
 
     void flush(u16 dst) {
+        auto* active_buf = active_buffer[dst];
         if (has_inflight[dst]) {
-            pending_pages[dst].push(active_buffer[dst]);
+            pending_pages[dst].push(active_buf);
         } else {
             has_inflight[dst] = true;
             if (pending_pages[dst].empty()) {
-                _flush(dst, active_buffer[dst]);
+                _flush(dst, active_buf);
             } else {
                 // flush first page in FIFO queue and current page to queue
                 _flush(dst, pending_pages[dst].front());
                 pending_pages[dst].pop();
-                pending_pages[dst].push(active_buffer[dst]);
+                pending_pages[dst].push(active_buf);
             }
         }
     }
