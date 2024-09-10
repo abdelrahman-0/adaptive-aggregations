@@ -72,17 +72,6 @@ void print(Ts... args) {
     __print<delimiter>(std::cout, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
 }
 
-// template <char delimiter = 0, typename... Ts>
-// void print(const Ts&... args) {
-//     __print<delimiter>(std::cout, args...);
-// }
-
-// template <char delimiter = ' ', typename... Ts>
-// void println(const Ts&... args) {
-//     __print<delimiter>(std::cout, args...);
-//     std::cout << '\n';
-// }
-
 template <char delimiter = ' ', typename... Ts>
 void logln(Ts... args) {
     __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...),
@@ -116,7 +105,23 @@ T random() {
     }
 }
 
-static_assert(custom_type_traits::is_tuple_v<std::tuple<u32, u32>>);
+void set_cpu_affinity(int tid, bool hyperthreading) {
+    auto nthreads_sys = std::thread::hardware_concurrency();
+    ::cpu_set_t mask;
+    auto cpu_0 = (2 * tid) % nthreads_sys;
+    auto cpu_1 = (2 * tid + 1) % nthreads_sys;
+    CPU_ZERO(&mask);
+    if (not hyperthreading) {
+        std::exit(0);
+    }
+    CPU_SET(cpu_0, &mask);
+    CPU_SET(cpu_1, &mask);
+    if (::sched_setaffinity(0, sizeof(mask), &mask)) {
+        logln("unable to pin CPU");
+        std::exit(0); // TODO exception class
+    }
+    println("pinned thread", tid, "to cpu(s):", cpu_0, cpu_1);
+}
 
 constexpr auto next_power_of_2(std::integral auto val) -> decltype(auto)
 requires(sizeof(val) <= sizeof(unsigned long long) and std::is_unsigned_v<decltype(val)>)
