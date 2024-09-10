@@ -30,21 +30,20 @@ static auto get_connection_hints(bool use_ipv6 = false) {
 
 // open multiple TCP connections to a particular destination
 struct Connection {
-    uint32_t num_connections{};
+    u32 num_connections{};
     std::string connection_ip{};
     std::vector<int> socket_fds{};
-    uint32_t node_id{};
-    uint32_t nthreads{};
-    uint32_t thread_id{};
+    u32 node_id{};
+    u32 nthreads{};
+    u32 thread_id{};
 
     Connection() = default;
 
-    explicit Connection(uint32_t node_id, uint32_t nthreads, uint32_t thread_id, uint32_t num_connections = 1)
+    explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, u32 num_connections = 1)
         : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections),
           socket_fds(num_connections, -1) {}
 
-    explicit Connection(uint32_t node_id, uint32_t nthreads, uint32_t thread_id, std::string connection_ip,
-                        uint32_t num_connections = 1)
+    explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, std::string connection_ip, u32 num_connections = 1)
         : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections),
           connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {}
 
@@ -103,7 +102,7 @@ struct Connection {
             if (ingress_fd < 0) {
                 throw NetworkSocketAcceptError{};
             }
-            uint32_t incoming_node_id;
+            u32 incoming_node_id;
             ::recv(ingress_fd, &incoming_node_id, sizeof(incoming_node_id), MSG_WAITALL);
             println("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
             socket_fds[incoming_node_id] = ingress_fd;
@@ -114,7 +113,7 @@ struct Connection {
     }
 
     // outgoing connections
-    void setup_egress(uint32_t outgoing_node_id) {
+    void setup_egress(u32 outgoing_node_id) {
         if (num_connections == 0) {
             return;
         }
