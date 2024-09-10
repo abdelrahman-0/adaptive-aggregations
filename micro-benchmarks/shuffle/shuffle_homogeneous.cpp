@@ -26,7 +26,7 @@ using ResultPage = PageLocal<ResultTuple>;
 /* ----------- NETWORK ----------- */
 using NetworkPage = PageCommunication<ResultTuple>;
 using IngressManager = IngressNetworkManager<NetworkPage>;
-using EgressManager = EgressNetworkManager<NetworkPage>;
+using EgressManager = BufferedEgressNetworkManager<NetworkPage>;
 
 /* ----------- CMD LINE PARAMS ----------- */
 
@@ -41,7 +41,7 @@ DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
 DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicable if 'random' flag is set)");
-DEFINE_uint32(bufs_per_peer, 5, "number of egress buffers to use per peer");
+DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
@@ -114,7 +114,7 @@ int main(int argc, char* argv[]) {
     println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
     println("--------------");
 
-    if (not(std::is_same_v<EgressManager, EgressNetworkManager<NetworkPage>> or FLAGS_bufs_per_peer == 1)) {
+    if (std::is_same_v<EgressManager, SimpleEgressNetworkManager<NetworkPage>> and FLAGS_bufs_per_peer != 1) {
         println("invalid combination of options!");
         std::exit(0);
     }
@@ -152,8 +152,10 @@ int main(int argc, char* argv[]) {
     /* ----------- THREAD SETUP ----------- */
 
     // control atomics
-    std::atomic<bool> wait{true};
-    std::atomic<u32> threads_ready{0};
+    ::pthread_barrier_t barrier_start{};
+    ::pthread_barrier_t barrier_end{};
+    ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
+    ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u32> current_swip{0};
     std::atomic<u64> tuples_processed{0};
     std::atomic<u64> tuples_sent{0};
@@ -163,8 +165,8 @@ int main(int argc, char* argv[]) {
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([thread_id, node_id, subnet, host_base, &wait, &threads_ready, &current_swip, &swips,
-                              &table, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv]() {
+        threads.emplace_back([thread_id, node_id, subnet, host_base, &current_swip, &swips, &table, &tuples_processed,
+                              &tuples_sent, &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
             /* ----------- NETWORK I/O ----------- */
 
             // setup connections to each node, forming a logical clique topology
@@ -212,11 +214,8 @@ int main(int argc, char* argv[]) {
                 manager_recv.post_recvs(peer);
             }
 
-            threads_ready++;
-
-            // spin barrier
-            while (wait)
-                ;
+            // barrier
+            ::pthread_barrier_wait(&barrier_start);
 
             /* ----------- BEGIN ----------- */
 
@@ -258,11 +257,12 @@ int main(int argc, char* argv[]) {
             while (peers_done < npeers) {
                 peers_done +=
                     consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
-                if constexpr (std::is_same_v<EgressManager, EgressNetworkManager<NetworkPage>>) {
-                    manager_send.try_drain_pending();
-                }
+                manager_send.try_drain_pending();
             }
             manager_send.wait_all();
+
+            // barrier
+            ::pthread_barrier_wait(&barrier_end);
 
             tuples_sent += local_tuples_sent;
             tuples_processed += local_tuples_processed;
@@ -274,16 +274,19 @@ int main(int argc, char* argv[]) {
         });
     }
 
-    while (threads_ready != FLAGS_threads)
-        ;
-
     Stopwatch swatch{};
+
+    ::pthread_barrier_wait(&barrier_start);
     swatch.start();
-    wait = false;
+    ::pthread_barrier_wait(&barrier_end);
+    swatch.stop();
+
     for (auto& t : threads) {
         t.join();
     }
-    swatch.stop();
+
+    ::pthread_barrier_destroy(&barrier_start);
+    ::pthread_barrier_destroy(&barrier_end);
 
     println("tuples received:", tuples_received.load());
     println("tuples sent:", tuples_sent.load());
@@ -302,6 +305,7 @@ int main(int argc, char* argv[]) {
     logger.log("threads", FLAGS_threads);
     logger.log("page size", defaults::network_page_size);
     logger.log("morsel size", FLAGS_morselsz);
+    logger.log("buffers per peer", FLAGS_bufs_per_peer);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
     logger.log("tuple throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);

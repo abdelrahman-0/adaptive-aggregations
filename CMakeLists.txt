@@ -3,10 +3,9 @@ project(grasshopper_db)
 
 set(CMAKE_CXX_STANDARD 20)
 
-#if(NOT DEFINED NETWORK_PAGE_SIZE_SHIFT)
-#    set(NETWORK_PAGE_SIZE_SHIFT 18)
-#endif()
-#add_compile_definitions(NETWORK_PAGE_SIZE_SHIFT=${NETWORK_PAGE_SIZE_SHIFT})
+if (CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fno-omit-frame-pointer" )
+endif()
 
 include_directories(include)
 

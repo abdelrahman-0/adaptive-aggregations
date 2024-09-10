@@ -110,6 +110,7 @@ struct Connection {
             ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip_buffer, sizeof(ip_buffer));
         }
         ::freeaddrinfo(local);
+        ::close(sock_fd);
     }
 
     // outgoing connections
