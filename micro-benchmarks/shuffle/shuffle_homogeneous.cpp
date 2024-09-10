@@ -44,7 +44,8 @@ DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicab
 DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
-DEFINE_bool(random, false, "whether to use sequential or random I/O for cached swips");
+DEFINE_bool(random, false, "whether to use randomly generated data instead of reading in a file");
+DEFINE_bool(hyperthreading, true, "whether the OS has hyper-threading enabled or not");
 DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
@@ -167,6 +168,9 @@ int main(int argc, char* argv[]) {
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([thread_id, node_id, subnet, host_base, &current_swip, &swips, &table, &tuples_processed,
                               &tuples_sent, &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
+
+            set_cpu_affinity(thread_id, FLAGS_hyperthreading);
+
             /* ----------- NETWORK I/O ----------- */
 
             // setup connections to each node, forming a logical clique topology

@@ -1,7 +1,7 @@
 TARGET_PATH='../../build-release/micro-benchmarks/shuffle/shuffle_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
-MAX_NODES=2
+MAX_NODES=4
 FLAGS="--nolocal --random --npages=500000 --morselsz=10"
 PRINT_HEADER='--print_header'
 
