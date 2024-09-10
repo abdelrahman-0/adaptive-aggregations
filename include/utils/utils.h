@@ -108,9 +108,9 @@ T random() {
 void set_cpu_affinity(int tid, bool hyperthreading) {
     auto nthreads_sys = std::thread::hardware_concurrency();
     ::cpu_set_t mask;
+    CPU_ZERO(&mask);
     auto cpu_0 = (2 * tid) % nthreads_sys;
     auto cpu_1 = (2 * tid + 1) % nthreads_sys;
-    CPU_ZERO(&mask);
     if (not hyperthreading) {
         std::exit(0);
     }
