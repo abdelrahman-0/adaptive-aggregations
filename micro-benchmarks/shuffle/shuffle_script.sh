@@ -14,7 +14,6 @@ for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID+1)));
       if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
         sleep 1s
       fi
-      echo $BUFS_PER_PEER
       $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$NODES --threads=$THREADS --bufs_per_peer=$BUFS_PER_PEER > /dev/null
       sleep 1s
       PRINT_HEADER='--noprint_header'
