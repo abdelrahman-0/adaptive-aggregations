@@ -18,6 +18,7 @@ struct NodeTopology {
     u16 nphysical_cores{0};
     u16 threads_per_core{0};
     bool compact{false};
+    std::mutex print_mut{};
 
     NodeTopology() = default;
 
@@ -53,25 +54,23 @@ struct NodeTopology {
         println("compact affinity:", compact);
     }
 
-    // set affinity of calling thread
-    void set_cpu_affinity(int tid) const {
+    // set affinity of calling thread (no hyper-thread floating allowed)
+    void set_cpu_affinity(int tid) {
         if (tid >= nthreads_sys) {
             logln("oversubscription: reduce number of threads");
             std::exit(0);
         }
         ::cpu_set_t mask;
-        int cpu = (tid * (compact ? 2 : 1)) % nthreads_sys;
         CPU_ZERO(&mask);
+        // balanced affinity (1 thread per physical core until we have more threads than cores)
+        int cpu = (tid * (compact ? 2 : 1)) % nthreads_sys;
+        cpu += (compact and tid >= nphysical_cores) ? 1 : 0;
         CPU_SET(cpu, &mask);
-        println("pinning thread", tid, "to cpu", cpu);
-
-        // allow thread to float between hyper-threads on same physical core
-        if (threads_per_core == 2) {
-            cpu += compact ? 1 : nthreads_sys / 2;
-            cpu %= nthreads_sys;
-            CPU_SET(cpu, &mask);
+        {
+            std::unique_lock _{print_mut};
             println("pinning thread", tid, "to cpu", cpu);
         }
+
         if (::sched_setaffinity(0, sizeof(mask), &mask)) {
             logln("unable to pin CPU");
             std::exit(0); // TODO exception class
