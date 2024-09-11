@@ -1,4 +1,5 @@
 gflags/*
 data/*
-logs/*
+analysis/logs/*
+analysis/plots/*
 logos/*
