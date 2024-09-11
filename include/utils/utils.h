@@ -105,24 +105,6 @@ T random() {
     }
 }
 
-void set_cpu_affinity(int tid, bool hyperthreading) {
-    auto nthreads_sys = std::thread::hardware_concurrency();
-    ::cpu_set_t mask;
-    CPU_ZERO(&mask);
-    auto cpu_0 = (2 * tid) % nthreads_sys;
-    auto cpu_1 = (2 * tid + 1) % nthreads_sys;
-    if (not hyperthreading) {
-        std::exit(0);
-    }
-    CPU_SET(cpu_0, &mask);
-    CPU_SET(cpu_1, &mask);
-    if (::sched_setaffinity(0, sizeof(mask), &mask)) {
-        logln("unable to pin CPU");
-        std::exit(0); // TODO exception class
-    }
-    println("pinned thread", tid, "to cpu(s):", cpu_0, cpu_1);
-}
-
 constexpr auto next_power_of_2(std::integral auto val) -> decltype(auto)
 requires(sizeof(val) <= sizeof(unsigned long long) and std::is_unsigned_v<decltype(val)>)
 {

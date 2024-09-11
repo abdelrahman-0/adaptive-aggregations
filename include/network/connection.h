@@ -76,8 +76,8 @@ struct Connection {
         auto double_kernel_recv_buffer_size{0u};
         ::getsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &double_kernel_recv_buffer_size, &size);
 
-        println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-        println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
+        // println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+        // println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
 
         if (::bind(sock_fd, local->ai_addr, local->ai_addrlen) == -1) {
             throw NetworkSocketBindError{};
@@ -91,7 +91,7 @@ struct Connection {
         ::inet_ntop(local->ai_family, local->ai_addr, ip_buffer, sizeof(ip_buffer));
         {
             std::unique_lock lock{print_mtx};
-            println("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+            // println("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
         }
 
         // listen loop
@@ -104,7 +104,7 @@ struct Connection {
             }
             u32 incoming_node_id;
             ::recv(ingress_fd, &incoming_node_id, sizeof(incoming_node_id), MSG_WAITALL);
-            println("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
+            // println("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
             socket_fds[incoming_node_id] = ingress_fd;
             ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip_buffer, sizeof(ip_buffer));
         }
@@ -146,8 +146,8 @@ struct Connection {
                 ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
 
                 if (i == 0) {
-                    println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-                    println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+                    // println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+                    // println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
                 }
 
                 ::linger sl{};
@@ -172,7 +172,7 @@ struct Connection {
             ::getsockname(socket_fds[i], (struct sockaddr*)&sin, &len);
             {
                 std::unique_lock lock{print_mtx};
-                println("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+                // println("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
             }
 
             // free addrinfo linked list
