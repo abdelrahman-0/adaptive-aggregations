@@ -1,4 +1,4 @@
-.PHONY: all install build-debug build-release
+.PHONY: default install build-debug build-release
 
 BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
@@ -6,12 +6,10 @@ BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
 
 TARGETS=shuffle_homogeneous generate_data
 
-all: build
+default: build-release
 
 install:
 	./install_dependencies
-
-build: build-debug build-release
 
 build-debug:
 	mkdir -p $(BUILD_DIR_DEB) && \
