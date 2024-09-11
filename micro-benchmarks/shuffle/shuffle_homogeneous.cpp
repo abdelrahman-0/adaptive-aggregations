@@ -46,6 +46,7 @@ DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use randomly generated data instead of reading in a file");
+DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
 DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
@@ -153,7 +154,7 @@ int main(int argc, char* argv[]) {
     /* ----------- THREAD SETUP ----------- */
 
     // control atomics
-    NodeTopology topology{};
+    NodeTopology topology{static_cast<u16>(FLAGS_threads)};
     topology.init();
     ::pthread_barrier_t barrier_start{};
     ::pthread_barrier_t barrier_end{};
@@ -164,14 +165,15 @@ int main(int argc, char* argv[]) {
     std::atomic<u64> tuples_sent{0};
     std::atomic<u64> tuples_received{0};
     std::atomic<u64> pages_recv{0};
-    println("threads used:", FLAGS_threads);
 
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
                               &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
-//            topology.set_cpu_affinity(thread_id);
+            if (FLAGS_pin) {
+                topology.pin_thread(thread_id);
+            }
 
             /* ----------- NETWORK I/O ----------- */
 

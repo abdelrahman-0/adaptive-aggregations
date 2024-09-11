@@ -17,10 +17,11 @@ struct NodeTopology {
     u16 nthreads_sys{0};
     u16 nphysical_cores{0};
     u16 threads_per_core{0};
-    bool compact{false};
+    u16 requested_threads{0};
+    bool compact_assignment{false};
     std::mutex print_mut{};
 
-    NodeTopology() = default;
+    explicit NodeTopology(u16 requested_threads) : requested_threads(requested_threads) {};
 
     // inspired by LIKWID's topology parsing
     // https://github.com/RRZE-HPC/likwid/blob/master/src/topology_proc.c#L606
@@ -45,35 +46,55 @@ struct NodeTopology {
             }
         }
         if (threads_per_core == 2 and threads[0].core_id == threads[1].core_id) {
-            compact = true;
+            compact_assignment = true;
         }
         nphysical_cores = nthreads_sys / threads_per_core;
         println("available threads:", nthreads_sys);
         println("physical cores:", nphysical_cores);
+        println("threads used:", requested_threads);
         println("threads per core:", threads_per_core);
-        println("compact affinity:", compact);
+        println("compact_assignment affinity:", compact_assignment);
     }
 
-    // set affinity of calling thread (no hyper-thread floating allowed)
-    void set_cpu_affinity(int tid) {
+    // set affinity of calling thread
+    // (core granularity is used to allow threads to float between different hyper-threads) as recommended here:
+    // https://www.intel.com/content/www/us/en/docs/dpcpp-cpp-compiler/developer-guide-reference/2023-0/thread-affinity-interface.html
+    void pin_thread(int tid) {
         if (tid >= nthreads_sys) {
             logln("oversubscription: reduce number of threads");
             std::exit(0);
         }
+
         ::cpu_set_t mask;
         CPU_ZERO(&mask);
-        // balanced affinity (1 thread per physical core until we have more threads than cores)
-        int cpu = (tid * (compact ? 2 : 1)) % nthreads_sys;
-        cpu += (compact and tid >= nphysical_cores) ? 1 : 0;
-        CPU_SET(cpu, &mask);
-        {
-            std::unique_lock _{print_mut};
-            println("pinning thread", tid, "to cpu", cpu);
+        int cpu;
+        if (threads_per_core == 1) {
+            cpu = tid;
+            CPU_SET(cpu, &mask);
+        } else {
+            // first determine physical core
+            auto num_siblings = (requested_threads > nphysical_cores) ? requested_threads % nphysical_cores : 0;
+            bool has_sibling = (tid / threads_per_core) < num_siblings;
+            auto physical_core = has_sibling ? (tid / threads_per_core) : tid - num_siblings;
+
+            // then determine the logical CPU (pin to both hyper-threads)
+            cpu = physical_core * threads_per_core;
+            CPU_SET(cpu, &mask);
+            log_thread_pinned(tid, cpu);
+
+            cpu += compact_assignment ? 1 : nphysical_cores;
+            CPU_SET(cpu, &mask);
+            log_thread_pinned(tid, cpu);
         }
 
         if (::sched_setaffinity(0, sizeof(mask), &mask)) {
             logln("unable to pin CPU");
             std::exit(0); // TODO exception class
         }
+    }
+
+    void log_thread_pinned(std::integral auto tid, std::integral auto cpu) {
+        std::unique_lock _{print_mut};
+        println("pinning thread", tid, "to cpu", cpu);
     }
 };
