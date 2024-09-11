@@ -171,7 +171,7 @@ int main(int argc, char* argv[]) {
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
                               &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
-            topology.set_cpu_affinity(thread_id);
+//            topology.set_cpu_affinity(thread_id);
 
             /* ----------- NETWORK I/O ----------- */
 
