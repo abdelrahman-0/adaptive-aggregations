@@ -7,9 +7,9 @@ PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID+1)));
  do
-  for THREADS in 1 2 4 8 10 12 16 20 32 64;
+  for THREADS in 1 4 8 16 32 64;
    do
-    for BUFS_PER_PEER in 1 2 4 10;
+    for BUFS_PER_PEER in 4;
      do
        for TRY in $(seq 1 5);
         do
