@@ -73,7 +73,7 @@ struct NodeTopology {
             CPU_SET(cpu, &mask);
         } else {
             // first determine physical core
-            auto num_siblings = (requested_threads > nphysical_cores) ? requested_threads % nphysical_cores : 0;
+            auto num_siblings = (requested_threads > nphysical_cores) ? requested_threads - nphysical_cores : 0;
             bool has_sibling = (tid / threads_per_core) < num_siblings;
             auto physical_core = has_sibling ? (tid / threads_per_core) : tid - num_siblings;
 
