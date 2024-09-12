@@ -78,7 +78,7 @@ struct NodeTopology {
             auto physical_core = has_sibling ? (tid / threads_per_core) : tid - num_siblings;
 
             // then determine the logical CPU (pin to both hyper-threads)
-            cpu = physical_core * threads_per_core;
+            cpu = compact_assignment ? physical_core * threads_per_core : physical_core;
             CPU_SET(cpu, &mask);
             log_thread_pinned(tid, cpu);
 
