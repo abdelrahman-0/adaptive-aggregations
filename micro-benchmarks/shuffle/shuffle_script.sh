@@ -2,16 +2,16 @@ TARGET_PATH='../../build-release/micro-benchmarks/shuffle/shuffle_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --npages=1000000 --morselsz=10 --pin"
+FLAGS="--nolocal --random --npages=250000 --morselsz=10 --pin"
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID+1)));
  do
   for THREADS in 1 4 8 12 16 32 64;
    do
-    for BUFS_PER_PEER in 1 2 4 10;
+    for BUFS_PER_PEER in 1 2 3 4;
      do
-       for TRY in $(seq 1 1);
+       for TRY in $(seq 1 3);
         do
           if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
             sleep 1s
