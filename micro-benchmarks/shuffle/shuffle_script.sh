@@ -11,7 +11,7 @@ for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID+1)));
    do
     for BUFS_PER_PEER in 2 4 10;
      do
-       for TRY in $(seq 1 3);
+       for TRY in $(seq 1 5);
         do
           if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
             sleep 1s
