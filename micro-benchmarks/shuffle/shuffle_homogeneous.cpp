@@ -313,6 +313,7 @@ int main(int argc, char* argv[]) {
     logger.log("threads", FLAGS_threads);
     logger.log("page size", defaults::network_page_size);
     logger.log("morsel size", FLAGS_morselsz);
+    logger.log("pin", FLAGS_pin);
     logger.log("buffers per peer", FLAGS_bufs_per_peer);
     logger.log("cache (%)", FLAGS_cache);
     logger.log("time (ms)", swatch.time_ms);
