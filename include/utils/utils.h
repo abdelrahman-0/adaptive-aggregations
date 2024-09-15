@@ -82,13 +82,13 @@ void logln(Ts... args) {
 template <typename T>
 T random() {
     if constexpr (std::is_same_v<unsigned char, T> or std::is_same_v<char, T>) {
-        std::uniform_int_distribution<T> dist(33 /* ! */, 126 /* ~ */);
+        thread_local std::uniform_int_distribution<T> dist(33 /* ! */, 126 /* ~ */);
         return dist(rng);
     } else if constexpr (std::is_integral_v<T>) {
-        std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+        thread_local std::uniform_int_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
         return dist(rng);
     } else if constexpr (std::is_floating_point_v<T>) {
-        std::uniform_real_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
+        thread_local std::uniform_real_distribution<T> dist(std::numeric_limits<T>::min(), std::numeric_limits<T>::max());
         return dist(rng);
     } else if constexpr (custom_type_traits::is_array_v<T>) {
         T arr{};
