@@ -45,8 +45,8 @@ class Table {
 
     template <custom_concepts::is_page CachePage>
     void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io) {
-        std::vector<std::thread> threads;
-        std::atomic<u32> current_swip{0u};
+        std::vector<std::jthread> threads;
+        std::atomic<u32> current_swip;
         if (random_contents) {
             // populate cache using all available threads
             for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
@@ -88,9 +88,6 @@ class Table {
                     }
                 });
             }
-        }
-        for (auto& t : threads) {
-            t.join();
         }
     }
 

@@ -4,6 +4,7 @@
 #include <deque>
 #include <liburing.h>
 #include <queue>
+#include <sys/mman.h>
 #include <tbb/scalable_allocator.h>
 
 #include "allocators/rpmalloc/rpmalloc_allocator.h"
@@ -12,8 +13,9 @@
 #include "exceptions/exceptions_io_uring.h"
 
 template <typename T>
-using VecAlloc = RPMallocAllocator<T>;
-// using VecAlloc = tbb::scalable_allocator<T>;
+// using VecAlloc = RPMallocAllocator<T>;
+using VecAlloc = tbb::scalable_allocator<T>;
+// using VecAlloc = std::allocator<T>;
 
 // Manages either ingress or egress traffic via a single uring instance
 template <custom_concepts::is_communication_page BufferPage>
@@ -22,7 +24,7 @@ class NetworkManager {
     io_uring ring{};
     std::vector<BufferPage, VecAlloc<BufferPage>> buffers{};
     std::vector<u32> free_pages;
-    BufferPage* const buffers_start;
+    BufferPage* buffers_start;
 
     u32 nwdepth;
 
@@ -62,7 +64,15 @@ class NetworkManager {
   public:
     explicit NetworkManager(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
                             bool register_bufs = false)
-        : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers), buffers_start(buffers.data()) {
+        : nwdepth(nwdepth), /*buffers(nbuffers),*/ free_pages(nbuffers) {
+        auto* ptr = ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (ptr == MAP_FAILED) {
+            throw std::runtime_error("Failed to allocate memory for the buffer pool");
+        }
+        buffers_start = reinterpret_cast<BufferPage*>(ptr);
+        ::madvise(buffers_start, nbuffers * sizeof(BufferPage), MADV_HUGEPAGE);
+
         init_ring(sqpoll);
         if (not sockets.empty()) {
             register_sockets(sockets);
