@@ -9,9 +9,9 @@
 #include "storage/chunked_list.h"
 #include "storage/page_local.h"
 #include "storage/table.h"
+#include "system/stopwatch.h"
+#include "system/topology.h"
 #include "utils/hash.h"
-#include "utils/stopwatch.h"
-#include "utils/topology.h"
 #include "utils/utils.h"
 
 using namespace std::chrono_literals;
