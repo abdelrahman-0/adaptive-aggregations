@@ -2,8 +2,8 @@
 
 #include <chrono>
 
-#include "logger.h"
-#include "utils.h"
+#include "utils/logger.h"
+#include "utils/utils.h"
 
 struct Stopwatch {
     std::chrono::time_point<std::chrono::high_resolution_clock> begin;
