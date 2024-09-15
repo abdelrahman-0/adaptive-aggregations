@@ -8,13 +8,14 @@
 #include "common/page.h"
 #include "connection.h"
 #include "exceptions/exceptions_io_uring.h"
+#include <tbb/scalable_allocator.h>
 
 // Manages either ingress or egress traffic via a single uring instance
 template <custom_concepts::is_communication_page BufferPage>
 class NetworkManager {
   protected:
     io_uring ring{};
-    std::vector<BufferPage> buffers{};
+    std::vector<BufferPage, tbb::scalable_allocator<BufferPage>> buffers{};
     std::vector<u32> free_pages;
     BufferPage* const buffers_start;
 
