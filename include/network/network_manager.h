@@ -64,15 +64,14 @@ class NetworkManager {
   public:
     explicit NetworkManager(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
                             bool register_bufs = false)
-        : nwdepth(nwdepth), buffers(nbuffers), free_pages(nbuffers) {
-        //        auto* ptr = ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE,
-        //                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
-        //        if (ptr == MAP_FAILED) {
-        //            throw std::runtime_error("Failed to allocate memory for the buffer pool");
-        //        }
-        //        buffers_start = reinterpret_cast<BufferPage*>(ptr);
-        //        ::madvise(buffers_start, nbuffers * sizeof(BufferPage), MADV_HUGEPAGE);
-        buffers_start = buffers.data();
+        : nwdepth(nwdepth), /*buffers(nbuffers),*/ free_pages(nbuffers) {
+        auto* ptr = ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE,
+                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (ptr == MAP_FAILED) {
+            throw std::runtime_error("Failed to allocate memory for the buffer pool");
+        }
+        buffers_start = reinterpret_cast<BufferPage*>(ptr);
+        ::madvise(buffers_start, nbuffers * sizeof(BufferPage), MADV_HUGEPAGE);
 
         init_ring(sqpoll);
         if (not sockets.empty()) {
