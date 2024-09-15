@@ -4,18 +4,23 @@
 #include <deque>
 #include <liburing.h>
 #include <queue>
+#include <tbb/scalable_allocator.h>
 
+#include "allocators/rpmalloc/rpmalloc_allocator.h"
 #include "common/page.h"
 #include "connection.h"
 #include "exceptions/exceptions_io_uring.h"
-#include <tbb/scalable_allocator.h>
+
+template <typename T>
+using VecAlloc = RPMallocAllocator<T>;
+// using VecAlloc = tbb::scalable_allocator<T>;
 
 // Manages either ingress or egress traffic via a single uring instance
 template <custom_concepts::is_communication_page BufferPage>
 class NetworkManager {
   protected:
     io_uring ring{};
-    std::vector<BufferPage, tbb::scalable_allocator<BufferPage>> buffers{};
+    std::vector<BufferPage, VecAlloc<BufferPage>> buffers{};
     std::vector<u32> free_pages;
     BufferPage* const buffers_start;
 
