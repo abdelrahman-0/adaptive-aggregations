@@ -16,7 +16,7 @@ struct PointerRing {
     std::vector<std::atomic<uint64_t>> thread_pages{};
     std::vector<uintptr_t> ring{};
 
-    PointerRing(std::size_t num_threads) : thread_pages(num_threads), ring(ring_size) {
+    explicit PointerRing(std::size_t num_threads) : thread_pages(num_threads), ring(ring_size) {
         for (auto& i : thread_pages) {
             i = 0;
         }

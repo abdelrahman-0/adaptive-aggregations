@@ -65,8 +65,8 @@ class NetworkManager {
     explicit NetworkManager(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
                             bool register_bufs = false)
         : nwdepth(nwdepth), /*buffers(nbuffers),*/ free_pages(nbuffers) {
-        auto* ptr = ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE,
-                         MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        auto* ptr =
+            ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (ptr == MAP_FAILED) {
             throw std::runtime_error("Failed to allocate memory for the buffer pool");
         }
@@ -140,6 +140,105 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
         free_pages.push_back(page - buffers_start);
         io_uring_cq_advance(&ring, 1);
     }
+};
+
+template <custom_concepts::is_communication_page BufferPage>
+class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
+  private:
+    // needed for dependent lookups
+    using NetworkManager<BufferPage>::ring;
+    using NetworkManager<BufferPage>::buffers;
+    using NetworkManager<BufferPage>::free_pages;
+    using NetworkManager<BufferPage>::buffers_start;
+    std::vector<io_uring_cqe*> cqes;
+    std::vector<std::atomic<bool>> used_pages;
+    std::vector<BufferPage*> page_ptrs;
+    std::vector<bool> has_inflight;
+    std::atomic<u16> head{0};
+    std::atomic<u16> tail{0};
+    u64 pages_recv{0};
+    u32 nbuffers;
+    std::atomic<u16> pending_peers;
+
+  public:
+    ConcurrentIngressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), used_pages(nbuffers),
+          page_ptrs(nbuffers * 2), nbuffers(nbuffers), pending_peers(npeers), has_inflight(npeers, false) {
+        for (auto i{0u}; i < nbuffers; ++i) {
+            used_pages[i] = false;
+        }
+    }
+
+    auto get_pages_recv() const { return pages_recv; }
+
+    void post_recvs(u16 dst) {
+        if (has_inflight[dst]) {
+            return;
+        }
+        has_inflight[dst] = true;
+        auto* sqe = io_uring_get_sqe(&ring);
+        // improve starting point?
+        auto buffer_idx{0u};
+        bool expected = false;
+        for (; buffer_idx < nbuffers; ++buffer_idx) {
+            if (used_pages[buffer_idx].compare_exchange_strong(expected, true)) {
+                goto found_idx;
+            }
+            expected = false;
+        }
+        return;
+    found_idx:;
+        // fixed buffers?
+        io_uring_prep_recv(sqe, dst, buffers_start + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = buffers_start + buffer_idx;
+        io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+        io_uring_submit(&ring);
+    }
+
+    void try_drain_done() {
+        auto cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+        if (cqes_peeked) {
+            std::unique_lock _{print_mtx};
+            println("ingress: peeked", cqes_peeked);
+        }
+        for (auto i{0u}; i < cqes_peeked; ++i) {
+            auto user_data = io_uring_cqe_get_data(cqes[i]);
+            assert(tail - head <= nbuffers);
+            auto* page_ptr = get_pointer<BufferPage>(user_data);
+            page_ptrs[tail++ % (nbuffers * 2)] = page_ptr;
+            if (not page_ptr->is_last_page()) {
+                has_inflight[get_tag(user_data)] = false;
+                post_recvs(get_tag(user_data));
+            } else {
+                println("nthread: saw last page with", page_ptr->get_num_tuples(), "tuples");
+                pending_peers--;
+            }
+        }
+        io_uring_cq_advance(&ring, cqes_peeked);
+        pages_recv += cqes_peeked;
+    }
+
+    constexpr static u16 ntries = 5;
+    BufferPage* try_dequeue_page() {
+        u16 tries{0};
+        u16 old_head;
+        while ((old_head = head) < tail and tries++ < ntries) {
+            if (head.compare_exchange_strong(old_head, old_head + 1)) {
+                auto* ptr = page_ptrs[old_head % (nbuffers * 2)];
+                {
+                    std::unique_lock _{print_mtx};
+                    println("ingress: dequeued page", ptr - buffers_start, ptr->is_last_page() ? "(last)" : "");
+                }
+                return ptr;
+            }
+        }
+        return nullptr;
+    }
+
+    void done_page(BufferPage* page) { used_pages[page - buffers_start] = false; }
+
+    [[nodiscard]] bool not_done() const { return pending_peers or head != tail; }
 };
 
 template <custom_concepts::is_communication_page BufferPage>
@@ -597,5 +696,142 @@ class BufferedZeroCopyEgressNetworkManager : public NetworkManager<BufferPage> {
                 pending_pages[dst].pop();
             }
         }
+    }
+};
+
+template <custom_concepts::is_communication_page BufferPage>
+class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage> {
+    // needed for dependent lookups
+    using NetworkManager<BufferPage>::ring;
+    using NetworkManager<BufferPage>::buffers;
+    using NetworkManager<BufferPage>::free_pages;
+    using NetworkManager<BufferPage>::buffers_start;
+    std::vector<std::atomic<bool>> used_pages;
+    std::vector<std::atomic<u16>> heads;
+    std::vector<std::atomic<u16>> tails;
+    std::vector<std::vector<BufferPage*>> page_ptrs;
+    std::vector<bool> has_inflight;
+    std::atomic<bool> continue_egress{true};
+    io_uring_cqe* cqe{nullptr};
+    std::vector<io_uring_cqe*> cqes;
+    u32 nbuffers;
+    u32 inflight_egress{0};
+    u32 total_submitted{0};
+    u32 total_retrieved{0};
+    u16 nthreads;
+    u16 npeers;
+
+  public:
+    ConcurrentBufferedEgressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, u16 nthreads, bool sqpoll,
+                                           const std::vector<int>& sockets)
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), has_inflight(npeers, false),
+          cqes(nwdepth * 2), nbuffers(nbuffers), heads(npeers), tails(npeers), page_ptrs(npeers), used_pages(nbuffers),
+          nthreads(nthreads), npeers(npeers) {
+        for (auto& ptrs : page_ptrs) {
+            ptrs.resize(nbuffers * 2);
+        }
+        std::fill(heads.begin(), heads.end(), 0);
+        std::fill(tails.begin(), tails.end(), 0);
+        std::fill(used_pages.begin(), used_pages.end(), 0);
+    }
+
+    BufferPage* get_new_page() {
+        // randomize start? initial idx based on thread_id?
+        u32 idx{0};
+        bool expected = false;
+        while (not used_pages[idx].compare_exchange_strong(expected, true)) {
+            expected = false;
+            idx = (idx + 1) % nbuffers;
+        }
+        {
+            std::unique_lock _{print_mtx};
+            // println("new page", idx);
+        }
+        return buffers_start + idx;
+    }
+
+    void enqueue_page(u16 dst, BufferPage* page) {
+        assert(tails[dst] < heads[dst] + nbuffers);
+        page_ptrs[dst][tails[dst]++ % (nbuffers * 2)] = page;
+    }
+
+    void _flush(u16 dst, BufferPage* page) {
+        auto* sqe = io_uring_get_sqe(&ring);
+        if (sqe == nullptr) {
+            throw IOUringSubmissionQueueFullError{};
+        }
+        io_uring_prep_send(sqe, dst, page, sizeof(BufferPage), 0);
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+        io_uring_sqe_set_data(sqe, tag_pointer(page, dst));
+        inflight_egress++;
+        auto num_submitted = io_uring_submit(&ring);
+        assert(num_submitted == 1);
+        total_submitted++;
+        {
+            std::unique_lock _{print_mtx};
+            println("egress: flushed", page - buffers_start, page);
+        }
+    }
+
+    void try_flush(u16 dst) {
+        if (has_inflight[dst] or heads[dst] == tails[dst]) {
+            return;
+        }
+        has_inflight[dst] = true;
+        _flush(dst, page_ptrs[dst][heads[dst]++ % (nbuffers * 2)]);
+    }
+
+    void try_drain_done() {
+        auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+        for (auto i{0u}; i < peeked; ++i) {
+            auto user_data = io_uring_cqe_get_data(cqes[i]);
+            if (cqes[i]->res <= 0) {
+                throw IOUringSendError{cqes[i]->res};
+            }
+            get_pointer<BufferPage>(user_data)->clear_tuples();
+            used_pages[get_pointer<BufferPage>(user_data) - buffers_start] = false;
+            auto peeked_dst = get_tag(user_data);
+            has_inflight[peeked_dst] = false;
+            try_flush(peeked_dst);
+        }
+        io_uring_cq_advance(&ring, peeked);
+        inflight_egress -= peeked;
+    }
+
+    [[nodiscard]] bool check_pending() {
+        for (auto dst{0u}; dst < npeers; ++dst) {
+            if (heads[dst] != tails[dst]) {
+                try_flush(dst);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    void wait_all() {
+        // wait for all inflight sends
+        int ret;
+        while (inflight_egress or continue_egress or check_pending()) {
+            for (auto i{0u}; i < inflight_egress; ++i) {
+                if ((ret = io_uring_wait_cqe(&ring, &cqe)) < 0) {
+                    throw IOUringWaitError(ret);
+                }
+                if (cqe->res != sizeof(BufferPage)) {
+                    throw IOUringSendError{cqe->res};
+                }
+                auto* user_data = io_uring_cqe_get_data(cqe);
+                io_uring_cq_advance(&ring, 1);
+                get_pointer<BufferPage>(user_data)->clear_tuples();
+                used_pages[get_pointer<BufferPage>(user_data) - buffers_start] = false;
+                auto dst = get_tag(user_data);
+                has_inflight[dst] = false;
+                try_flush(dst);
+            }
+        }
+    }
+
+    void finished_egress() {
+        println("qthread: finished egress");
+        continue_egress = false;
     }
 };
