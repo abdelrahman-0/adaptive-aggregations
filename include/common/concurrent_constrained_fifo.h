@@ -18,7 +18,7 @@ class alignas(64) ConcurrentFIFO {
     uint64_t mask{0};
 
   public:
-    explicit ConcurrentFIFO(uint64_t size = 10)
+    explicit ConcurrentFIFO(uint64_t size = 16)
         : fifo_size(next_power_of_2(size)), mask(fifo_size - 1), buffer(next_power_of_2(size), nullptr) {}
 
     ~ConcurrentFIFO() = default;
@@ -31,7 +31,7 @@ class alignas(64) ConcurrentFIFO {
         mask = other.mask;
     }
 
-    void insert(custom_concepts::is_pointer_type auto ptr) {
+    void insert(custom_concepts::pointer_type auto ptr) {
         uint64_t prev_tail;
         do {
             while ((prev_tail = tail) >= head + fifo_size)

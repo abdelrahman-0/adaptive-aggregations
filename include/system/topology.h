@@ -32,9 +32,9 @@ struct NodeTopology {
             auto topology_dir = "/sys/devices/system/cpu/cpu"s + std::to_string(tid) + "/topology/"s;
 
             std::ifstream ifstream_package_id{topology_dir + "physical_package_id"s};
-            std::string str_physical_package_id;
-            std::getline(ifstream_package_id, str_physical_package_id);
-            threads[tid].package_id = std::stoi(str_physical_package_id);
+            std::string str_package_id;
+            std::getline(ifstream_package_id, str_package_id);
+            threads[tid].package_id = std::stoi(str_package_id);
 
             std::ifstream ifstream_core_id{topology_dir + "core_id"s};
             std::string str_core_id;
@@ -53,7 +53,7 @@ struct NodeTopology {
         println("physical cores:", nphysical_cores);
         println("threads used:", requested_threads);
         println("threads per core:", threads_per_core);
-        println("compact_assignment affinity:", compact_assignment);
+        println("logical CPU assignment:", compact_assignment ? "compact" : "round-robin");
     }
 
     // set affinity of calling thread
