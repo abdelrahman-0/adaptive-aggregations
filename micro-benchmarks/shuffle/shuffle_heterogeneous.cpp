@@ -172,8 +172,15 @@ int main(int argc, char* argv[]) {
     auto npeers = FLAGS_nodes - 1;
 
     // control atomics
-    std::atomic<bool> nthread_continue{true};
+    std::vector<std::atomic<bool>> nthread_continue(FLAGS_nthreads);
+    std::fill(nthread_continue.begin(), nthread_continue.end(), true);
     std::atomic<u64> pages_recv{0};
+
+    // barriers
+    ::pthread_barrier_t barrier_start{};
+    ::pthread_barrier_t barrier_end{};
+    ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_qthreads + 1);
+    ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_nthreads + FLAGS_qthreads + 1);
 
     // networking
     std::vector<EgressManager*> egress_managers(FLAGS_nthreads);
@@ -182,7 +189,7 @@ int main(int argc, char* argv[]) {
     ::pthread_barrier_init(&barrier_network, nullptr, FLAGS_nthreads + 1);
     std::vector<std::thread> threads_network{};
     for (auto thread_id{0u}; thread_id < FLAGS_nthreads; ++thread_id) {
-        threads_network.emplace_back([=, &topology, &egress_managers, &ingress_managers, &barrier_network,
+        threads_network.emplace_back([=, &topology, &egress_managers, &ingress_managers, &barrier_network, &barrier_end,
                                       &nthread_continue, &pages_recv]() {
             if (FLAGS_pin) {
                 topology.pin_thread(thread_id);
@@ -229,7 +236,7 @@ int main(int argc, char* argv[]) {
             ::pthread_barrier_wait(&barrier_network);
 
             // network loop
-            while (nthread_continue) {
+            while (nthread_continue[thread_id]) {
                 manager_recv.try_drain_done();
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.try_flush(dst);
@@ -240,34 +247,27 @@ int main(int argc, char* argv[]) {
                 manager_send.try_drain_done();
             }
             manager_send.wait_all();
-            // TODO barrier
+            ::pthread_barrier_wait(&barrier_end);
             pages_recv += manager_recv.get_pages_recv();
         });
     }
     ::pthread_barrier_wait(&barrier_network);
 
     // query processing
-    ::pthread_barrier_t barrier_start{};
-    ::pthread_barrier_t barrier_end{};
-    ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_qthreads + 1);
-    ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_qthreads + 1);
+    std::atomic<u32> current_swip{0};
     std::atomic<u64> tuples_processed{0};
     std::atomic<u64> tuples_sent{0};
     std::atomic<u64> tuples_received{0};
 
-    // control atomics
-    std::atomic<u32> current_swip{0};
     std::vector<std::atomic<u32>> qthreads_done(FLAGS_nthreads);
     std::vector<std::atomic<u32>> added_last_page(FLAGS_nthreads);
-    for (auto i{0u}; i < FLAGS_nthreads; ++i) {
-        qthreads_done[i] = 0;
-    }
+    std::fill(qthreads_done.begin(), qthreads_done.end(), 0);
 
     std::vector<std::thread> threads_query;
     for (auto thread_id{0u}; thread_id < FLAGS_qthreads; ++thread_id) {
         threads_query.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
                                     &tuples_received, &pages_recv, &barrier_start, &barrier_end, &added_last_page,
-                                    &egress_managers, &qthreads_done]() {
+                                    &egress_managers, &qthreads_done, &nthread_continue]() {
             if (FLAGS_pin) {
                 topology.pin_thread(thread_id + FLAGS_nthreads);
             }
@@ -344,7 +344,9 @@ int main(int argc, char* argv[]) {
             }
 
             // flush all
+            bool last_thread{false};
             if (qthreads_done[dedicated_network_thread]++ == qthreads_per_nthread - 1) {
+                last_thread = true;
                 // wait for other qthreads to add their active pages
                 while (added_last_page[dedicated_network_thread] != qthreads_per_nthread - 1)
                     ;
@@ -366,6 +368,9 @@ int main(int argc, char* argv[]) {
                 consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
             }
 
+            if (last_thread) {
+                nthread_continue[dedicated_network_thread] = false;
+            }
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
@@ -382,7 +387,6 @@ int main(int argc, char* argv[]) {
     ::pthread_barrier_wait(&barrier_start);
     swatch.start();
     ::pthread_barrier_wait(&barrier_end);
-    nthread_continue = false;
     swatch.stop();
 
     for (auto& t : threads_query) {
