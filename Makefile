@@ -4,7 +4,7 @@ BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
 BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
 
-TARGETS=shuffle_homogeneous generate_data
+TARGETS=shuffle_homogeneous shuffle_heterogeneous generate_data
 
 default: build-release
 
