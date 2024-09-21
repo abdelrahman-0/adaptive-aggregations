@@ -202,7 +202,6 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
             auto* page_ptr = get_pointer<BufferPage>(user_data);
             page_ptrs.push(page_ptr);
             if (page_ptr->is_last_page()) {
-                has_inflight[get_tag(user_data)] = true;
                 pending_peers--;
             } else {
                 has_inflight[get_tag(user_data)] = false;
