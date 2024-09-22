@@ -311,6 +311,9 @@ int main(int argc, char* argv[]) {
     logger.log("traffic", "both"s);
     logger.log("implementation", "shuffle_homogeneous"s);
     logger.log("threads", FLAGS_threads);
+    logger.log("total pages", FLAGS_npages);
+    logger.log("local page size", defaults::local_page_size);
+    logger.log("network page size", defaults::network_page_size);
     logger.log("page size", defaults::network_page_size);
     logger.log("morsel size", FLAGS_morselsz);
     logger.log("pin", FLAGS_pin);
