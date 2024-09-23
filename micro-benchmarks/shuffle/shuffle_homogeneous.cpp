@@ -309,7 +309,7 @@ int main(int argc, char* argv[]) {
     logger.log("node id", node_id);
     logger.log("nodes", FLAGS_nodes);
     logger.log("traffic", "both"s);
-    logger.log("implementation", "shuffle_homogeneous"s);
+    logger.log("implementation", "homogeneous"s);
     logger.log("threads", FLAGS_threads);
     logger.log("total pages", FLAGS_npages);
     logger.log("local page size", defaults::local_page_size);

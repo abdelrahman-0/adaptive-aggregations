@@ -413,7 +413,7 @@ int main(int argc, char* argv[]) {
     logger.log("node id", node_id);
     logger.log("nodes", FLAGS_nodes);
     logger.log("traffic", "both"s);
-    logger.log("implementation", "shuffle_heterogeneous"s);
+    logger.log("implementation", "heterogeneous"s);
     logger.log("network threads", FLAGS_nthreads);
     logger.log("query threads", FLAGS_qthreads);
     logger.log("total pages", FLAGS_npages);
