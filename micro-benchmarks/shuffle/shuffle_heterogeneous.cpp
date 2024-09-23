@@ -33,8 +33,8 @@ using EgressManager = ConcurrentBufferedEgressNetworkManager<NetworkPage>;
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
-DEFINE_uint32(nthreads, 2, "number of network threads to use");
-DEFINE_uint32(qthreads, 3, "number of query-processing threads to use");
+DEFINE_uint32(nthreads, 1, "number of network threads to use");
+DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
