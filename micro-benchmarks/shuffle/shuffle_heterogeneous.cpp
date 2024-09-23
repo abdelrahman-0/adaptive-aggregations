@@ -48,7 +48,7 @@ DEFINE_uint32(bufs_per_peer, 2, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
-DEFINE_bool(pin, false, "pin threads using balanced affinity at core granularity");
+DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
 DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
