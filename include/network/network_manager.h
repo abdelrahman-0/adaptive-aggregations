@@ -149,10 +149,9 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
     // needed for dependent lookups
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
-    using NetworkManager<BufferPage>::free_pages;
     using NetworkManager<BufferPage>::buffers_start;
     std::vector<io_uring_cqe*> cqes;
-    std::vector<std::atomic<bool>> used_pages;
+    tbb::concurrent_bounded_queue<BufferPage*> free_pages;
     tbb::concurrent_queue<BufferPage*> page_ptrs;
     std::vector<bool> has_inflight;
     u64 pages_recv{0};
@@ -162,9 +161,11 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
 
   public:
     ConcurrentIngressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), used_pages(nbuffers),
-          nbuffers(nbuffers), pending_peers(npeers), has_inflight(npeers, false) {
-        std::fill(used_pages.begin(), used_pages.end(), 0);
+        : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), nbuffers(nbuffers),
+          pending_peers(npeers), has_inflight(npeers, false) {
+        for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
+            free_pages.push(buffers_start + page_idx);
+        }
     }
 
     auto get_pages_recv() const { return pages_recv; }
@@ -173,21 +174,14 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
         if (has_inflight[dst]) {
             return;
         }
-        // improve starting point?
-        auto buffer_idx{0u};
-        bool expected = false;
-        for (; buffer_idx < nbuffers; ++buffer_idx) {
-            if (used_pages[buffer_idx].compare_exchange_strong(expected, true)) {
-                goto found_idx;
-            }
-            expected = false;
+        BufferPage* new_page;
+        if (not free_pages.try_pop(new_page)) {
+            return;
         }
-        return;
-    found_idx:;
         // fixed buffers?
         auto* sqe = io_uring_get_sqe(&ring);
-        io_uring_prep_recv(sqe, dst, buffers_start + buffer_idx, sizeof(BufferPage), MSG_WAITALL);
-        auto* user_data = buffers_start + buffer_idx;
+        io_uring_prep_recv(sqe, dst, new_page, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = new_page;
         io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
         sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
         io_uring_submit(&ring);
@@ -224,7 +218,7 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
         return nullptr;
     }
 
-    void done_page(BufferPage* page) { used_pages[page - buffers_start] = false; }
+    void done_page(BufferPage* page) { free_pages.push(page); }
 
     [[nodiscard]] bool not_done() const { return pending_peers or not page_ptrs.empty(); }
 };
@@ -692,9 +686,8 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
     // needed for dependent lookups
     using NetworkManager<BufferPage>::ring;
     using NetworkManager<BufferPage>::buffers;
-    using NetworkManager<BufferPage>::free_pages;
     using NetworkManager<BufferPage>::buffers_start;
-    std::vector<std::atomic<bool>> used_pages;
+    tbb::concurrent_bounded_queue<BufferPage*> free_pages;
     std::vector<tbb::concurrent_queue<BufferPage*>> page_ptrs;
     std::vector<bool> has_inflight;
     std::atomic<bool> continue_egress{true};
@@ -711,20 +704,16 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
     ConcurrentBufferedEgressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, u16 nthreads, bool sqpoll,
                                            const std::vector<int>& sockets)
         : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), has_inflight(npeers, false),
-          cqes(nwdepth * 2), nbuffers(nbuffers), page_ptrs(npeers), used_pages(nbuffers), nthreads(nthreads),
-          npeers(npeers) {
-        std::fill(used_pages.begin(), used_pages.end(), 0);
+          cqes(nwdepth * 2), nbuffers(nbuffers), page_ptrs(npeers), nthreads(nthreads), npeers(npeers) {
+        for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
+            free_pages.push(buffers_start + page_idx);
+        }
     }
 
     BufferPage* get_new_page() {
-        // randomize start? initial idx based on thread_id?
-        u32 idx{0};
-        bool expected = false;
-        while (not used_pages[idx].compare_exchange_strong(expected, true)) {
-            expected = false;
-            idx = (idx + 1) % nbuffers;
-        }
-        return buffers_start + idx;
+        BufferPage* new_page;
+        free_pages.pop(new_page);
+        return new_page;
     }
 
     void enqueue_page(u16 dst, BufferPage* page) { page_ptrs[dst].push(page); }
@@ -761,8 +750,9 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
             if (cqes[i]->res <= 0) {
                 throw IOUringSendError{cqes[i]->res};
             }
-            get_pointer<BufferPage>(user_data)->clear_tuples();
-            used_pages[get_pointer<BufferPage>(user_data) - buffers_start] = false;
+            auto* page_ptr = get_pointer<BufferPage>(user_data);
+            page_ptr->clear_tuples();
+            free_pages.push(page_ptr);
             auto peeked_dst = get_tag(user_data);
             has_inflight[peeked_dst] = false;
             try_flush(peeked_dst);
@@ -794,8 +784,9 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
                 }
                 auto* user_data = io_uring_cqe_get_data(cqe);
                 io_uring_cq_advance(&ring, 1);
-                get_pointer<BufferPage>(user_data)->clear_tuples();
-                used_pages[get_pointer<BufferPage>(user_data) - buffers_start] = false;
+                auto* page_ptr = get_pointer<BufferPage>(user_data);
+                page_ptr->clear_tuples();
+                free_pages.push(page_ptr);
                 auto dst = get_tag(user_data);
                 has_inflight[dst] = false;
                 try_flush(dst);
@@ -804,7 +795,5 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
         }
     }
 
-    void finished_egress() {
-        continue_egress = false;
-    }
+    void finished_egress() { continue_egress = false; }
 };
