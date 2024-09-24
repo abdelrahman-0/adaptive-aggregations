@@ -44,7 +44,7 @@ DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
 DEFINE_uint32(npages, 1'000, "number of random pages to generate (only applicable if 'random' flag is set)");
-DEFINE_uint32(bufs_per_peer, 2, "number of egress buffers to use per peer");
+DEFINE_uint32(bufs_per_peer, 4, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
@@ -65,8 +65,8 @@ std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id) {
     return {dedicated_nthread, qthreads_per_nthread};
 }
 
-void consume_ingress(IngressManager& manager_recv, ResultPage*& current_result_page,
-                     PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received) {
+void consume_ingress(IngressManager& manager_recv /*, ResultPage*& current_result_page,
+                     PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received */) {
     auto* network_page = manager_recv.try_dequeue_page();
     while (network_page) {
         //        for (auto i{0u}; i < network_page->get_num_tuples(); ++i) {
@@ -75,13 +75,14 @@ void consume_ingress(IngressManager& manager_recv, ResultPage*& current_result_p
         //            }
         //            current_result_page->emplace_back(i, *network_page);
         //        }
-        local_tuples_received += network_page->get_num_tuples();
+        //        local_tuples_received += network_page->get_num_tuples();
         manager_recv.done_page(network_page);
         network_page = manager_recv.try_dequeue_page();
     }
 }
 
-void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result,
+void process_local_page(u32 node_id,
+                        /* ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result , */
                         EgressManager& manager_send, std::vector<NetworkPage*>& active_buffers,
                         u64& local_tuples_processed, u64& local_tuples_sent, const TablePage& page) {
     u64 page_local_tuples_processed{0};
@@ -96,7 +97,7 @@ void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunk
             //                current_result_page = chunked_list_result.get_new_page();
             //            }
             //            current_result_page->emplace_back_transposed(j, page);
-            page_local_tuples_processed++;
+            //            page_local_tuples_processed++;
         } else {
             auto actual_dst = dst - (dst > node_id);
             auto* dst_page = active_buffers[actual_dst];
@@ -109,7 +110,7 @@ void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunk
                 throw std::runtime_error{"egress page has too many tuples"};
             }
             dst_page->emplace_back_transposed(j, page);
-            page_local_tuples_sent++;
+            //            page_local_tuples_sent++;
         }
     }
     local_tuples_processed += page_local_tuples_processed;
@@ -315,7 +316,7 @@ int main(int argc, char* argv[]) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
                 if (manager_recv.not_done()) {
-                    consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                    consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
@@ -333,13 +334,13 @@ int main(int argc, char* argv[]) {
                 TablePage* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
-                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send, active_buffers,
-                                       local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(node_id, /* current_result_page, chunked_list_result, */ manager_send,
+                                       active_buffers, local_tuples_processed, local_tuples_sent, *page_to_process);
                 }
                 while (thread_io.has_inflight_requests()) {
                     page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
-                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send, active_buffers,
-                                       local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(node_id, /* current_result_page, chunked_list_result, */ manager_send,
+                                       active_buffers, local_tuples_processed, local_tuples_sent, *page_to_process);
                 }
             }
 
@@ -365,7 +366,7 @@ int main(int argc, char* argv[]) {
 
             // wait for ingress
             while (manager_recv.not_done()) {
-                consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
             }
 
             if (last_thread) {

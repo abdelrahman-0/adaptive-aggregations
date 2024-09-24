@@ -42,7 +42,7 @@ DEFINE_string(path, "data/random.tbl",
               "path to input relation (if empty random pages will be generated instead, see "
               "flag 'npages')");
 DEFINE_uint32(npages, 50'000, "number of random pages to generate (only applicable if 'random' flag is set)");
-DEFINE_uint32(bufs_per_peer, 1, "number of egress buffers to use per peer");
+DEFINE_uint32(bufs_per_peer, 4, "number of egress buffers to use per peer");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 DEFINE_bool(random, false, "whether to use randomly generated data instead of reading in a file");
@@ -51,8 +51,8 @@ DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
 
-[[nodiscard]] u32 consume_ingress(IngressManager& manager_recv, ResultPage*& current_result_page,
-                                  PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received) {
+[[nodiscard]] u32 consume_ingress(IngressManager& manager_recv/*, ResultPage*& current_result_page,
+                                  PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received*/) {
     u32 peers_done{0};
     auto [network_page, peer] = manager_recv.get_page();
     while (network_page) {
@@ -64,7 +64,7 @@ DEFINE_bool(print_header, true, "whether to print metrics header");
         //        }
         bool last_page = network_page->is_last_page();
         peers_done += last_page;
-        local_tuples_received += network_page->get_num_tuples();
+        //        local_tuples_received += network_page->get_num_tuples();
         manager_recv.done_page(network_page);
         if (!last_page) {
             // still more pages
@@ -75,8 +75,9 @@ DEFINE_bool(print_header, true, "whether to print metrics header");
     return peers_done;
 }
 
-void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result,
-                        EgressManager& manager_send, u64& local_tuples_processed, u64& local_tuples_sent,
+void process_local_page(u32 node_id,
+                        /*ResultPage*& current_result_page, PageChunkedList<ResultPage>&
+chunked_list_result, */ EgressManager& manager_send /*, u64& local_tuples_processed, u64& local_tuples_sent*/,
                         const TablePage& page) {
     u64 page_local_tuples_processed{0};
     u64 page_local_tuples_sent{0};
@@ -90,16 +91,16 @@ void process_local_page(u32 node_id, ResultPage*& current_result_page, PageChunk
             //                current_result_page = chunked_list_result.get_new_page();
             //            }
             //            current_result_page->emplace_back_transposed(j, page);
-            page_local_tuples_processed++;
+            //            page_local_tuples_processed++;
         } else {
             auto actual_dst = dst - (dst > node_id);
             auto dst_page = manager_send.get_page(actual_dst);
             dst_page->emplace_back_transposed(j, page);
-            page_local_tuples_sent++;
+            //            page_local_tuples_sent++;
         }
     }
-    local_tuples_processed += page_local_tuples_processed;
-    local_tuples_sent += page_local_tuples_sent;
+    //    local_tuples_processed += page_local_tuples_processed;
+    //    local_tuples_sent += page_local_tuples_sent;
 }
 
 /* ----------- MAIN ----------- */
@@ -235,7 +236,7 @@ int main(int argc, char* argv[]) {
                 // handle ingress communication
                 if (peers_done < npeers) {
                     peers_done +=
-                        consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                        consume_ingress(manager_recv/*, current_result_page, chunked_list_result, local_tuples_received*/);
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
@@ -251,20 +252,20 @@ int main(int argc, char* argv[]) {
                 TablePage* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
-                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send,
-                                       local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(node_id, /*current_result_page, chunked_list_result,*/ manager_send,
+                                       /*local_tuples_processed, local_tuples_sent,*/ *page_to_process);
                 }
                 while (thread_io.has_inflight_requests()) {
                     page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
-                    process_local_page(node_id, current_result_page, chunked_list_result, manager_send,
-                                       local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(node_id, /*current_result_page, chunked_list_result,*/ manager_send,
+                                       /*local_tuples_processed, local_tuples_sent,*/ *page_to_process);
                 }
             }
 
             manager_send.flush_all();
             while (peers_done < npeers) {
                 peers_done +=
-                    consume_ingress(manager_recv, current_result_page, chunked_list_result, local_tuples_received);
+                    consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
                 manager_send.try_drain_pending();
             }
             manager_send.wait_all();

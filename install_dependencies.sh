@@ -3,7 +3,7 @@
 cd ~
 
 sudo apt-get -y update
-sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb
+sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb bpfcc-tools linux-headers-$(uname -r)
 
 # oneTBB
 cd /tmp &&
@@ -31,4 +31,5 @@ sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
 sudo sysctl -p
 
+echo 1 | sudo tee /proc/sys/kernel/sched_schedstats
 
