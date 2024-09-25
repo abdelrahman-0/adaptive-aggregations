@@ -242,8 +242,10 @@ int main(int argc, char* argv[]) {
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.try_flush(dst);
                 }
-                for (auto dst{0u}; dst < npeers; ++dst) {
-                    manager_recv.post_recvs(dst);
+                if (manager_recv.pending_peers()) {
+                    for (auto dst{0u}; dst < npeers; ++dst) {
+                        manager_recv.post_recvs(dst);
+                    }
                 }
                 manager_send.try_drain_done();
             }
@@ -315,7 +317,7 @@ int main(int argc, char* argv[]) {
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
-                if (manager_recv.not_done()) {
+                if (manager_recv.pending_peers() or manager_recv.pending_pages()) {
                     consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
                 }
 
@@ -365,7 +367,11 @@ int main(int argc, char* argv[]) {
             }
 
             // wait for ingress
-            while (manager_recv.not_done()) {
+            while (manager_recv.pending_peers()) {
+                consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
+            }
+
+            while (manager_recv.pending_pages()) {
                 consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
             }
 
@@ -418,6 +424,7 @@ int main(int argc, char* argv[]) {
     logger.log("network threads", FLAGS_nthreads);
     logger.log("query threads", FLAGS_qthreads);
     logger.log("total pages", FLAGS_npages);
+    logger.log("recv pages", pages_recv);
     logger.log("local page size", defaults::local_page_size);
     logger.log("network page size", defaults::network_page_size);
     logger.log("morsel size", FLAGS_morselsz);

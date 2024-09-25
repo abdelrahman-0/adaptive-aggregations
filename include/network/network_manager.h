@@ -157,12 +157,12 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
     u64 pages_recv{0};
     u64 total_submitted{0};
     u32 nbuffers;
-    std::atomic<u16> pending_peers;
+    std::atomic<u16> peers_left;
 
   public:
     ConcurrentIngressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : NetworkManager<BufferPage>(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), nbuffers(nbuffers),
-          pending_peers(npeers), has_inflight(npeers, false) {
+          peers_left(npeers), has_inflight(npeers, false) {
         for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
             free_pages.push(buffers_start + page_idx);
         }
@@ -196,7 +196,7 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
             auto* page_ptr = get_pointer<BufferPage>(user_data);
             page_ptrs.push(page_ptr);
             if (page_ptr->is_last_page()) {
-                pending_peers--;
+                peers_left--;
             } else {
                 has_inflight[get_tag(user_data)] = false;
                 post_recvs(get_tag(user_data));
@@ -220,7 +220,9 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
 
     void done_page(BufferPage* page) { free_pages.push(page); }
 
-    [[nodiscard]] bool not_done() const { return pending_peers or not page_ptrs.empty(); }
+    [[nodiscard]] bool pending_peers() const { return peers_left; }
+
+    [[nodiscard]] bool pending_pages() const { return not page_ptrs.empty(); }
 };
 
 template <custom_concepts::is_communication_page BufferPage>
