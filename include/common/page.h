@@ -142,23 +142,6 @@ struct PageRowStore : public Page<page_size, Attributes> {
         return ptr++;
     }
 
-    template <u16 num_cols, u16 idx, u16 other_idx, u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
-    void _emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
-    {
-        std::get<idx>(*ptr) = page.template get_value<other_idx>(row_idx);
-        if constexpr (idx < num_cols - 1) {
-            _emplace_back_transposed<num_cols, idx + 1, other_idxs...>(row_idx, page);
-        }
-    }
-
-    template <u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
-    [[maybe_unused]]
-    auto emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
-    {
-        _emplace_back_transposed<sizeof...(other_idxs), 0, other_idxs...>(row_idx, page);
-        return ptr++;
-    }
-
     template <u16... col_idxs>
     ALWAYS_INLINE auto get_subtuple(std::integral auto row_idx) const
     {
