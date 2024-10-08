@@ -36,64 +36,7 @@ struct Page {
 
     Page() { clear_tuples(); }
 
-    template <u16 num_cols, u64 idx, u64 other_idx, u64... other_idxs, typename... OtherAttributes>
-    void _emplace_back(const std::tuple<OtherAttributes...>& tuple)
-    {
-        std::get<idx>(*ptr) = std::get<other_idx>(tuple);
-        if constexpr (idx < num_cols - 1) {
-            _emplace_back<num_cols, idx + 1, other_idxs...>(tuple);
-        }
-    }
-
-    [[maybe_unused]]
-    auto emplace_back(const Attribute& val)
-    {
-        *ptr = val;
-        return ptr++;
-    }
-
-    template <u64... other_idxs, typename... OtherAttributes>
-    [[maybe_unused]]
-    auto emplace_back(const std::tuple<OtherAttributes...>& tuple)
-    {
-        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(tuple);
-        return ptr++;
-    }
-
-    template <u64... other_idxs, u64 other_page_size, typename... OtherAttributes>
-    requires concepts::is_row_store<Attribute, Attributes...>
-    [[maybe_unused]]
-    auto emplace_back(std::size_t row_idx, const Page<other_page_size, OtherAttributes...>& page)
-    {
-        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(page.template get_value<0>(row_idx));
-        return ptr++;
-    }
-
-    template <u16 num_cols, u16 idx, u16 other_idx, u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
-    void _emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
-    {
-        std::get<idx>(*ptr) = page.template get_value<other_idx>(row_idx);
-        if constexpr (idx < num_cols - 1) {
-            _emplace_back_transposed<num_cols, idx + 1, other_idxs...>(row_idx, page);
-        }
-    }
-
-    template <u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
-    requires concepts::is_row_store<Attribute, Attributes...>
-    [[maybe_unused]]
-    auto emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
-    {
-        _emplace_back_transposed<sizeof...(other_idxs), 0, other_idxs...>(row_idx, page);
-        return ptr++;
-    }
-
     void clear() { memset(this, 0, page_size); }
-
-    void clear_tuples()
-    requires concepts::is_row_store<Attribute, Attributes...>
-    { // constexpr
-        ptr = reinterpret_cast<Attribute*>(reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t));
-    }
 
     void clear_tuples() { num_tuples = 0; }
 
@@ -103,11 +46,10 @@ struct Page {
         return std::get<col_idx>(columns)[row_idx];
     }
 
-    [[nodiscard]]
-    bool full() const
-    requires concepts::is_row_store<Attribute, Attributes...>
+    template <u16... col_idxs>
+    auto get_tuple(std::integral auto row_idx) const
     {
-        return ptr == (std::get<0>(columns).data() + std::get<0>(columns).size());
+        return std::make_tuple(std::get<col_idxs>(columns)[row_idx]...);
     }
 
     [[nodiscard]]
@@ -118,26 +60,11 @@ struct Page {
 
     [[nodiscard]]
     bool empty() const
-    requires concepts::is_row_store<Attribute, Attributes...>
-    {
-        return ptr == reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t);
-    }
-
-    [[nodiscard]]
-    bool empty() const
     {
         return num_tuples == 0;
     }
 
-    void retire()
-    requires concepts::is_row_store<Attribute, Attributes...>
-    {
-        num_tuples = ptr - std::get<0>(columns).data();
-    }
-
     void retire() const {}
-
-    void compress() {}
 
     [[nodiscard]]
     std::byte* as_bytes() const
@@ -171,6 +98,93 @@ struct Page {
     }
 };
 
+static_assert(sizeof(Page<defaults::local_page_size, char>) == defaults::local_page_size);
+
+template <u64 page_size, typename Attributes>
+requires concepts::is_tuple<Attributes>
+struct PageRowStore : public Page<page_size, Attributes> {
+    using PageBase = Page<page_size, Attributes>;
+    using PageBase::columns;
+    using PageBase::num_tuples;
+    using PageBase::ptr;
+
+    [[maybe_unused]]
+    auto emplace_back(const Attributes& val)
+    {
+        *ptr = val;
+        return ptr++;
+    }
+
+    PageRowStore() { clear_tuples(); }
+
+    template <u16 num_cols, u64 idx, u64 other_idx, u64... other_idxs, typename... OtherAttributes>
+    void _emplace_back(const std::tuple<OtherAttributes...>& tuple)
+    {
+        std::get<idx>(*ptr) = std::get<other_idx>(tuple);
+        if constexpr (idx < num_cols - 1) {
+            _emplace_back<num_cols, idx + 1, other_idxs...>(tuple);
+        }
+    }
+
+    template <u64... other_idxs, typename... OtherAttributes>
+    [[maybe_unused]]
+    auto emplace_back(const std::tuple<OtherAttributes...>& tuple)
+    {
+        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(tuple);
+        return ptr++;
+    }
+
+    template <u64... other_idxs, u64 other_page_size, typename OtherAttributes>
+    [[maybe_unused]]
+    auto emplace_back(std::size_t row_idx, const PageRowStore<other_page_size, OtherAttributes>& page)
+    {
+        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(page.template get_value<0>(row_idx));
+        return ptr++;
+    }
+
+    template <u16 num_cols, u16 idx, u16 other_idx, u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
+    void _emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
+    {
+        std::get<idx>(*ptr) = page.template get_value<other_idx>(row_idx);
+        if constexpr (idx < num_cols - 1) {
+            _emplace_back_transposed<num_cols, idx + 1, other_idxs...>(row_idx, page);
+        }
+    }
+
+    template <u16... other_idxs, u64 other_page_size, typename... OtherAttributes>
+    [[maybe_unused]]
+    auto emplace_back_transposed(u64 row_idx, const Page<other_page_size, OtherAttributes...>& page)
+    {
+        _emplace_back_transposed<sizeof...(other_idxs), 0, other_idxs...>(row_idx, page);
+        return ptr++;
+    }
+
+    template <u16... col_idxs>
+    ALWAYS_INLINE auto get_subtuple(std::integral auto row_idx) const
+    {
+        return std::make_tuple(std::get<col_idxs...>(get_tuple<0>(row_idx)));
+    }
+
+    [[nodiscard]]
+    bool empty() const
+    {
+        return ptr == reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t);
+    }
+
+    [[nodiscard]]
+    bool full() const
+    {
+        return ptr == (std::get<0>(columns).data() + std::get<0>(columns).size());
+    }
+
+    void clear_tuples()
+    {
+        ptr = reinterpret_cast<Attributes*>(reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t));
+    }
+
+    void retire() { num_tuples = ptr - std::get<0>(columns).data(); }
+};
+
 template <u64 page_size, typename... Attributes>
 static void check_page(const Page<page_size, Attributes...> page, bool send)
 {
@@ -189,5 +203,3 @@ static void check_page(const Page<page_size, Attributes...> page, bool send)
         }
     }
 }
-
-static_assert(sizeof(Page<defaults::local_page_size, char>) == defaults::local_page_size);
