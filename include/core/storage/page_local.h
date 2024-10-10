@@ -3,8 +3,8 @@
 #include "common/page.h"
 #include "defaults.h"
 
-template <typename... Attributes>
-using PageLocal = Page<defaults::local_page_size, Attributes...>;
+template <typename Attribute, typename... Attributes>
+using PageLocal = Page<defaults::local_page_size, Attribute, Attributes...>;
 
 static_assert(sizeof(PageLocal<int32_t>) == defaults::local_page_size);
 static_assert(sizeof(PageLocal<int32_t, char[20]>) == defaults::local_page_size);

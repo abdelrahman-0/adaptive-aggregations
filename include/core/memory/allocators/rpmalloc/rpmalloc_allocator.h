@@ -1,6 +1,6 @@
 #include <cstdint>
 
-#include "allocators/rpmalloc/rpmalloc.h"
+#include "rpmalloc.h"
 
 template <typename T>
 struct RPMallocAllocator {

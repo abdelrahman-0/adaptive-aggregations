@@ -3,15 +3,16 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <liburing.h>
+#include <mutex>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <utility>
 
+#include "concepts_traits/concepts_common.h"
 #include "defaults.h"
 #include "exceptions/exceptions_network.h"
-#include "utils/custom_concepts.h"
 #include "utils/utils.h"
 
 static constexpr auto communication_port_base = defaults::port;
@@ -19,7 +20,8 @@ static char ip_buffer[INET_ADDRSTRLEN];
 
 static std::mutex print_mtx{};
 
-static auto get_connection_hints(bool use_ipv6 = false) {
+static auto get_connection_hints(bool use_ipv6 = false)
+{
     ::addrinfo hints{};
     ::memset(&hints, 0, sizeof(addrinfo));
     hints.ai_family = use_ipv6 ? AF_INET6 : AF_INET; // use IPv4/IPv6
@@ -41,16 +43,21 @@ struct Connection {
 
     explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, u32 num_connections = 1)
         : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections),
-          socket_fds(num_connections, -1) {}
+          socket_fds(num_connections, -1)
+    {
+    }
 
     explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, std::string connection_ip, u32 num_connections = 1)
         : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections),
-          connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1) {}
+          connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1)
+    {
+    }
 
     ~Connection() = default;
 
     // incoming connections
-    void setup_ingress() {
+    void setup_ingress()
+    {
         int ret;
         ::addrinfo* local;
         auto hints = get_connection_hints();
@@ -76,8 +83,8 @@ struct Connection {
         auto double_kernel_recv_buffer_size{0u};
         ::getsockopt(sock_fd, SOL_SOCKET, SO_RCVBUF, &double_kernel_recv_buffer_size, &size);
 
-        // println("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-        // println("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
+        // print("setting recv buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+        // print("size of recv buff (incl. kernel bookkeeping):", double_kernel_recv_buffer_size);
 
         if (::bind(sock_fd, local->ai_addr, local->ai_addrlen) == -1) {
             throw NetworkSocketBindError{};
@@ -91,7 +98,7 @@ struct Connection {
         ::inet_ntop(local->ai_family, local->ai_addr, ip_buffer, sizeof(ip_buffer));
         {
             std::unique_lock lock{print_mtx};
-            // println("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+            // print("listening on", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
         }
 
         // listen loop
@@ -104,7 +111,7 @@ struct Connection {
             }
             u32 incoming_node_id;
             ::recv(ingress_fd, &incoming_node_id, sizeof(incoming_node_id), MSG_WAITALL);
-            // println("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
+            // print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
             socket_fds[incoming_node_id] = ingress_fd;
             ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip_buffer, sizeof(ip_buffer));
         }
@@ -113,14 +120,15 @@ struct Connection {
     }
 
     // outgoing connections
-    void setup_egress(u32 outgoing_node_id) {
+    void setup_egress(u32 outgoing_node_id)
+    {
         if (num_connections == 0) {
             return;
         }
         int ret;
         auto hints = get_connection_hints();
         auto thread_comm_port = std::to_string(communication_port_base + outgoing_node_id * nthreads + thread_id);
-        //        println("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
+        //        print("opening"s, num_connections, "connections to:"s, connection_ip, "..."s);
         for (auto i = 0u; i < num_connections; ++i) {
             // setup connection structs
             addrinfo* peer;
@@ -146,8 +154,8 @@ struct Connection {
                 ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
 
                 if (i == 0) {
-                    // println("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
-                    // println("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
+                    // print("setting send buff (excl. kernel bookkeeping):", defaults::kernel_recv_buffer_size);
+                    // print("size of send buff (incl. kernel bookkeeping):", double_kernel_send_buffer_size);
                 }
 
                 ::linger sl{};
@@ -172,7 +180,7 @@ struct Connection {
             ::getsockname(socket_fds[i], (struct sockaddr*)&sin, &len);
             {
                 std::unique_lock lock{print_mtx};
-                // println("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
+                // print("connected to", std::string(ip_buffer), "( port", thread_comm_port, ") ...");
             }
 
             // free addrinfo linked list
@@ -180,7 +188,8 @@ struct Connection {
         }
     }
 
-    void close_connections() {
+    void close_connections()
+    {
         for (auto i : socket_fds) {
             //            ::close(i);
             ::shutdown(i, SHUT_RDWR);

@@ -9,7 +9,7 @@
 
 template <uint64_t initial_ring_size>
 struct PointerRing {
-    uint64_t ring_size = next_power_of_2(initial_ring_size);
+    uint64_t ring_size = next_power_2(initial_ring_size);
     uint64_t ring_mask = ring_size - 1;
     uint64_t head{0};
     std::atomic<uint64_t> tail{0};

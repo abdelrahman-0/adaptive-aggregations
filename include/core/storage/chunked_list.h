@@ -4,12 +4,12 @@
 #include <memory>
 #include <tbb/scalable_allocator.h>
 
-#include "allocators/rpmalloc/rpmalloc.h"
+#include "memory/allocators/rpmalloc/rpmalloc.h"
 #include "common/page.h"
 
 static constexpr std::size_t chunk_size = defaults::num_pages_on_chunk;
 
-template <custom_concepts::is_page PageOnChunk>
+template <concepts::is_page PageOnChunk>
 class PageChunk {
   private:
     std::array<PageOnChunk, chunk_size> page_array{};
@@ -23,7 +23,7 @@ class PageChunk {
     bool page_full(std::size_t index) { return page_array[index].full(); }
 };
 
-template <custom_concepts::is_page PageOnChunk>
+template <concepts::is_page PageOnChunk>
 struct PageChunkedList {
     using Chunk = PageChunk<PageOnChunk>;
 //        tbb::scalable_allocator<Chunk> chunk_allocator{};

@@ -71,10 +71,9 @@ struct Traffic {
                 auto page_idx = cqes[i]->user_data;
                 if ((reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples >
                     (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)
-                        ->max_num_tuples_per_page) {
-                    println(
-                        "Sent",
-                        (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples);
+                        ->max_tuples_per_page) {
+                    print("Sent",
+                          (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples);
                 }
                 (reinterpret_cast<PageOnBuffer*>(comm_buffers[destination].begin()) + page_idx)->num_tuples = 0;
                 bytes_sent += cqes[i]->res;
@@ -101,8 +100,8 @@ struct Traffic {
             throw IOUringSubmissionQueueFullError{};
         }
         // compress page before sending?
-        if (current_page->num_tuples > current_page->max_num_tuples_per_page) {
-            println("Sent", current_page->num_tuples);
+        if (current_page->num_tuples > current_page->max_tuples_per_page) {
+            print("Sent", current_page->num_tuples);
         }
         io_uring_prep_send(sqe, destination, current_page, defaults::network_page_size, 0);
         sqe->flags |= IOSQE_FIXED_FILE;

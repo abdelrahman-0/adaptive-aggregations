@@ -43,7 +43,7 @@ class Table {
 
     auto& get_swips() { return swips; }
 
-    template <custom_concepts::is_page CachePage>
+    template <concepts::is_page CachePage>
     void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io) {
         std::vector<std::jthread> threads;
         std::atomic<u32> current_swip;
@@ -56,7 +56,7 @@ class Table {
                         end_swip = std::min(num_pages_cache, local_swip + batch_sz);
                         for (; local_swip < end_swip; ++local_swip) {
                             auto& page = cache.get_page(local_swip);
-                            page.num_tuples = CachePage::max_num_tuples_per_page;
+                            page.num_tuples = CachePage::max_tuples_per_page;
                             page.fill_random();
                             swips[local_swip].set_pointer(&page);
                         }
@@ -91,14 +91,14 @@ class Table {
         }
     }
 
-    template <typename... Attributes>
-    void read_async(IO_Manager& io, std::size_t page_idx, PageLocal<Attributes...>* block) {
-        io.async_io<READ>(segment_id, page_idx * sizeof(PageLocal<Attributes...>), as_bytes(block), true);
+    template <typename Attribute, typename... Attributes>
+    void read_async(IO_Manager& io, std::size_t page_idx, PageLocal<Attribute, Attributes...>* block) {
+        io.async_io<READ>(segment_id, page_idx * sizeof(PageLocal<Attribute, Attributes...>), as_bytes(block), true);
     }
 
-    template <typename... Attributes>
+    template <typename Attribute, typename... Attributes>
     void read_pages_async(IO_Manager& io, uint32_t swips_begin, uint32_t swips_end,
-                          std::vector<PageLocal<Attributes...>>& batch_blocks) {
+                          std::vector<PageLocal<Attribute, Attributes...>>& batch_blocks) {
         io.batch_async_io<READ>(segment_id, std::span{swips.begin() + swips_begin, swips.begin() + swips_end},
                                 batch_blocks);
     }

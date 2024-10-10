@@ -5,8 +5,8 @@
 #include <type_traits>
 
 #include "common/page.h"
+#include "concepts_traits/concepts_common.h"
 #include "defaults.h"
-#include "utils/custom_concepts.h"
 #include "utils/hash.h"
 
 static constexpr std::size_t highest_bit_mask = static_cast<std::size_t>(~0) >> 1;
@@ -22,29 +22,29 @@ struct Swip {
 
     explicit Swip(const PageIdx idx) : val(idx | (~highest_bit_mask)) {}
 
-    explicit Swip(custom_concepts::pointer_type auto ptr) : val(ptr) {}
+    explicit Swip(concepts::is_pointer auto ptr) : val(ptr) {}
 
     Swip& operator=(PageIdx idx) {
         val = idx | (~highest_bit_mask);
         return *this;
     }
 
-    [[nodiscard]] inline bool is_page_idx() const { return val & ~highest_bit_mask; }
+    [[nodiscard]] ALWAYS_INLINE bool is_page_idx() const { return val & ~highest_bit_mask; }
 
-    [[nodiscard]] inline bool is_pointer() const { return not is_page_idx(); }
+    [[nodiscard]] ALWAYS_INLINE bool is_pointer() const { return not is_page_idx(); }
 
-    inline void set_pointer(custom_concepts::pointer_type auto ptr) { val = reinterpret_cast<uintptr_t>(ptr); }
+    ALWAYS_INLINE void set_pointer(concepts::is_pointer auto ptr) { val = reinterpret_cast<uintptr_t>(ptr); }
 
-    inline void set_page_index(const PageIdx idx) { val = idx | (~highest_bit_mask); }
+    ALWAYS_INLINE void set_page_index(const PageIdx idx) { val = idx | (~highest_bit_mask); }
 
-    [[nodiscard]] inline PageIdx get_page_index() const { return val & highest_bit_mask; }
+    [[nodiscard]] ALWAYS_INLINE PageIdx get_page_index() const { return val & highest_bit_mask; }
 
     [[nodiscard]] inline PageIdx get_byte_offset() const {
         return (val & highest_bit_mask) * defaults::local_page_size;
     }
 
-    template <custom_concepts::pointer_type T>
-    [[nodiscard]] inline auto get_pointer() const {
+    template <concepts::is_pointer T>
+    [[nodiscard]] ALWAYS_INLINE auto get_pointer() const {
         return reinterpret_cast<T>(val);
     }
 
@@ -59,7 +59,7 @@ struct Swip {
     }
 };
 
-template <custom_concepts::is_page CachePage>
+template <concepts::is_page CachePage>
 struct Cache {
     std::vector<CachePage> pages;
 

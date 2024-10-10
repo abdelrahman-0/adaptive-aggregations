@@ -52,7 +52,7 @@ class IO_Manager {
     // TODO move has_inflight_requests to Table to be able to share io_manager and load multiple tables
     [[nodiscard]] bool has_inflight_requests() const { return inflight > 0; }
 
-    template <custom_concepts::pointer_type T>
+    template <concepts::is_pointer T>
     T get_next_cqe_data() {
         if (cqes_index == cqes_peeked) {
             cqes_peeked = peek();
@@ -75,16 +75,16 @@ class IO_Manager {
         return result;
     }
 
-    template <FileMode mode, typename... Attributes>
-    inline void sync_io(int fd, uint64_t offset, PageLocal<Attributes...>& block,
+    template <FileMode mode, typename Attribute, typename... Attributes>
+    inline void sync_io(int fd, uint64_t offset, PageLocal<Attribute, Attributes...>& block,
                         std::size_t block_size = defaults::local_page_size) {
         async_io<mode>(fd, offset, block, block_size);
         wait(1);
         seen(1);
     }
 
-    template <FileMode mode, typename... Attributes>
-    inline void async_io(int fd, uint64_t offset, PageLocal<Attributes...>& block,
+    template <FileMode mode, typename Attribute, typename... Attributes>
+    inline void async_io(int fd, uint64_t offset, PageLocal<Attribute, Attributes...>& block,
                          std::size_t block_size = defaults::local_page_size, bool registered = false) {
         auto* sqe = io_uring_get_sqe(&ring);
         if (sqe == nullptr) {
@@ -103,20 +103,20 @@ class IO_Manager {
     }
 
     // TODO registered buffers
-    template <FileMode mode, typename... Attributes>
-    inline void batch_async_io(int fd, const std::span<Swip> swips, std::vector<PageLocal<Attributes...>>& blocks,
-                               bool registered = false) {
+    template <FileMode mode, typename Attribute, typename... Attributes>
+    inline void batch_async_io(int fd, const std::span<Swip> swips,
+                               std::vector<PageLocal<Attribute, Attributes...>>& blocks, bool registered = false) {
         for (auto i{0u}; i < swips.size(); ++i) {
             auto* sqe = io_uring_get_sqe(&ring);
             if (sqe == nullptr) {
                 throw IOUringSubmissionQueueFullError{};
             }
             if constexpr (mode == FileMode::READ) {
-                io_uring_prep_read(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attributes...>),
-                                   swips[i].get_page_index() * sizeof(PageLocal<Attributes...>));
+                io_uring_prep_read(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attribute, Attributes...>),
+                                   swips[i].get_page_index() * sizeof(PageLocal<Attribute, Attributes...>));
             } else {
-                io_uring_prep_write(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attributes...>),
-                                    swips[i].get_page_index() * sizeof(PageLocal<Attributes...>));
+                io_uring_prep_write(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attribute, Attributes...>),
+                                    swips[i].get_page_index() * sizeof(PageLocal<Attribute, Attributes...>));
             }
             io_uring_sqe_set_data(sqe, &blocks[i]);
             io_uring_sqe_set_flags(sqe, registered ? IOSQE_FIXED_FILE : 0);
