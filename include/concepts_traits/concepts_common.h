@@ -4,12 +4,20 @@
 #include <cstddef>
 #include <type_traits>
 
-namespace custom_concepts {
+#include "type_traits_common.h"
 
-// concept wrapper for type trait
+namespace concepts {
+
+// concept wrappers for type traits
 // needed for passing auto args
 template <typename T>
-concept pointer_type = std::is_pointer_v<T>;
+concept is_pointer = std::is_pointer_v<T>;
+template <typename T>
+concept is_array = type_traits::is_array_v<T>;
+template <typename T>
+concept is_tuple = type_traits::is_tuple_v<T>;
+template <typename T>
+concept is_char = type_traits::is_char_v<T>;
 
 // unify arrays and vectors (but not strings)
 template <typename T>
@@ -31,12 +39,7 @@ concept is_communication_page = is_page<T> and requires(T t) {
     t.is_last_page();
 };
 
-template <typename T>
-concept Can_Send = requires(T t, size_t i, std::byte* buf) { t.send(i, buf); };
+template <typename... Attributes>
+concept is_row_store = sizeof...(Attributes) == 1;
 
-template <typename T>
-concept Can_Recv = requires(T t, size_t i, std::byte* buf) { t.recv(i, buf); };
-
-template <typename T>
-concept Can_Send_Recv = Can_Send<T> and Can_Recv<T>;
-} // namespace custom_concepts
+} // namespace concepts
