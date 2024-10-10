@@ -11,11 +11,11 @@ include_directories(include)
 find_package(gflags REQUIRED)
 find_package(TBB REQUIRED)
 
-add_library(rpmalloc include/allocators/rpmalloc/rpmalloc.c)
+add_library(rpmalloc include/core/memory/allocators/rpmalloc/rpmalloc.c)
 
 add_subdirectory(micro-benchmarks)
 
 add_executable(grasshopper_db
-        include/utils/custom_concepts.h
-        include/network/connection.h
+        include/concepts_traits/concepts_common.h
+        include/core/network/connection.h
         micro-benchmarks/shuffle/shuffle.cpp)
