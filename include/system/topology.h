@@ -49,11 +49,11 @@ struct NodeTopology {
             compact_assignment = true;
         }
         nphysical_cores = nthreads_sys / threads_per_core;
-        println("available threads:", nthreads_sys);
-        println("physical cores:", nphysical_cores);
-        println("threads used:", requested_threads);
-        println("threads per core:", threads_per_core);
-        println("logical CPU assignment:", compact_assignment ? "compact" : "round-robin");
+        print("available threads:", nthreads_sys);
+        print("physical cores:", nphysical_cores);
+        print("threads used:", requested_threads);
+        print("threads per core:", threads_per_core);
+        print("logical CPU assignment:", compact_assignment ? "compact" : "round-robin");
     }
 
     // set affinity of calling thread
@@ -95,6 +95,6 @@ struct NodeTopology {
 
     void log_thread_pinned(std::integral auto tid, std::integral auto cpu) {
         std::unique_lock _{print_mut};
-        println("pinning thread", tid, "to cpu", cpu);
+        print("pinning thread", tid, "to cpu", cpu);
     }
 };

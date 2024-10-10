@@ -25,7 +25,7 @@ class Logger {
 
     template <typename T>
     requires std::is_same_v<std::string, T> or requires(T t) { std::to_string(t); }
-    void log(const std::string& param, T&& val) {
+    auto& log(const std::string& param, T&& val) {
         std::unique_lock<std::mutex> _{mutex};
         header.push_back(param);
         if constexpr (std::is_same_v<std::string, T>) {
@@ -33,5 +33,6 @@ class Logger {
         } else {
             row.push_back(std::to_string(val));
         }
+        return *this;
     }
 };

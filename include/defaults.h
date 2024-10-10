@@ -1,8 +1,9 @@
 #pragma once
 
-#include <tbb/partitioner.h>
-
+#define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define DEFAULTS_AUTO static constexpr auto
+
+#define CACHELINE_SZ 64
 
 using s16 = int16_t;
 using u16 = uint16_t;
@@ -13,10 +14,11 @@ using u64 = uint64_t;
 
 namespace defaults {
 
+DEFAULTS_AUTO hashtable_page_size = 1ul << 8;
+
 DEFAULTS_AUTO local_page_size = 1ul << 12;
 DEFAULTS_AUTO local_io_depth = 256ul;
 DEFAULTS_AUTO num_pages_on_chunk = 1ul << 6;
-static auto shuffle_partitioner = tbb::affinity_partitioner();
 
 DEFAULTS_AUTO network_io_depth = 128ul;
 DEFAULTS_AUTO network_page_size = 1ul << 17;
