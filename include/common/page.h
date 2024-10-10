@@ -13,7 +13,7 @@
 template <typename... Attributes>
 consteval std::size_t calc_max_tuples_per_page(std::size_t page_size)
 {
-    return ((page_size - alignof(std::max_align_t)) / (sizeof(Attributes) + ...));
+    return (page_size - alignof(std::max_align_t)) / (sizeof(Attributes) + ...);
 }
 
 template <typename T, std::size_t length>
@@ -40,13 +40,15 @@ struct Page {
 
     void clear_tuples() { num_tuples = 0; }
 
+    // TODO const variants
     template <u16 col_idx = 0>
-    auto get_value(std::integral auto row_idx) const
+    auto& get_value(std::integral auto row_idx)
     {
         return std::get<col_idx>(columns)[row_idx];
     }
 
     template <u16... col_idxs>
+    requires(sizeof...(col_idxs) > 0)
     auto get_tuple(std::integral auto row_idx) const
     {
         return std::make_tuple(std::get<col_idxs>(columns)[row_idx]...);
@@ -79,17 +81,20 @@ struct Page {
         print(std::get<col_idx>(columns)); // TODO use std::span to handle non-full pages
     }
 
-    void print_contents() const
-    {
-        print<' '>("num tuples:", num_tuples);
-        hexdump(this, sizeof(*this));
-    }
-
     void print_info() const
     {
-        print<' '>("size of page:", page_size, "( max tuples:", max_tuples_per_page, ")");
-        print("schema: ");
-        print<','>(boost::core::demangle(typeid(Attributes).name())...);
+        print("size of page:", page_size, "( max tuples:", max_tuples_per_page, ")");
+        print("schema: ", boost::core::demangle(typeid(Attribute).name()),
+              boost::core::demangle(typeid(Attributes).name())...);
+        print("-----");
+    }
+
+    void print_page() const
+    {
+        print_info();
+        print("num tuples:", num_tuples);
+        hexdump(this, sizeof(*this));
+        print();
     }
 
     void fill_random()
@@ -101,12 +106,13 @@ struct Page {
 static_assert(sizeof(Page<defaults::local_page_size, char>) == defaults::local_page_size);
 
 template <u64 page_size, typename Attributes>
-requires concepts::is_tuple<Attributes>
 struct PageRowStore : public Page<page_size, Attributes> {
     using PageBase = Page<page_size, Attributes>;
     using PageBase::columns;
     using PageBase::num_tuples;
     using PageBase::ptr;
+
+    PageRowStore() { clear_tuples(); }
 
     [[maybe_unused]]
     auto emplace_back(const Attributes& val)
@@ -114,8 +120,6 @@ struct PageRowStore : public Page<page_size, Attributes> {
         *ptr = val;
         return ptr++;
     }
-
-    PageRowStore() { clear_tuples(); }
 
     template <u16 num_cols, u64 idx, u64 other_idx, u64... other_idxs, typename... OtherAttributes>
     void _emplace_back(const std::tuple<OtherAttributes...>& tuple)
@@ -142,16 +146,10 @@ struct PageRowStore : public Page<page_size, Attributes> {
         return ptr++;
     }
 
-    template <u16... col_idxs>
-    ALWAYS_INLINE auto get_subtuple(std::integral auto row_idx) const
-    {
-        return std::make_tuple(std::get<col_idxs...>(get_tuple<0>(row_idx)));
-    }
-
     [[nodiscard]]
     bool empty() const
     {
-        return ptr == reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t);
+        return ptr == std::get<0>(columns).data();
     }
 
     [[nodiscard]]
@@ -160,10 +158,7 @@ struct PageRowStore : public Page<page_size, Attributes> {
         return ptr == (std::get<0>(columns).data() + std::get<0>(columns).size());
     }
 
-    void clear_tuples()
-    {
-        ptr = reinterpret_cast<Attributes*>(reinterpret_cast<std::byte*>(this) + alignof(std::max_align_t));
-    }
+    void clear_tuples() { ptr = std::get<0>(columns).data(); }
 
     void retire() { num_tuples = ptr - std::get<0>(columns).data(); }
 };
