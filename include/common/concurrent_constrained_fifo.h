@@ -3,8 +3,8 @@
 #include <atomic>
 #include <vector>
 
-#include "page.h"
-#include "utils/custom_concepts.h"
+#include "concepts_traits/concepts_common.h"
+#include "core/page.h"
 
 // FIFO queue implemented as circular buffer. Allows multiple writers and one reader
 class alignas(64) ConcurrentFIFO {

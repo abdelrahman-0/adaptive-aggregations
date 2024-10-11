@@ -8,12 +8,12 @@
 #include <cstdint>
 #include <tbb/concurrent_queue.h>
 
-#include "concepts_traits/concepts_alloc.h"
-#include "concepts_traits/concepts_hashtable.h"
 #include "core/memory/alloc.h"
 #include "defaults.h"
 #include "hashtable_page.h"
-#include "micro_benchmarks/debug.h"
+#include "misc/concepts_traits/concepts_alloc.h"
+#include "misc/concepts_traits/concepts_hashtable.h"
+#include "ubench/debug.h"
 
 template <typename PageType, concepts::is_allocator Alloc, bool heterogeneous = false>
 class BlockAllocator {
@@ -31,7 +31,7 @@ class BlockAllocator {
     u32 block_sz;
 
   public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 5)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 10000)
         : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);
@@ -51,9 +51,7 @@ class BlockAllocator {
     {
         auto block = Alloc::template alloc<PageType>(block_sz * sizeof(PageType));
         allocations.push_back({block_sz, consume ? 1u : 0u, block});
-        if (allocations_budget) {
-            allocations_budget--;
-        }
+        allocations_budget--;
         return block;
     }
 
@@ -72,15 +70,13 @@ class BlockAllocator {
             free_pages.pop_back();
         }
         else if (allocations_budget) {
-            // allocate if no free pages
+            // allocate new block
             page = allocate();
         }
         else {
             // throw error (could also wait for cqe?)
             throw std::runtime_error("Exhausted allocation budget");
         }
-        page->clear_tuples();
-        print("allocated", page);
         return page;
     }
 
@@ -97,15 +93,13 @@ class BlockAllocator {
             // check for free pages
         }
         else if (allocations_budget) {
+            // allocate new block
             page = allocate();
         }
         else {
             // throw error (could also wait for cqe?)
             throw std::runtime_error("Exhausted allocation budget");
         }
-
-        // allocate new partition block
-        page->clear_tuples();
         return page;
     }
 
@@ -147,17 +141,19 @@ struct PartitionedChainedHashtable {
 
   public:
     PartitionedChainedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
-        : npartitions(next_power_2(_npartitions)), partition_shift(__builtin_ctz(next_power_2(_nslots))),
-          ht_mask((next_power_2(_npartitions) << __builtin_ctz(next_power_2(_nslots))) - 1),
-          block_alloc(next_power_2(_npartitions)), consumer_fns(std::move(_consumer_fns))
+        : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
+          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions),
+          consumer_fns(std::move(_consumer_fns))
     {
+        DEBUGGING(assert(_npartitions == next_power_2(_npartitions)));
+        DEBUGGING(assert(_nslots == next_power_2(_nslots)));
         // alloc ht
         ht = Alloc::template alloc<Slot>(sizeof(Slot) * (ht_mask + 1));
 
-        DEBUGGING(print("max tuples per HashTablePreAgg page:", PageAgg::max_tuples_per_page);)
         // alloc partitions
         for (u32 part{0}; part < npartitions; ++part) {
             partitions.push_back(block_alloc.get_page());
+            partitions.back()->clear_tuples();
         }
     }
 
@@ -183,9 +179,6 @@ struct PartitionedChainedHashtable {
         auto*& part_page = partitions[part_no];
         Slot& slot = ht[mod];
         Slot next_offset = slot, offset = slot;
-        if (part_no == 0) {
-            int x = 2;
-        }
         while (next_offset != EMPTY_SLOT) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
@@ -198,6 +191,7 @@ struct PartitionedChainedHashtable {
             // evict if full
             evict(part_no, part_page);
             part_page = block_alloc.get_page();
+            part_page->clear_tuples();
             offset = EMPTY_SLOT;
         }
         slot = part_page->emplace_back_grp(offset, key, value);

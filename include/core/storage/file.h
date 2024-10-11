@@ -7,8 +7,8 @@
 #include <sys/types.h>
 #include <utility>
 
-#include "common/page.h"
-#include "exceptions/exceptions_file.h"
+#include "core/page.h"
+#include "misc/exceptions/exceptions_file.h"
 
 enum FileMode : int8_t { READ, WRITE, READ_WRITE };
 
@@ -20,9 +20,14 @@ class File {
     std::size_t offset_end{};
     int fd{-1};
 
-    [[nodiscard]] bool check_file_exists() const { return std::filesystem::exists({path}); }
+    [[nodiscard]]
+    bool check_file_exists() const
+    {
+        return std::filesystem::exists({path});
+    }
 
-    void open(FileMode mode) {
+    void open(FileMode mode)
+    {
         switch (mode) {
         case READ: {
             fd = ::open(path.c_str(), O_RDONLY | O_NOATIME | O_DIRECT);
@@ -40,7 +45,8 @@ class File {
         }
     }
 
-    void determine_size() {
+    void determine_size()
+    {
         struct stat fileStat{};
         if (fstat(fd, &fileStat) < 0) {
             throw FileStatError();
@@ -48,7 +54,8 @@ class File {
         size_in_bytes = fileStat.st_size;
     }
 
-    void close() const {
+    void close() const
+    {
         auto ret = ::close(fd);
         if (ret < 0) {
             throw FileCloseError{};
@@ -58,7 +65,8 @@ class File {
   public:
     File() = default;
 
-    File(std::string path, FileMode mode) : path(std::move(path)) {
+    File(std::string path, FileMode mode) : path(std::move(path))
+    {
         if (mode == READ and !check_file_exists()) {
             throw FileNotExistsError{};
         }
@@ -66,7 +74,8 @@ class File {
         determine_size();
     }
 
-    File& operator=(File&& other) noexcept {
+    File& operator=(File&& other) noexcept
+    {
         path = std::move(other.path);
         fd = other.fd;
         size_in_bytes = other.size_in_bytes;
@@ -76,22 +85,40 @@ class File {
         return *this;
     }
 
-    ~File() {
+    ~File()
+    {
         if (fd > 0) {
             close();
         }
     }
 
-    void set_offset(std::size_t begin, std::size_t end) {
+    void set_offset(std::size_t begin, std::size_t end)
+    {
         offset_begin = begin;
         offset_end = end;
     }
 
-    [[nodiscard]] int get_file_descriptor() const { return fd; }
+    [[nodiscard]]
+    int get_file_descriptor() const
+    {
+        return fd;
+    }
 
-    [[nodiscard]] std::size_t get_offset_begin() const { return offset_begin; }
+    [[nodiscard]]
+    std::size_t get_offset_begin() const
+    {
+        return offset_begin;
+    }
 
-    [[nodiscard]] std::size_t get_size() const { return offset_end - offset_begin; }
+    [[nodiscard]]
+    std::size_t get_size() const
+    {
+        return offset_end - offset_begin;
+    }
 
-    [[nodiscard]] std::size_t get_total_size() const { return size_in_bytes; }
+    [[nodiscard]]
+    std::size_t get_total_size() const
+    {
+        return size_in_bytes;
+    }
 };

@@ -4,8 +4,8 @@
 #include <memory>
 #include <tbb/scalable_allocator.h>
 
+#include "core/page.h"
 #include "memory/allocators/rpmalloc/rpmalloc.h"
-#include "common/page.h"
 
 static constexpr std::size_t chunk_size = defaults::num_pages_on_chunk;
 

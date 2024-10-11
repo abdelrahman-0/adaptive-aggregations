@@ -17,7 +17,7 @@
 //
 //    void register_fds(const std::vector<int>& fds) {
 //        for (auto fd : fds) {
-//            pool.emplace_back();
+//            pool._emplace_back();
 //            auto& ring = pool.back();
 //            int ret;
 //            if ((ret = io_uring_queue_init(ring_depth, &ring, sqpoll ? IORING_SETUP_SQPOLL : 0))) {

@@ -1,9 +1,9 @@
 #pragma once
 
-#include "common/page.h"
-#include "concepts_traits/concepts_common.h"
 #include "core/network/page_communication.h"
+#include "core/page.h"
 #include "defaults.h"
+#include "misc/concepts_traits/concepts_hashtable.h"
 #include "utils/hash.h"
 
 template <concepts::is_slot Next>

@@ -8,7 +8,7 @@
 #include <vector>
 
 #include "cache.h"
-#include "common/page.h"
+#include "core/page.h"
 #include "defaults.h"
 #include "file.h"
 #include "io_manager.h"
@@ -51,7 +51,7 @@ class Table {
             // populate cache using all available threads
             for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
                 threads.emplace_back([&]() {
-                    u32 local_swip, end_swip, batch_sz{100};
+                    u32 local_swip, end_swip, batch_sz{10};
                     while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
                         end_swip = std::min(num_pages_cache, local_swip + batch_sz);
                         for (; local_swip < end_swip; ++local_swip) {
@@ -67,7 +67,7 @@ class Table {
             auto swip_indexes = std::vector<std::size_t>(swips.size());
             std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
             if (not sequential_io) {
-                std::shuffle(swip_indexes.begin(), swip_indexes.end(), rng);
+                std::shuffle(swip_indexes.begin(), swip_indexes.end(), librand::rng);
             }
 
             // populate cache using all available threads

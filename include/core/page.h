@@ -6,22 +6,15 @@
 #include <cstring>
 #include <tuple>
 
-#include "concepts_traits/type_traits_common.h"
 #include "defaults.h"
+#include "misc/concepts_traits/type_traits_common.h"
+#include "misc/librand/random.h"
 #include "utils/utils.h"
 
 template <typename... Attributes>
 consteval std::size_t calc_max_tuples_per_page(std::size_t page_size)
 {
     return (page_size - alignof(std::max_align_t)) / (sizeof(Attributes) + ...);
-}
-
-template <typename T, std::size_t length>
-void random_column(std::array<T, length>& column)
-{
-    for (auto& el : column) {
-        el = random<std::remove_reference_t<decltype(el)>>();
-    }
 }
 
 // PAX-style page
@@ -48,7 +41,6 @@ struct Page {
     }
 
     template <u16... col_idxs>
-    requires(sizeof...(col_idxs) > 0)
     auto get_tuple(std::integral auto row_idx) const
     {
         return std::make_tuple(std::get<col_idxs>(columns)[row_idx]...);
@@ -99,7 +91,8 @@ struct Page {
 
     void fill_random()
     {
-        std::apply([](auto&&... args) { ((random_column(args)), ...); }, columns);
+        // TODO better design -> limit min, max based on ngroups
+        std::apply([](auto&&... args) { ((librand::random_column(args)), ...); }, columns);
     }
 };
 

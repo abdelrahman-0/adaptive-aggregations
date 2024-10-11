@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/page.h"
+#include "core/page.h"
 #include "defaults.h"
 
 template <typename Attribute, typename... Attributes>

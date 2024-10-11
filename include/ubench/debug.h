@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cassert>
+
 #ifdef NDEBUG
 #define DEBUGGING(x...)
 #else

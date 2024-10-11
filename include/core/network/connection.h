@@ -9,10 +9,11 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <utility>
+#include <vector>
 
-#include "concepts_traits/concepts_common.h"
 #include "defaults.h"
-#include "exceptions/exceptions_network.h"
+#include "misc/concepts_traits/concepts_common.h"
+#include "misc/exceptions/exceptions_network.h"
 #include "utils/utils.h"
 
 static constexpr auto communication_port_base = defaults::port;

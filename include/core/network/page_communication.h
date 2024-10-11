@@ -1,6 +1,6 @@
 #pragma once
 
-#include "common/page.h"
+#include "core/page.h"
 #include "defaults.h"
 
 static constexpr u32 highest_bit_mask_32 = static_cast<u32>(1) << 31;

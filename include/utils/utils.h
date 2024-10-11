@@ -1,15 +1,14 @@
 #pragma once
 
+#include <bit>
 #include <boost/core/demangle.hpp>
 #include <exception>
 #include <iostream>
-#include <limits>
-#include <random>
 #include <tuple>
 #include <type_traits>
 
-#include "concepts_traits/concepts_common.h"
-#include "concepts_traits/type_traits_common.h"
+#include "misc/concepts_traits/concepts_common.h"
+#include "misc/concepts_traits/type_traits_common.h"
 
 // need 64-bit system for pointer tagging
 static_assert(sizeof(std::size_t) == 8 and sizeof(uintptr_t) == 8);
@@ -36,8 +35,6 @@ static inline auto tag_pointer(concepts::is_pointer auto ptr, std::integral auto
 {
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(tag) << 48));
 }
-
-static auto rng = std::mt19937{std::random_device{}()};
 
 template <char delimiter = 0, typename... Ts, size_t... indexes>
 void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence<indexes...>)
@@ -80,45 +77,6 @@ void logln(Ts... args)
     __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...),
                        std::index_sequence_for<Ts...>{});
     std::cerr << '\n';
-}
-
-template <concepts::is_char T>
-T random()
-{
-    thread_local std::uniform_int_distribution<T> dist(33 /* ! */, 126 /* ~ */);
-    return dist(rng);
-}
-
-template <std::integral T>
-requires(not concepts::is_char<T>)
-T random(T min = std::numeric_limits<T>::min(), T max = 9)
-{
-    thread_local std::uniform_int_distribution<T> dist(min, max);
-    return dist(rng);
-}
-
-template <std::floating_point T>
-T random(T min = std::numeric_limits<T>::min(), T max = std::numeric_limits<T>::max())
-{
-    thread_local std::uniform_real_distribution<T> dist(min, max);
-    return dist(rng);
-}
-
-template <concepts::is_array T>
-T random()
-{
-    T arr{};
-    for (auto& el : arr)
-        el = random<typename T::value_type>();
-    return arr;
-}
-
-template <concepts::is_tuple T>
-T random()
-{
-    T tup{};
-    std::apply([](auto&& el) { el = random<decltype(el)>(); }, tup);
-    return tup;
 }
 
 constexpr auto next_power_2(std::integral auto val) -> decltype(auto)

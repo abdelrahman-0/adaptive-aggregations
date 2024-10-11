@@ -11,9 +11,9 @@
 #include <cstdint>
 #include <sys/mman.h>
 
-#include "concepts_traits/concepts_alloc.h"
 #include "defaults.h"
-#include "exceptions/exceptions_alloc.h"
+#include "misc/concepts_traits/concepts_alloc.h"
+#include "misc/exceptions/exceptions_alloc.h"
 
 namespace memory {
 

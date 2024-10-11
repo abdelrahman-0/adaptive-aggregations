@@ -3,8 +3,8 @@
 #include <cassert>
 #include <liburing.h>
 
-#include "common/page.h"
 #include "connection.h"
+#include "core/page.h"
 #include "exceptions/exceptions_io_uring.h"
 
 static std::atomic<std::size_t> pages_sent{0u};

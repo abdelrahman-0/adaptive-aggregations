@@ -4,9 +4,9 @@
 #include <atomic>
 #include <type_traits>
 
-#include "common/page.h"
-#include "concepts_traits/concepts_common.h"
+#include "core/page.h"
 #include "defaults.h"
+#include "misc/concepts_traits/concepts_common.h"
 #include "utils/hash.h"
 
 static constexpr std::size_t highest_bit_mask = static_cast<std::size_t>(~0) >> 1;
@@ -24,36 +24,55 @@ struct Swip {
 
     explicit Swip(concepts::is_pointer auto ptr) : val(ptr) {}
 
-    Swip& operator=(PageIdx idx) {
+    Swip& operator=(PageIdx idx)
+    {
         val = idx | (~highest_bit_mask);
         return *this;
     }
 
-    [[nodiscard]] ALWAYS_INLINE bool is_page_idx() const { return val & ~highest_bit_mask; }
+    [[nodiscard]]
+    ALWAYS_INLINE bool is_page_idx() const
+    {
+        return val & ~highest_bit_mask;
+    }
 
-    [[nodiscard]] ALWAYS_INLINE bool is_pointer() const { return not is_page_idx(); }
+    [[nodiscard]]
+    ALWAYS_INLINE bool is_pointer() const
+    {
+        return not is_page_idx();
+    }
 
     ALWAYS_INLINE void set_pointer(concepts::is_pointer auto ptr) { val = reinterpret_cast<uintptr_t>(ptr); }
 
     ALWAYS_INLINE void set_page_index(const PageIdx idx) { val = idx | (~highest_bit_mask); }
 
-    [[nodiscard]] ALWAYS_INLINE PageIdx get_page_index() const { return val & highest_bit_mask; }
+    [[nodiscard]]
+    ALWAYS_INLINE PageIdx get_page_index() const
+    {
+        return val & highest_bit_mask;
+    }
 
-    [[nodiscard]] inline PageIdx get_byte_offset() const {
+    [[nodiscard]]
+    inline PageIdx get_byte_offset() const
+    {
         return (val & highest_bit_mask) * defaults::local_page_size;
     }
 
     template <concepts::is_pointer T>
-    [[nodiscard]] ALWAYS_INLINE auto get_pointer() const {
+    [[nodiscard]]
+    ALWAYS_INLINE auto get_pointer() const
+    {
         return reinterpret_cast<T>(val);
     }
 
-    std::ostream& operator<<(std::ostream& out) const {
+    std::ostream& operator<<(std::ostream& out) const
+    {
         out << reinterpret_cast<uint64_t>(val);
         return out;
     }
 
-    Swip& operator++() {
+    Swip& operator++()
+    {
         set_page_index(get_page_index() + 1);
         return *this;
     }
@@ -67,5 +86,9 @@ struct Cache {
 
     ~Cache() = default;
 
-    [[nodiscard]] auto& get_page(std::size_t idx) { return pages[idx]; }
+    [[nodiscard]]
+    auto& get_page(std::size_t idx)
+    {
+        return pages[idx];
+    }
 };

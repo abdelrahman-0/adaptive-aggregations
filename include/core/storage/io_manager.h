@@ -7,9 +7,9 @@
 #include <span>
 
 #include "cache.h"
-#include "common/page.h"
+#include "core/page.h"
 #include "defaults.h"
-#include "exceptions/exceptions_io_uring.h"
+#include "misc/exceptions/exceptions_io_uring.h"
 #include "page_local.h"
 
 static constexpr std::size_t local_io_depth = defaults::local_io_depth;
@@ -23,7 +23,8 @@ class IO_Manager {
     uint64_t cqes_peeked{0};
 
   public:
-    explicit IO_Manager(uint32_t sqdepth, bool sqpoll) {
+    explicit IO_Manager(uint32_t sqdepth, bool sqpoll)
+    {
         int ret;
         if ((ret = io_uring_queue_init(sqdepth, &ring, sqpoll ? IORING_SETUP_SQPOLL : 0)) < 0) {
             throw IOUringInitError{ret};
@@ -32,7 +33,8 @@ class IO_Manager {
 
     ~IO_Manager() { io_uring_queue_exit(&ring); }
 
-    void register_files(const std::vector<int>& fds) {
+    void register_files(const std::vector<int>& fds)
+    {
         int ret;
         if ((ret = io_uring_register_files(&ring, fds.data(), fds.size())) < 0) {
             throw IOUringRegisterFilesError{ret};
@@ -43,17 +45,23 @@ class IO_Manager {
 
     auto wait(uint32_t num_wait) { return io_uring_wait_cqe_nr(&ring, cqes.data(), num_wait); }
 
-    void seen(uint32_t num_seen) {
+    void seen(uint32_t num_seen)
+    {
         io_uring_cq_advance(&ring, num_seen);
         inflight -= num_seen;
     }
 
     // TODO encode segment_id in user_data
     // TODO move has_inflight_requests to Table to be able to share io_manager and load multiple tables
-    [[nodiscard]] bool has_inflight_requests() const { return inflight > 0; }
+    [[nodiscard]]
+    bool has_inflight_requests() const
+    {
+        return inflight > 0;
+    }
 
     template <concepts::is_pointer T>
-    T get_next_cqe_data() {
+    T get_next_cqe_data()
+    {
         if (cqes_index == cqes_peeked) {
             cqes_peeked = peek();
             cqes_index = 0;
@@ -61,14 +69,16 @@ class IO_Manager {
         if (cqes_peeked) {
             seen(1);
             return reinterpret_cast<T>(cqes[cqes_index++]->user_data);
-        } else {
+        }
+        else {
             return nullptr;
         }
     }
 
     template <typename BufferPagePtr>
     requires std::is_pointer_v<BufferPagePtr>
-    auto* get_next_page() {
+    auto* get_next_page()
+    {
         wait(1);
         auto* result = reinterpret_cast<BufferPagePtr>(cqes[0]->user_data);
         seen(1);
@@ -77,7 +87,8 @@ class IO_Manager {
 
     template <FileMode mode, typename Attribute, typename... Attributes>
     inline void sync_io(int fd, uint64_t offset, PageLocal<Attribute, Attributes...>& block,
-                        std::size_t block_size = defaults::local_page_size) {
+                        std::size_t block_size = defaults::local_page_size)
+    {
         async_io<mode>(fd, offset, block, block_size);
         wait(1);
         seen(1);
@@ -85,14 +96,16 @@ class IO_Manager {
 
     template <FileMode mode, typename Attribute, typename... Attributes>
     inline void async_io(int fd, uint64_t offset, PageLocal<Attribute, Attributes...>& block,
-                         std::size_t block_size = defaults::local_page_size, bool registered = false) {
+                         std::size_t block_size = defaults::local_page_size, bool registered = false)
+    {
         auto* sqe = io_uring_get_sqe(&ring);
         if (sqe == nullptr) {
             throw IOUringSubmissionQueueFullError{};
         }
         if constexpr (mode == FileMode::READ) {
             io_uring_prep_read(sqe, fd, &block, block_size, offset);
-        } else {
+        }
+        else {
             io_uring_prep_write(sqe, fd, &block, block_size, offset);
         }
         io_uring_sqe_set_data(sqe, &block);
@@ -105,7 +118,8 @@ class IO_Manager {
     // TODO registered buffers
     template <FileMode mode, typename Attribute, typename... Attributes>
     inline void batch_async_io(int fd, const std::span<Swip> swips,
-                               std::vector<PageLocal<Attribute, Attributes...>>& blocks, bool registered = false) {
+                               std::vector<PageLocal<Attribute, Attributes...>>& blocks, bool registered = false)
+    {
         for (auto i{0u}; i < swips.size(); ++i) {
             auto* sqe = io_uring_get_sqe(&ring);
             if (sqe == nullptr) {
@@ -114,7 +128,8 @@ class IO_Manager {
             if constexpr (mode == FileMode::READ) {
                 io_uring_prep_read(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attribute, Attributes...>),
                                    swips[i].get_page_index() * sizeof(PageLocal<Attribute, Attributes...>));
-            } else {
+            }
+            else {
                 io_uring_prep_write(sqe, fd, blocks.data() + i, sizeof(PageLocal<Attribute, Attributes...>),
                                     swips[i].get_page_index() * sizeof(PageLocal<Attribute, Attributes...>));
             }

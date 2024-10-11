@@ -3,7 +3,7 @@
 #include <atomic>
 #include <vector>
 
-#include "common/page.h"
+#include "core/page.h"
 #include "defaults.h"
 #include "utils/spinlock.h"
 
