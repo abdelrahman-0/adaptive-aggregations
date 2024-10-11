@@ -16,6 +16,6 @@ add_library(rpmalloc include/core/memory/allocators/rpmalloc/rpmalloc.c)
 add_subdirectory(micro-benchmarks)
 
 add_executable(grasshopper_db
-        include/concepts_traits/concepts_common.h
+        include/misc/concepts_traits/concepts_common.h
         include/core/network/connection.h
         micro-benchmarks/shuffle/shuffle.cpp)

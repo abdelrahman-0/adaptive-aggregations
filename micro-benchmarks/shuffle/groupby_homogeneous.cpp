@@ -1,9 +1,10 @@
 #include <span>
 #include <thread>
 
+#include "core/buffer/tuple_buffer.h"
+#include "core/hashtable/hashtable.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
-#include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
 #include "defaults.h"
@@ -19,6 +20,9 @@ using namespace std::chrono_literals;
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_uint32(threads, 1, "number of threads to use");
+DEFINE_uint32(partitions, 128, "number of hashtable partitions to use");
+DEFINE_uint32(slots, 16, "number of slots to use per partition");
+DEFINE_uint32(groups, 1, "number of unique groups to use");
 
 /* ----------- SCHEMA ----------- */
 
@@ -28,37 +32,30 @@ using TablePage = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
 
+/* ----------- GROUP BY ----------- */
+
+using GroupAttributes = std::tuple<u64>;
+using AggregateAttributes = std::tuple<u64>;
+auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
+    std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
+};
+// TODO test Slot = u16
+using HashTablePreAgg = PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate>;
+
 /* ----------- NETWORK ----------- */
 
-using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
-using IngressManager = IngressNetworkManager<NetworkPage>;
-using EgressManager = BufferedEgressNetworkManager<NetworkPage>;
-
-/* ----------- FUNCTIONS ----------- */
-
-[[nodiscard]]
-u32 consume_ingress(IngressManager& manager_recv)
-{
-    u32 peers_done{0};
-    auto [network_page, peer] = manager_recv.get_page();
-    while (network_page) {
-        bool last_page = network_page->is_last_page();
-        peers_done += last_page;
-        manager_recv.done_page(network_page);
-        if (!last_page) {
-            // still more pages
-            manager_recv.post_recvs(peer);
-        }
-        std::tie(network_page, peer) = manager_recv.get_page();
-    }
-    return peers_done;
-}
+// TODO redesign IngressManager to take outside pages for ingress traffic (it doesn't store pages)
+using IngressManager = IngressNetworkManager<HashTablePreAgg::PageAgg>;
+using EgressManager = EgressNetworkManager<HashTablePreAgg::PageAgg>;
 
 /* ----------- MAIN ----------- */
 
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    FLAGS_slots = next_power_2(FLAGS_slots);
 
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
@@ -160,27 +157,66 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
+            TupleBuffer<HashTablePreAgg::PageAgg> tuple_buffer;
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
+            u64 local_tuples_processed{0};
+            u64 local_tuples_sent{0};
+            u64 local_tuples_received{0};
 
             for (auto peer{0u}; peer < npeers; ++peer) {
                 manager_recv.post_recvs(peer);
             }
 
+            /* ------------ GROUP BY ------------ */
+
+            std::vector<HashTablePreAgg::ConsumerFn> consumer_fns{};
+            for (u32 part{0}; part < FLAGS_partitions; ++part) {
+                u16 dst = (part * FLAGS_nodes) / FLAGS_partitions;
+                if (dst == node_id) {
+                    consumer_fns.emplace_back([&tuple_buffer](HashTablePreAgg::PageAgg* p, bool is_last = false) {
+                        p->retire();
+                        tuple_buffer.add_page(p);
+                    });
+                }
+                else {
+                    auto actual_dst = dst - (dst > node_id);
+                    consumer_fns.emplace_back(
+                        [&manager_send, actual_dst](HashTablePreAgg::PageAgg* p, bool is_last = false) {
+                            p->retire();
+                            if (is_last) {
+                                p->set_last_page();
+                            }
+                            manager_send.try_flush(actual_dst, p);
+                        });
+                }
+            }
+            HashTablePreAgg ht{FLAGS_partitions, FLAGS_slots, consumer_fns};
+
             /* ------------ LAMBDAS ------------ */
 
-            auto process_local_page = [node_id, &manager_send](const TablePage& page) {
+            auto process_local_page = [&ht](const TablePage& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    // hash tuple
-                    auto tup = page.get_tuple<0, 1, 2, 3>(j);
-                    auto dst = hash_key(std::get<0>(tup)) % FLAGS_nodes;
-                    if (dst == node_id) {
-                    }
-                    else {
-                        auto actual_dst = dst - (dst > node_id);
-                        auto dst_page = manager_send.get_page(actual_dst);
-                        dst_page->emplace_back<0, 1, 2, 3>(tup);
-                    }
+                    auto group = page.get_tuple<0>(j);
+                    auto agg = std::make_tuple<u64>(1);
+                    ht.aggregate(group, agg);
                 }
+            };
+
+            auto consume_ingress = [&manager_recv, &tuple_buffer]() {
+                u32 peers_done{0};
+                auto [network_page, peer] = manager_recv.get_page();
+                while (network_page) {
+                    bool last_page = network_page->is_last_page();
+                    peers_done += last_page;
+                    tuple_buffer.add_page(network_page);
+                    manager_recv.done_page(network_page);
+                    if (!last_page) {
+                        // still more pages
+                        manager_recv.post_recvs(peer);
+                    }
+                    std::tie(network_page, peer) = manager_recv.get_page();
+                }
+                return peers_done;
             };
 
             // barrier
@@ -193,9 +229,10 @@ int main(int argc, char* argv[])
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
-                // handle ingress communication
+                // handle communication
+                manager_send.try_drain_pending();
                 if (peers_done < npeers) {
-                    peers_done += consume_ingress(manager_recv);
+                    peers_done += consume_ingress();
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
@@ -218,16 +255,19 @@ int main(int argc, char* argv[])
                     process_local_page(*page_to_process);
                 }
             }
-
-            manager_send.flush_all();
+            ht.finalize();
             while (peers_done < npeers) {
-                peers_done += consume_ingress(manager_recv);
+                peers_done += consume_ingress();
                 manager_send.try_drain_pending();
             }
             manager_send.wait_all();
 
             // barrier
             ::pthread_barrier_wait(&barrier_end);
+
+            tuples_sent += local_tuples_sent;
+            tuples_processed += local_tuples_processed;
+            tuples_received += local_tuples_received;
 
             pages_recv += manager_recv.get_pages_recv();
 
@@ -255,14 +295,15 @@ int main(int argc, char* argv[])
         print("tuples sent:", tuples_sent.load());
         print("tuples processed:", tuples_processed.load());
         u64 pages_local = (tuples_processed + ResultPage::max_tuples_per_page - 1) / ResultPage::max_tuples_per_page;
-        u64 local_sz = pages_local * defaults::local_page_size; u64 recv_sz = pages_recv * defaults::network_page_size;
+        u64 local_sz = pages_local * defaults::local_page_size;
+        u64 recv_sz = pages_recv * defaults::network_page_size;
     )
 
     Logger{FLAGS_print_header}
         .log("node id", node_id)
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
-        .log("implementation", "shuffle homogeneous"s)
+        .log("implementation", "groupby homogeneous"s)
         .log("threads", FLAGS_threads)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)

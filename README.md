@@ -24,3 +24,10 @@ set `/proc/sys/net/core/rmem_max` to be large enough (e.g. 1<<28)
 set `/proc/sys/net/core/wmem_max` to be large enough (e.g. 1<<28)\
 
 echo 1 | sudo tee /proc/sys/kernel/sched_schedstats
+
+TODO:
+add option for compiling with:
+
+`-stdlib=libc++` for forward-layout `std::tuple`s
+
+`-stdlib=stdlibc++` for backward-layout `std::tuple`s

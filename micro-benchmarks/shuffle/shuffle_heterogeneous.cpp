@@ -1,20 +1,26 @@
-#include <gflags/gflags.h>
 #include <span>
 #include <thread>
 
+#include "common/alignment.h"
+#include "core/network/connection.h"
+#include "core/network/network_manager.h"
+#include "core/network/page_communication.h"
+#include "core/storage/page_local.h"
+#include "core/storage/table.h"
 #include "defaults.h"
-#include "network/connection.h"
-#include "network/network_manager.h"
-#include "network/page_communication.h"
-#include "storage/chunked_list.h"
-#include "storage/page_local.h"
-#include "storage/table.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
+#include "ubench/common_flags.h"
+#include "ubench/debug.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 
 using namespace std::chrono_literals;
+
+/* ----------- CMD LINE PARAMS ----------- */
+
+DEFINE_uint32(nthreads, 1, "number of network threads to use");
+DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
 
 /* ----------- SCHEMA ----------- */
 
@@ -26,35 +32,15 @@ using ResultPage = PageLocal<ResultTuple>;
 
 /* ----------- NETWORK ----------- */
 
-using NetworkPage = PageCommunication<ResultTuple>;
+using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
 using IngressManager = ConcurrentIngressNetworkManager<NetworkPage>;
 using EgressManager = ConcurrentBufferedEgressNetworkManager<NetworkPage>;
-
-/* ----------- CMD LINE PARAMS ----------- */
-
-DEFINE_bool(local, true, "run benchmark using loop-back interface");
-DEFINE_uint32(nthreads, 1, "number of network threads to use");
-DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
-DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
-DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
-DEFINE_uint32(nodes, 2, "total number of num_nodes to use");
-DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
-DEFINE_uint32(morselsz, 10, "number of pages to process in one morsel");
-DEFINE_string(path, "data/random.tbl",
-              "path to input relation (if empty random pages will be generated instead, see "
-              "flag 'npages')");
-DEFINE_uint32(npages, 1'000, "number of random pages to generate (only applicable if 'random' flag is set)");
-DEFINE_uint32(bufs_per_peer, 4, "number of egress buffers to use per peer");
-DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
-DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
-DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
-DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
-DEFINE_bool(print_header, true, "whether to print metrics header");
 
 /* ----------- FUNCTIONS ----------- */
 
 // balanced qthread-to-nthread mapping
-std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id) {
+std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id)
+{
     u16 qthreads_per_nthread = FLAGS_qthreads / FLAGS_nthreads;
     auto num_fat_nthreads = FLAGS_qthreads % FLAGS_nthreads;
     auto num_fat_qthreads = (qthreads_per_nthread + 1) * num_fat_nthreads;
@@ -65,61 +51,19 @@ std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id) {
     return {dedicated_nthread, qthreads_per_nthread};
 }
 
-void consume_ingress(IngressManager& manager_recv /*, ResultPage*& current_result_page,
-                     PageChunkedList<ResultPage>& chunked_list_result, u64& local_tuples_received */) {
+ALWAYS_INLINE void consume_ingress(IngressManager& manager_recv)
+{
     auto* network_page = manager_recv.try_dequeue_page();
     while (network_page) {
-        //        for (auto i{0u}; i < network_page->get_num_tuples(); ++i) {
-        //            if (current_result_page->full()) {
-        //                current_result_page = chunked_list_result.get_new_page();
-        //            }
-        //            current_result_page->emplace_back(i, *network_page);
-        //        }
-        //        local_tuples_received += network_page->get_num_tuples();
         manager_recv.done_page(network_page);
         network_page = manager_recv.try_dequeue_page();
     }
 }
 
-void process_local_page(u32 node_id,
-                        /* ResultPage*& current_result_page, PageChunkedList<ResultPage>& chunked_list_result , */
-                        EgressManager& manager_send, std::vector<NetworkPage*>& active_buffers,
-                        u64& local_tuples_processed, u64& local_tuples_sent, const TablePage& page) {
-    u64 page_local_tuples_processed{0};
-    u64 page_local_tuples_sent{0};
-    for (auto j{0u}; j < page.num_tuples; ++j) {
-        // hash tuple
-        auto dst = std::hash<u64>{}(std::get<0>(page.columns)[j]) % FLAGS_nodes;
-
-        // send or materialize into thread-local buffers
-        if (dst == node_id) {
-            //            if (current_result_page->full()) {
-            //                current_result_page = chunked_list_result.get_new_page();
-            //            }
-            //            current_result_page->emplace_back_transposed(j, page);
-            //            page_local_tuples_processed++;
-        } else {
-            auto actual_dst = dst - (dst > node_id);
-            auto* dst_page = active_buffers[actual_dst];
-            if (dst_page->full()) {
-                manager_send.enqueue_page(actual_dst, dst_page);
-                dst_page = manager_send.get_new_page();
-                active_buffers[actual_dst] = dst_page;
-            }
-            if (dst_page->num_tuples > dst_page->max_num_tuples_per_page) {
-                throw std::runtime_error{"egress page has too many tuples"};
-            }
-            dst_page->emplace_back_transposed(j, page);
-            //            page_local_tuples_sent++;
-        }
-    }
-    local_tuples_processed += page_local_tuples_processed;
-    local_tuples_sent += page_local_tuples_sent;
-}
-
 /* ----------- MAIN ----------- */
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[])
+{
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
@@ -128,11 +72,11 @@ int main(int argc, char* argv[]) {
     auto env_var = std::getenv("NODE_ID");
     u32 node_id = std::stoul(env_var ? env_var : "0");
 
-    println("NODE", node_id, "of", FLAGS_nodes - 1, ":");
-    println("--------------");
+    print("NODE", node_id, "of", FLAGS_nodes - 1, ":");
+    print("--------------");
 
     if (FLAGS_nthreads > FLAGS_qthreads) {
-        println("invalid combination of options!");
+        print("invalid combination of options!");
         std::exit(0);
     }
 
@@ -142,7 +86,8 @@ int main(int argc, char* argv[]) {
     Table table{random_table};
     if (random_table) {
         table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
-    } else {
+    }
+    else {
         // prepare local IO at node offset (adjusted for page boundaries)
         File file{FLAGS_path, FileMode::READ};
         auto offset_begin =
@@ -155,8 +100,8 @@ int main(int argc, char* argv[]) {
         file.set_offset(offset_begin, offset_end);
         table.bind_file(std::move(file));
         table.prepare_file_swips();
-        println("reading bytes:", offset_begin, "→", offset_end,
-                (offset_end - offset_begin) / defaults::local_page_size, "pages");
+        print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
+              "pages");
     }
 
     auto& swips = table.get_swips();
@@ -173,7 +118,7 @@ int main(int argc, char* argv[]) {
     auto npeers = FLAGS_nodes - 1;
 
     // control atomics
-    std::vector<std::atomic<bool>> nthread_continue(FLAGS_nthreads);
+    std::vector<CachelineAlignedAtomic<bool>> nthread_continue(FLAGS_nthreads);
     std::fill(nthread_continue.begin(), nthread_continue.end(), true);
     std::atomic<u64> pages_recv{0};
 
@@ -237,7 +182,7 @@ int main(int argc, char* argv[]) {
             ::pthread_barrier_wait(&barrier_network);
 
             // network loop
-            while (nthread_continue[thread_id]) {
+            while (nthread_continue[thread_id].val) {
                 manager_recv.try_drain_done();
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.try_flush(dst);
@@ -262,8 +207,8 @@ int main(int argc, char* argv[]) {
     std::atomic<u64> tuples_sent{0};
     std::atomic<u64> tuples_received{0};
 
-    std::vector<std::atomic<u32>> qthreads_done(FLAGS_nthreads);
-    std::vector<std::atomic<u32>> added_last_page(FLAGS_nthreads);
+    std::vector<CachelineAlignedAtomic<u32>> qthreads_done(FLAGS_nthreads);
+    std::vector<CachelineAlignedAtomic<u32>> added_last_page(FLAGS_nthreads);
     std::fill(qthreads_done.begin(), qthreads_done.end(), 0);
 
     std::vector<std::thread> threads_query;
@@ -283,7 +228,7 @@ int main(int argc, char* argv[]) {
 
             {
                 std::unique_lock _{print_mtx};
-                println("assigning qthread", thread_id, "to nthread", dedicated_network_thread);
+                print("assigning qthread", thread_id, "to nthread", dedicated_network_thread);
             }
 
             /* ----------- LOCAL I/O ----------- */
@@ -301,11 +246,28 @@ int main(int argc, char* argv[]) {
                 page_ptr = manager_send.get_new_page();
             }
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
-            PageChunkedList<ResultPage> chunked_list_result{};
-            auto* current_result_page = chunked_list_result.get_current_page();
-            u64 local_tuples_processed{0};
-            u64 local_tuples_sent{0};
-            u64 local_tuples_received{0};
+
+            /* ------------ LAMBDAS ------------ */
+
+            auto process_local_page = [node_id, &manager_send, &active_buffers](const TablePage& page) {
+                for (auto j{0u}; j < page.num_tuples; ++j) {
+                    // hash tuple
+                    auto tup = page.get_tuple<0, 1, 2, 3>(j);
+                    auto dst = hash_key(std::get<0>(tup)) % FLAGS_nodes;
+                    if (dst == node_id) {
+                    }
+                    else {
+                        auto actual_dst = dst - (dst > node_id);
+                        auto* dst_page = active_buffers[actual_dst];
+                        if (dst_page->full()) {
+                            manager_send.enqueue_page(actual_dst, dst_page);
+                            dst_page = manager_send.get_new_page();
+                            active_buffers[actual_dst] = dst_page;
+                        }
+                        dst_page->emplace_back<0, 1, 2, 3>(tup);
+                    }
+                }
+            };
 
             // barrier
             ::pthread_barrier_wait(&barrier_start);
@@ -318,7 +280,7 @@ int main(int argc, char* argv[]) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
                 if (manager_recv.pending_peers() or manager_recv.pending_pages()) {
-                    consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
+                    consume_ingress(manager_recv);
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
@@ -336,43 +298,36 @@ int main(int argc, char* argv[]) {
                 TablePage* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
-                    process_local_page(node_id, /* current_result_page, chunked_list_result, */ manager_send,
-                                       active_buffers, local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(*page_to_process);
                 }
                 while (thread_io.has_inflight_requests()) {
                     page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
-                    process_local_page(node_id, /* current_result_page, chunked_list_result, */ manager_send,
-                                       active_buffers, local_tuples_processed, local_tuples_sent, *page_to_process);
+                    process_local_page(*page_to_process);
                 }
             }
 
             // flush all
             bool last_thread{false};
-            if (qthreads_done[dedicated_network_thread]++ == qthreads_per_nthread - 1) {
+            if (qthreads_done[dedicated_network_thread].val++ == qthreads_per_nthread - 1) {
                 last_thread = true;
                 // wait for other qthreads to add their active pages
-                while (added_last_page[dedicated_network_thread] != qthreads_per_nthread - 1)
+                while (added_last_page[dedicated_network_thread].val != qthreads_per_nthread - 1)
                     ;
                 for (auto dst{0u}; dst < npeers; ++dst) {
-                    auto* page = active_buffers[dst];
-                    page->set_last_page();
-                    manager_send.enqueue_page(dst, page);
+                    manager_send.enqueue_page<true>(dst, active_buffers[dst]);
                     manager_send.finished_egress();
                 }
-            } else {
+            }
+            else {
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.enqueue_page(dst, active_buffers[dst]);
                 }
-                added_last_page[dedicated_network_thread]++;
+                added_last_page[dedicated_network_thread].val++;
             }
 
             // wait for ingress
-            while (manager_recv.pending_peers()) {
-                consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
-            }
-
-            while (manager_recv.pending_pages()) {
-                consume_ingress(manager_recv /*, current_result_page, chunked_list_result, local_tuples_received*/);
+            while (manager_recv.pending_peers() or manager_recv.pending_pages()) {
+                consume_ingress(manager_recv);
             }
 
             if (last_thread) {
@@ -381,16 +336,11 @@ int main(int argc, char* argv[]) {
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
-            tuples_sent += local_tuples_sent;
-            tuples_processed += local_tuples_processed;
-            tuples_received += local_tuples_received;
-
             /* ----------- END ----------- */
         });
     }
 
     Stopwatch swatch{};
-
     ::pthread_barrier_wait(&barrier_start);
     swatch.start();
     ::pthread_barrier_wait(&barrier_end);
@@ -407,32 +357,35 @@ int main(int argc, char* argv[]) {
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);
 
-    println("tuples received:", tuples_received.load());
-    println("tuples sent:", tuples_sent.load());
-    println("tuples processed:", tuples_processed.load());
+    // clang-format off
+    DEBUGGING(
+        print("tuples received:", tuples_received.load());
+        print("tuples sent:", tuples_sent.load());
+        print("tuples processed:", tuples_processed.load());
+        u64 pages_local = (tuples_processed + ResultPage::max_tuples_per_page - 1) / ResultPage::max_tuples_per_page;
+        u64 local_sz = pages_local * defaults::local_page_size;
+        u64 recv_sz = pages_recv * defaults::network_page_size;
+    )
 
-    u64 pages_local =
-        (tuples_processed + ResultPage::max_num_tuples_per_page - 1) / ResultPage::max_num_tuples_per_page;
-    u64 local_sz = pages_local * defaults::local_page_size;
-    u64 recv_sz = pages_recv * defaults::network_page_size;
-
-    Logger logger{FLAGS_print_header};
-    logger.log("node id", node_id);
-    logger.log("nodes", FLAGS_nodes);
-    logger.log("traffic", "both"s);
-    logger.log("implementation", "heterogeneous"s);
-    logger.log("network threads", FLAGS_nthreads);
-    logger.log("query threads", FLAGS_qthreads);
-    logger.log("total pages", FLAGS_npages);
-    logger.log("recv pages", pages_recv);
-    logger.log("local page size", defaults::local_page_size);
-    logger.log("network page size", defaults::network_page_size);
-    logger.log("morsel size", FLAGS_morselsz);
-    logger.log("pin", FLAGS_pin);
-    logger.log("buffers per peer", FLAGS_bufs_per_peer);
-    logger.log("cache (%)", FLAGS_cache);
-    logger.log("time (ms)", swatch.time_ms);
-    logger.log("tuple throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms);
-    logger.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms));
-    logger.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms));
+    Logger{FLAGS_print_header}
+        .log("node id", node_id)
+        .log("nodes", FLAGS_nodes)
+        .log("traffic", "both"s)
+        .log("implementation", "shuffle heterogeneous"s)
+        .log("network threads", FLAGS_nthreads)
+        .log("query threads", FLAGS_qthreads)
+        .log("total pages", FLAGS_npages)
+        .log("recv pages", pages_recv)
+        .log("local page size", defaults::local_page_size)
+        .log("network page size", defaults::network_page_size)
+        .log("morsel size", FLAGS_morselsz)
+        .log("pin", FLAGS_pin)
+        .log("buffers per peer", FLAGS_bufs_per_peer)
+        .log("cache (%)", FLAGS_cache)
+        .log("time (ms)", swatch.time_ms)
+        DEBUGGING(
+        .log("tuple throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms)
+        .log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms))
+        .log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))
+        );
 }
