@@ -33,7 +33,8 @@ class Table {
 
     void prepare_swips() {}
 
-    void prepare_file_swips() {
+    void prepare_file_swips()
+    {
         swips.resize((file.get_size() + defaults::local_page_size - 1) / defaults::local_page_size);
         auto first_page = file.get_offset_begin() / defaults::local_page_size;
         std::iota(swips.begin(), swips.end(), first_page);
@@ -63,7 +64,8 @@ class Table {
                     }
                 });
             }
-        } else {
+        }
+        else {
             auto swip_indexes = std::vector<std::size_t>(swips.size());
             std::iota(swip_indexes.begin(), swip_indexes.end(), 0u);
             if (not sequential_io) {
@@ -92,13 +94,15 @@ class Table {
     }
 
     template <typename Attribute, typename... Attributes>
-    void read_async(IO_Manager& io, std::size_t page_idx, PageLocal<Attribute, Attributes...>* block) {
+    void read_async(IO_Manager& io, std::size_t page_idx, PageLocal<Attribute, Attributes...>* block)
+    {
         io.async_io<READ>(segment_id, page_idx * sizeof(PageLocal<Attribute, Attributes...>), as_bytes(block), true);
     }
 
     template <typename Attribute, typename... Attributes>
     void read_pages_async(IO_Manager& io, uint32_t swips_begin, uint32_t swips_end,
-                          std::vector<PageLocal<Attribute, Attributes...>>& batch_blocks) {
+                          std::vector<PageLocal<Attribute, Attributes...>>& batch_blocks)
+    {
         io.batch_async_io<READ>(segment_id, std::span{swips.begin() + swips_begin, swips.begin() + swips_end},
                                 batch_blocks);
     }
