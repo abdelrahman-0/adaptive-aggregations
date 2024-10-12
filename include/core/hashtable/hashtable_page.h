@@ -22,14 +22,16 @@ struct ChainedEntry : public Chained<Next> {
     }
 };
 
-template <concepts::is_slot Next, typename... Attributes>
-using PagePreAggHT = PageCommunication<defaults::hashtable_page_size, ChainedEntry<Next, Attributes...>>;
+template <bool use_ptr, concepts::is_slot Next, typename... Attributes>
+using PagePreAggHT = PageCommunication<defaults::hashtable_page_size, ChainedEntry<Next, Attributes...>, use_ptr>;
 
-template <concepts::is_slot Next, typename GroupAttributes, typename AggregateAttributes>
+template <concepts::is_slot Next, typename GroupAttributes, typename AggregateAttributes, bool use_ptr = true>
 requires(type_traits::is_tuple_v<GroupAttributes> and type_traits::is_tuple_v<AggregateAttributes>)
-struct PageAggHashTable : public PagePreAggHT<Next, GroupAttributes, AggregateAttributes> {
-    using PageBase = PagePreAggHT<Next, GroupAttributes, AggregateAttributes>;
+struct PageAggHashTable : public PagePreAggHT<use_ptr, Next, GroupAttributes, AggregateAttributes> {
+    using PageBase = PagePreAggHT<use_ptr, Next, GroupAttributes, AggregateAttributes>;
+    using PageBase::columns;
     using PageBase::emplace_back;
+    using PageBase::get_value;
     using TupleAgg = ChainedEntry<Next, GroupAttributes, AggregateAttributes>;
 
     ALWAYS_INLINE GroupAttributes& get_group(std::integral auto idx) { return std::get<0>(get_value(idx).val); }

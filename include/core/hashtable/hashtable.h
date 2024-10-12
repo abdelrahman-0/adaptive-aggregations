@@ -120,15 +120,10 @@ template <typename Key, typename Value, void fn_agg(Value&, const Value&), conce
           concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool heterogeneous = false,
           bool concurrent = false>
 struct PartitionedChainedHashtable {
-    using PageAgg = PageAggHashTable<Slot, Key, Value>;
+    using PageAgg = PageAggHashTable<Slot, Key, Value, std::is_pointer_v<Slot>>;
     using ConsumerFn = std::function<void(PageAgg*, bool)>;
-    static consteval auto get_empty_slot() -> Slot
-    {
-        if constexpr (std::is_integral_v<Slot>)
-            return -1;
-        return 0;
-    }
-    static constexpr Slot EMPTY_SLOT = get_empty_slot();
+    //    static constexpr auto get_empty_slot() { return std::is_integral_v<Slot> ? -1 : 0; }
+    static constexpr Slot EMPTY_SLOT = 0;
 
   private:
     Slot* ht;

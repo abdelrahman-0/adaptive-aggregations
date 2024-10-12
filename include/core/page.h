@@ -33,7 +33,6 @@ struct Page {
 
     void clear_tuples() { num_tuples = 0; }
 
-    // TODO const variants
     template <u16 col_idx = 0>
     auto& get_value(std::integral auto row_idx)
     {
@@ -91,31 +90,43 @@ struct Page {
 
     void fill_random()
     {
-        // TODO better design -> limit min, max based on ngroups
         std::apply([](auto&&... args) { ((librand::random_column(args)), ...); }, columns);
     }
 };
 
 static_assert(sizeof(Page<defaults::local_page_size, char>) == defaults::local_page_size);
 
-template <u64 page_size, typename Attributes>
-struct PageRowStore : public Page<page_size, Attributes> {
-    using PageBase = Page<page_size, Attributes>;
+template <u64 page_size, typename Attribute, bool use_ptr = true>
+struct PageRowStore : public Page<page_size, Attribute> {
+    using PageBase = Page<page_size, Attribute>;
+    using PageBase::clear_tuples;
     using PageBase::columns;
+    using PageBase::full;
     using PageBase::num_tuples;
     using PageBase::ptr;
+    using PageBase::retire;
 
     PageRowStore() { clear_tuples(); }
 
     [[maybe_unused]]
-    auto emplace_back(const Attributes& val)
+    auto emplace_back(const Attribute& val)
+    requires(use_ptr)
     {
         *ptr = val;
         return ptr++;
     }
 
+    [[maybe_unused]]
+    auto emplace_back(const Attribute& val)
+    requires(not use_ptr)
+    {
+        std::get<0>(columns)[num_tuples] = val;
+        return num_tuples++;
+    }
+
     template <u16 num_cols, u64 idx, u64 other_idx, u64... other_idxs, typename... OtherAttributes>
     void _emplace_back(const std::tuple<OtherAttributes...>& tuple)
+    requires(use_ptr)
     {
         std::get<idx>(*ptr) = std::get<other_idx>(tuple);
         if constexpr (idx < num_cols - 1) {
@@ -126,6 +137,7 @@ struct PageRowStore : public Page<page_size, Attributes> {
     template <u64... other_idxs, typename... OtherAttributes>
     [[maybe_unused]]
     auto emplace_back(const std::tuple<OtherAttributes...>& tuple)
+    requires(use_ptr)
     {
         _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(tuple);
         return ptr++;
@@ -134,6 +146,7 @@ struct PageRowStore : public Page<page_size, Attributes> {
     template <u64... other_idxs, u64 other_page_size, typename OtherAttributes>
     [[maybe_unused]]
     auto emplace_back(std::size_t row_idx, const PageRowStore<other_page_size, OtherAttributes>& page)
+    requires(use_ptr)
     {
         _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(page.template get_value<0>(row_idx));
         return ptr++;
@@ -141,19 +154,44 @@ struct PageRowStore : public Page<page_size, Attributes> {
 
     [[nodiscard]]
     bool empty() const
+    requires(use_ptr)
     {
         return ptr == std::get<0>(columns).data();
     }
 
     [[nodiscard]]
     bool full() const
+    requires(use_ptr)
     {
         return ptr == (std::get<0>(columns).data() + std::get<0>(columns).size());
     }
 
-    void clear_tuples() { ptr = std::get<0>(columns).data(); }
+    void clear_tuples()
+    requires(use_ptr)
+    {
+        ptr = std::get<0>(columns).data();
+    }
 
-    void retire() { num_tuples = ptr - std::get<0>(columns).data(); }
+    void clear_tuples()
+    requires(not use_ptr)
+    {
+        // start from first tuple so that hashtable can use 0 as 'no tuple' indicator
+        num_tuples = 1;
+    }
+
+    void retire()
+    requires(use_ptr)
+    {
+        num_tuples = ptr - std::get<0>(columns).data();
+    }
+
+    auto begin() { return std::get<0>(columns).begin(); }
+
+    auto cbegin() const { return std::get<0>(columns).cbegin(); }
+
+    auto end() { return std::get<0>(columns).end(); }
+
+    auto cend() const { return std::get<0>(columns).cend(); }
 };
 
 template <u64 page_size, typename... Attributes>
