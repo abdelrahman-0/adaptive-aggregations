@@ -6,6 +6,8 @@
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_common.h"
 
+DECLARE_uint32(groups);
+
 namespace librand {
 
 thread_local auto rng = std::mt19937{std::random_device{}()};
@@ -49,13 +51,31 @@ ALWAYS_INLINE T random()
     return tup;
 }
 
+template <typename T>
+auto get_min()
+{
+    return std::numeric_limits<T>::min();
+}
+
+template <typename T>
+auto get_max()
+requires(std::is_integral_v<T>)
+{
+    return FLAGS_groups - 1;
+}
+
+template <typename T>
+auto get_max()
+{
+    return std::numeric_limits<T>::max();
+}
+
 template <typename T, std::size_t length>
 requires(not type_traits::is_tuple_v<T> and not type_traits::is_array_v<T>)
-void random_column(std::array<T, length>& column, T min = std::numeric_limits<T>::min(),
-                   T max = std::numeric_limits<T>::max())
+void random_column(std::array<T, length>& column)
 {
     for (auto& el : column) {
-        el = librand::random<std::remove_reference_t<decltype(el)>>(min, max);
+        el = librand::random<T>(get_min<T>(), get_max<T>());
     }
 }
 
@@ -64,7 +84,7 @@ requires(type_traits::is_tuple_v<T> or type_traits::is_array_v<T>)
 void random_column(std::array<T, length>& column)
 {
     for (auto& el : column) {
-        el = librand::random<std::remove_reference_t<decltype(el)>>();
+        el = librand::random<T>();
     }
 }
 
