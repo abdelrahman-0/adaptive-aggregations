@@ -16,3 +16,5 @@ DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for ca
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
 DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
 DEFINE_bool(print_header, true, "whether to print metrics header");
+
+DEFINE_uint64(groups, 10'000, "number of unique groups to use");

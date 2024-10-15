@@ -1,12 +1,13 @@
 #pragma once
 
+#include <gflags/gflags.h>
 #include <limits>
 #include <random>
 
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_common.h"
 
-DECLARE_uint32(groups);
+DECLARE_uint64(groups);
 
 namespace librand {
 
@@ -59,7 +60,7 @@ auto get_min()
 
 template <typename T>
 auto get_max()
-requires(std::is_integral_v<T>)
+requires(std::is_same_v<T, u64>)
 {
     return FLAGS_groups - 1;
 }

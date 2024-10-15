@@ -27,19 +27,4 @@ concept is_iterable = !std::is_same_v<T, std::string> and requires(T t) {
     *begin(t);
 };
 
-template <typename T>
-concept is_page = requires(T t) {
-    t.num_tuples;
-    t.full();
-};
-
-template <typename T>
-concept is_communication_page = is_page<T> and requires(T t) {
-    t.set_last_page();
-    t.is_last_page();
-};
-
-template <typename... Attributes>
-concept is_row_store = sizeof...(Attributes) == 1;
-
 } // namespace concepts
