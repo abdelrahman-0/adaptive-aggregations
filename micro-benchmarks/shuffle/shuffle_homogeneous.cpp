@@ -31,7 +31,7 @@ using ResultPage = PageLocal<ResultTuple>;
 /* ----------- NETWORK ----------- */
 
 using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
-using IngressManager = IngressNetworkManager<NetworkPage>;
+using IngressManager = SimpleIngressNetworkManager<NetworkPage>;
 using EgressManager = BufferedEgressNetworkManager<NetworkPage>;
 
 /* ----------- FUNCTIONS ----------- */
