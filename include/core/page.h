@@ -102,6 +102,7 @@ struct PageRowStore : public Page<page_size, Attribute> {
     using PageBase::clear_tuples;
     using PageBase::columns;
     using PageBase::full;
+    using PageBase::max_tuples_per_page;
     using PageBase::num_tuples;
     using PageBase::ptr;
     using PageBase::retire;
@@ -163,20 +164,13 @@ struct PageRowStore : public Page<page_size, Attribute> {
     bool full() const
     requires(use_ptr)
     {
-        return ptr == (std::get<0>(columns).data() + std::get<0>(columns).size());
+        return ptr == (std::get<0>(columns).data() + max_tuples_per_page);
     }
 
     void clear_tuples()
     requires(use_ptr)
     {
         ptr = std::get<0>(columns).data();
-    }
-
-    void clear_tuples()
-    requires(not use_ptr)
-    {
-        // start from first tuple so that hashtable can use 0 as 'no tuple' indicator
-        num_tuples = 1;
     }
 
     void retire()

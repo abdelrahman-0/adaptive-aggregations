@@ -2,11 +2,18 @@
 
 #include <vector>
 
+#include "defaults.h"
+
 template <typename BufferPage>
 struct TupleBuffer {
+    u64 num_tuples{0};
     std::vector<BufferPage*> pages;
 
-    void add_page(BufferPage* page) { pages.push_back(page); }
+    void add_page(BufferPage* page)
+    {
+        num_tuples += page->num_tuples;
+        pages.push_back(page);
+    }
 
     auto begin() { return pages.begin(); }
 

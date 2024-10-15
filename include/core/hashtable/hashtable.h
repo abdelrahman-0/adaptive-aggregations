@@ -1,147 +1,50 @@
 // Abdelrahman Adel (2024)
 
-// inspired by Max
+// inspired by Maximilian Kuschewski (2023)
 
 #pragma once
 #include <atomic>
 #include <cmath>
 #include <cstdint>
+#include <map>
 #include <tbb/concurrent_queue.h>
 
 #include "core/memory/alloc.h"
+#include "core/memory/block_allocator.h"
 #include "defaults.h"
 #include "hashtable_page.h"
 #include "misc/concepts_traits/concepts_alloc.h"
 #include "misc/concepts_traits/concepts_hashtable.h"
 #include "ubench/debug.h"
 
-template <typename PageType, concepts::is_allocator Alloc, bool heterogeneous = false>
-class BlockAllocator {
-    struct BlockAllocation {
-        u64 npages;
-        u64 used;
-        PageType* ptr; // pointer bumping
-    };
+namespace hashtable {
 
-  private:
-    // In a heterogeneous model, network threads (and not the query thread) can push to free_pages
-    std::conditional_t<heterogeneous, tbb::concurrent_queue<PageType*>, std::vector<PageType*>> free_pages;
-    std::vector<BlockAllocation> allocations;
-    u64 allocations_budget;
-    u32 block_sz;
+enum TagType : u8 { NONE, BLOOM, SALT };
 
-  public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 10000)
-        : block_sz(block_sz), allocations_budget(max_allocations)
-    {
-        allocations.reserve(100);
-        allocate(false);
-    };
-
-    ~BlockAllocator()
-    {
-        // loop through partitions and deallocate them
-        for (auto& allocation : allocations) {
-            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
-        }
-    }
-
-    [[maybe_unused]]
-    PageType* allocate(bool consume = true)
-    {
-        auto block = Alloc::template alloc<PageType>(block_sz * sizeof(PageType));
-        allocations.push_back({block_sz, consume ? 1u : 0u, block});
-        allocations_budget--;
-        return block;
-    }
-
-    PageType* get_page()
-    requires(not heterogeneous)
-    {
-        PageType* page;
-        auto& current_allocation = allocations.back();
-        if (current_allocation.used != current_allocation.npages) {
-            // try pointer bumping
-            page = current_allocation.ptr + current_allocation.used++;
-        }
-        else if (not free_pages.empty()) {
-            // check for free pages
-            page = free_pages.back();
-            free_pages.pop_back();
-        }
-        else if (allocations_budget) {
-            // allocate new block
-            page = allocate();
-        }
-        else {
-            // throw error (could also wait for cqe?)
-            throw std::runtime_error("Exhausted allocation budget");
-        }
-        return page;
-    }
-
-    PageType* get_page()
-    requires(heterogeneous)
-    {
-        auto current_allocation = allocations.back();
-        PageType* page;
-        if (current_allocation.used != current_allocation.npages) {
-            // try pointer bumping
-            page = current_allocation.ptr + current_allocation.used++;
-        }
-        else if (free_pages.try_pop(page)) {
-            // check for free pages
-        }
-        else if (allocations_budget) {
-            // allocate new block
-            page = allocate();
-        }
-        else {
-            // throw error (could also wait for cqe?)
-            throw std::runtime_error("Exhausted allocation budget");
-        }
-        return page;
-    }
-
-    void add_page(PageType* page)
-    requires(not heterogeneous)
-    {
-        free_pages.push_back(page);
-    }
-
-    void add_page(PageType* page)
-    requires(heterogeneous)
-    {
-        free_pages.push(page);
-    }
-};
-
-template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool heterogeneous = false,
-          bool concurrent = false>
-struct PartitionedChainedHashtable {
-    using PageAgg = PageAggHashTable<Slot, Key, Value, std::is_pointer_v<Slot>>;
+template <typename Key, typename Value, void fn_agg(Value&, const Value&), bool is_entry_chained,
+          concepts::is_slot Slot, concepts::is_allocator Alloc, bool is_heterogeneous, bool concurrent>
+struct BasePartitionedHashtable {
+    using PageAgg = PageAggHashTable<Slot, Key, Value, is_entry_chained, std::is_pointer_v<Slot>>;
     using ConsumerFn = std::function<void(PageAgg*, bool)>;
-    //    static constexpr auto get_empty_slot() { return std::is_integral_v<Slot> ? -1 : 0; }
-    static constexpr Slot EMPTY_SLOT = 0;
 
-  private:
-    Slot* ht;
+  protected:
+    static constexpr Slot EMPTY_SLOT = 0;
     std::vector<std::conditional_t<concurrent, std::atomic<PageAgg*>, PageAgg*>> partitions;
     std::vector<ConsumerFn> consumer_fns;
-    BlockAllocator<PageAgg, Alloc, heterogeneous> block_alloc;
+    memory::BlockAllocator<PageAgg, Alloc, is_heterogeneous> block_alloc;
+    Slot* ht;
     u64 ht_mask;
     u32 partition_shift;
     u32 npartitions;
 
-  public:
-    PartitionedChainedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
+    BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
           ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions),
           consumer_fns(std::move(_consumer_fns))
     {
-        DEBUGGING(assert(_npartitions == next_power_2(_npartitions)));
-        DEBUGGING(assert(_nslots == next_power_2(_nslots)));
+        ASSERT(_npartitions == next_power_2(_npartitions));
+        ASSERT(_nslots == next_power_2(_nslots));
+
         // alloc ht
         ht = Alloc::template alloc<Slot>(sizeof(Slot) * (ht_mask + 1));
 
@@ -152,23 +55,52 @@ struct PartitionedChainedHashtable {
         }
     }
 
-    ~PartitionedChainedHashtable()
+    template <bool fill = true>
+    void evict(u64 part_no, PageAgg* page_to_evict, bool final_eviction = false)
     {
-        //        for (auto p : partitions) {
-        //            p->retire();
-        //            p->print_page();
-        //            for(auto j{0u}; j<p->num_tuples; ++j){
-        //                print(p->template get_tuple<0>(j));
-        //            }
-        //        }
+        consumer_fns[part_no](page_to_evict, final_eviction);
+        if constexpr (fill) {
+            // clear partition
+            auto* part_begin = ht + (part_no << partition_shift);
+            std::fill(part_begin, part_begin + (1 << partition_shift), EMPTY_SLOT);
+        }
     }
 
-    void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
+  public:
+    void finalize()
+    {
+        for (u32 part_no{0}; part_no < npartitions; ++part_no) {
+            evict<false>(part_no, partitions[part_no], true);
+        }
+    }
+};
+
+template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
+          concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
+          bool concurrent = false>
+struct PartitionedChainedHashtable
+    : public BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent> {
+    using BaseHashTable = BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent>;
+    using BaseHashTable::block_alloc;
+    using BaseHashTable::EMPTY_SLOT;
+    using BaseHashTable::evict;
+    using BaseHashTable::ht;
+    using BaseHashTable::ht_mask;
+    using BaseHashTable::partition_shift;
+    using BaseHashTable::partitions;
+    using typename BaseHashTable::ConsumerFn;
+    using typename BaseHashTable::PageAgg;
+
+  public:
+    PartitionedChainedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
+        : BaseHashTable(_npartitions, _nslots, _consumer_fns)
+    {
+    }
 
     void aggregate(Key key, Value value, u64 key_hash)
     requires(not concurrent)
     {
-        // extract bits from hash
+        // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
         auto*& part_page = partitions[part_no];
@@ -192,33 +124,114 @@ struct PartitionedChainedHashtable {
         slot = part_page->emplace_back_grp(offset, key, value);
     }
 
-    template <bool fill = true>
-    void evict(u64 part_no, PageAgg* page_to_evict, bool final_eviction = false)
-    {
-        consumer_fns[part_no](page_to_evict, final_eviction);
-        if constexpr (fill) {
-            // clear partition
-            auto* part_begin = ht + (part_no << partition_shift);
-            std::fill(part_begin, part_begin + (1 << partition_shift), EMPTY_SLOT);
-        }
-    }
+    void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
+};
 
-    void finalize()
+template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
+          concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
+          bool concurrent = false>
+requires(sizeof(Slot) == 8)
+struct PartitionedSaltedHashtable
+    : public BasePartitionedHashtable<Key, Value, fn_agg, false, Slot, Alloc, is_heterogeneous, concurrent> {
+    using BaseHashTable =
+        BasePartitionedHashtable<Key, Value, fn_agg, false, Slot, Alloc, is_heterogeneous, concurrent>;
+    using BaseHashTable::block_alloc;
+    using BaseHashTable::EMPTY_SLOT;
+    using BaseHashTable::evict;
+    using BaseHashTable::ht;
+    using BaseHashTable::ht_mask;
+    using BaseHashTable::partition_shift;
+    using BaseHashTable::partitions;
+    using typename BaseHashTable::ConsumerFn;
+    using typename BaseHashTable::PageAgg;
+
+  private:
+    u64 slots_mask;
+
+  public:
+    PartitionedSaltedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
+        : BaseHashTable(_npartitions, _nslots, _consumer_fns), slots_mask(_nslots - 1)
     {
-        for (u32 part_no{0}; part_no < npartitions; ++part_no) {
-            evict<false>(part_no, partitions[part_no], true);
-        }
+        using namespace std::string_literals;
+        ASSERT(_nslots > PageAgg::max_tuples_per_page);
     }
 
     void aggregate(Key key, Value value, u64 key_hash)
-    requires(concurrent)
+    requires(not concurrent and not std::is_pointer_v<Slot>)
     {
-        // TODO concurrent
-        // extract bits from hash
+        // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
-        auto* part_page = partitions[part_no];
-        Slot& slot = ht[mod];
-        Slot next_offset = slot, offset;
+        u64 partition_mask = mod | slots_mask;
+        auto*& part_page = partitions[part_no];
+        Slot slot = ht[mod];
+        // use top bits for salt
+        u16 hash_prefix = key_hash >> 48;
+        while (slot != EMPTY_SLOT) {
+            // walk chain of slots
+            if (hash_prefix == static_cast<u16>(slot)) {
+                slot >>= 16;
+                if (part_page->get_group(slot) == key) {
+                    fn_agg(part_page->get_aggregates(slot), value);
+                    return;
+                }
+            }
+            mod = (mod + 1) & partition_mask;
+            slot = ht[mod];
+        }
+        if (part_page->full()) {
+            // evict if full
+            evict(part_no, part_page);
+            part_page = block_alloc.get_page();
+            part_page->clear_tuples();
+            mod = key_hash & ht_mask;
+        }
+        ht[mod] = (part_page->emplace_back_grp(key, value) << 16) | hash_prefix;
     }
+
+    void aggregate(Key key, Value value, u64 key_hash)
+    requires(not concurrent and std::is_pointer_v<Slot>)
+    {
+        // extract lower bits from hash
+        u64 mod = key_hash & ht_mask;
+        u64 part_no = mod >> partition_shift;
+        u64 partition_mask = part_no << partition_shift;
+        auto* part_page = partitions[part_no];
+        Slot slot = ht[mod];
+        // use top bits for salt
+        u16 hash_prefix = key_hash >> 48;
+        mod &= slots_mask;
+        u64 n = 0;
+        while (slot != EMPTY_SLOT) {
+            // walk chain of slots
+            if (n++ >= slots_mask + 1) {
+                int z = 2;
+            }
+            if (hash_prefix == static_cast<u16>(reinterpret_cast<uintptr_t>(slot))) {
+                slot = reinterpret_cast<Slot>(reinterpret_cast<uintptr_t>(slot) >> 16);
+                auto group_pg = part_page->get_group(slot);
+                if (group_pg == key) {
+                    fn_agg(part_page->get_aggregates(slot), value);
+                    return;
+                }
+            }
+            mod = (mod + 1) & slots_mask;
+            slot = ht[mod | partition_mask];
+        }
+        if (part_page->full()) {
+            // evict if full
+            evict(part_no, part_page);
+            part_page = block_alloc.get_page();
+            part_page->clear_tuples();
+            partitions[part_no] = part_page;
+            mod = key_hash & ht_mask;
+            ASSERT(ht[mod] == EMPTY_SLOT);
+        }
+        ht[mod | partition_mask] = reinterpret_cast<Slot>(
+            (reinterpret_cast<uintptr_t>(part_page->emplace_back_grp(key, value)) << 16) | hash_prefix);
+    }
+
+    void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
 };
+
+} // namespace hashtable

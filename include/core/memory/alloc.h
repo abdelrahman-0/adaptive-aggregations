@@ -19,7 +19,6 @@ namespace memory {
 
 template <bool huge = true>
 struct MMapMemoryAllocator {
-    constexpr static u64 min_physical_alloc() { return huge ? 2 * 1024 * 1024 : 4096; }
 
     template <typename T = void>
     static auto alloc(u64 size)
