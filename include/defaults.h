@@ -16,7 +16,7 @@ using u64 = uint64_t;
 
 namespace defaults {
 
-DEFAULTS_AUTO hashtable_page_size = 1ul << 8;
+DEFAULTS_AUTO hashtable_page_size = 1ul << 12;
 
 DEFAULTS_AUTO local_page_size = 1ul << 12;
 DEFAULTS_AUTO local_io_depth = 256ul;
