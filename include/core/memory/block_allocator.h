@@ -89,10 +89,7 @@ class BlockAllocator {
         throw BlockAllocError{"Exhausted allocation budget"};
     }
 
-    void return_page(PageType* page)
-    {
-        free_pages.push(page);
-    }
+    void return_page(PageType* page) { free_pages.push(page); }
 };
 
-} // namespace memory
+} // namespace mem
