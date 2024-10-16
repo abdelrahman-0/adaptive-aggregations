@@ -30,7 +30,7 @@ class BlockAllocator {
     }
 
   public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 10'000)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 100'000)
         : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);
