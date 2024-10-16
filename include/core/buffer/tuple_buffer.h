@@ -7,12 +7,20 @@
 template <typename BufferPage>
 struct TupleBuffer {
     u64 num_tuples{0};
+    // TODO tbb::concurrent vector?
     std::vector<BufferPage*> pages;
 
     void add_page(BufferPage* page)
     {
         num_tuples += page->num_tuples;
         pages.push_back(page);
+    }
+
+    void print_pages() const
+    {
+        for (auto* p : pages) {
+            p->print_page();
+        }
     }
 
     auto begin() { return pages.begin(); }

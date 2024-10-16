@@ -1,6 +1,8 @@
 #pragma once
 
-namespace memory {
+#include <queue>
+
+namespace mem {
 
 template <typename PageType, concepts::is_allocator Alloc, bool is_heterogeneous = false>
 class BlockAllocator {
@@ -12,13 +14,23 @@ class BlockAllocator {
 
   private:
     // In a heterogeneous model, network threads (and not the query thread) can push to free_pages
-    std::conditional_t<is_heterogeneous, tbb::concurrent_queue<PageType*>, std::vector<PageType*>> free_pages;
+    std::conditional_t<is_heterogeneous, tbb::concurrent_queue<PageType*>, std::queue<PageType*>> free_pages;
     std::vector<BlockAllocation> allocations;
     u64 allocations_budget;
     u32 block_sz;
 
+    PageType* try_bump_pointer()
+    {
+        auto& current_allocation = allocations.back();
+        if (current_allocation.used != current_allocation.npages) {
+            // try pointer bumping
+            return current_allocation.ptr + current_allocation.used++;
+        }
+        return nullptr;
+    }
+
   public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 10000)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 10'000)
         : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);
@@ -46,58 +58,38 @@ class BlockAllocator {
     requires(not is_heterogeneous)
     {
         PageType* page;
-        auto& current_allocation = allocations.back();
-        if (current_allocation.used != current_allocation.npages) {
-            // try pointer bumping
-            page = current_allocation.ptr + current_allocation.used++;
+        if ((page = try_bump_pointer())) {
+            return page;
         }
         else if (not free_pages.empty()) {
             // check for free pages
-            page = free_pages.back();
-            free_pages.pop_back();
+            page = free_pages.front();
+            free_pages.pop();
+            return page;
         }
         else if (allocations_budget) {
             // allocate new block
-            page = allocate();
+            return allocate();
         }
-        else {
-            // throw error (could also wait for cqe?)
-            throw std::runtime_error("Exhausted allocation budget");
-        }
-        return page;
+        throw BlockAllocError{"Exhausted allocation budget"};
     }
 
     PageType* get_page()
     requires(is_heterogeneous)
     {
-        auto current_allocation = allocations.back();
         PageType* page;
-        if (current_allocation.used != current_allocation.npages) {
-            // try pointer bumping
-            page = current_allocation.ptr + current_allocation.used++;
-        }
-        else if (free_pages.try_pop(page)) {
-            // check for free pages
+        if ((page = try_bump_pointer()) or free_pages.try_pop(page)) {
+            return page;
         }
         else if (allocations_budget) {
             // allocate new block
-            page = allocate();
+            return allocate();
         }
-        else {
-            // throw error (could also wait for cqe?)
-            throw std::runtime_error("Exhausted allocation budget");
-        }
-        return page;
+        // throw error (could also wait for cqe?)
+        throw BlockAllocError{"Exhausted allocation budget"};
     }
 
     void return_page(PageType* page)
-    requires(not is_heterogeneous)
-    {
-        free_pages.push_back(page);
-    }
-
-    void return_page(PageType* page)
-    requires(is_heterogeneous)
     {
         free_pages.push(page);
     }

@@ -15,7 +15,7 @@
 #include "misc/concepts_traits/concepts_alloc.h"
 #include "misc/exceptions/exceptions_alloc.h"
 
-namespace memory {
+namespace mem {
 
 template <bool huge = true>
 struct MMapMemoryAllocator {
@@ -33,6 +33,6 @@ struct MMapMemoryAllocator {
         return reinterpret_cast<T*>(ptr);
     }
 
-    static void dealloc(void* ptr, u64 size) { ::munmap(ptr, size); }
+    static void dealloc(void* ptr, u64 size) noexcept { ::munmap(ptr, size); }
 };
 } // namespace memory

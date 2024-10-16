@@ -171,7 +171,7 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
     using BaseNetworkManager::free_pages;
     using BaseNetworkManager::ring;
     std::vector<io_uring_cqe*> cqes;
-    memory::BlockAllocator<BufferPage, memory::MMapMemoryAllocator<true>, false> block_alloc;
+    mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false> block_alloc;
     u64 pages_recv{0};
     ConsumerFn consumer_fn;
 
@@ -662,8 +662,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     using BaseNetworkManager::buffers_start;
     using BaseNetworkManager::free_pages;
     using BaseNetworkManager::ring;
-    using ConsumerFn = std::function<void(BufferPage*)>;
-    // TODO return done pages to block allocator
+    using PageConsumerFn = std::function<void(BufferPage*)>;
 
   private:
     std::vector<std::queue<BufferPage*>> pending_pages;
@@ -671,13 +670,16 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     std::vector<io_uring_cqe*> cqes;
     u64 pages_sent{0};
     u32 inflight_egress{0};
+    PageConsumerFn consume_page_fn;
 
   public:
     EgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false),
-          cqes(nwdepth * 2)
+          cqes(nwdepth * 2), consume_page_fn(consume_page_fn)
     {
     }
+
+    void register_page_consumer_fn(PageConsumerFn _consume_page_fn) { consume_page_fn = _consume_page_fn; }
 
     void flush(u16 dst, BufferPage* page)
     {
@@ -715,7 +717,8 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
     {
         auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
         for (auto i{0u}; i < peeked; ++i) {
-            auto peeked_dst = get_tag(io_uring_cqe_get_data(cqes[i]));
+            auto user_data = io_uring_cqe_get_data(cqes[i]);
+            auto peeked_dst = get_tag(user_data);
             if (not pending_pages[peeked_dst].empty()) {
                 flush(peeked_dst, pending_pages[peeked_dst].front());
                 pending_pages[peeked_dst].pop();
@@ -723,7 +726,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
             else {
                 has_inflight[peeked_dst] = false;
             }
-            // TODO return page to consumer (e.g BlockAllocator's free_pages)
+            consume_page_fn(get_pointer<BufferPage>(user_data));
         }
         io_uring_cq_advance(&ring, peeked);
         inflight_egress -= peeked;

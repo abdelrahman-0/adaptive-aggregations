@@ -194,7 +194,7 @@ static void check_page(const Page<page_size, Attributes...> page, bool send)
     for (auto i{0u}; i < page.max_tuples_per_page; ++i) {
         if (std::get<0>(std::get<0>(page.columns)[i]) != 0 and std::get<0>(std::get<0>(page.columns)[i]) != '0' and
             std::get<0>(std::get<0>(page.columns)[i]) != '1') {
-            page.print_contents();
+            page.print_page();
             print("weird character:", std::get<0>(std::get<0>(page.columns)[i]),
                   int32_t(std::get<0>(std::get<0>(page.columns)[i])),
                   u64(*reinterpret_cast<const u64*>(&std::get<0>(page.columns)[i])), "idx:", i, "/",

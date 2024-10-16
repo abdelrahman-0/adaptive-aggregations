@@ -31,7 +31,7 @@ struct BasePartitionedHashtable {
     static constexpr Slot EMPTY_SLOT = 0;
     std::vector<std::conditional_t<concurrent, std::atomic<PageAgg*>, PageAgg*>> partitions;
     std::vector<ConsumerFn> consumer_fns;
-    memory::BlockAllocator<PageAgg, Alloc, is_heterogeneous> block_alloc;
+    mem::BlockAllocator<PageAgg, Alloc, is_heterogeneous> block_alloc;
     Slot* ht;
     u64 ht_mask;
     u32 partition_shift;
@@ -73,10 +73,12 @@ struct BasePartitionedHashtable {
             evict<false>(part_no, partitions[part_no], true);
         }
     }
+
+    auto& get_alloc() { return block_alloc; }
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
+          concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
           bool concurrent = false>
 struct PartitionedChainedHashtable
     : public BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent> {
@@ -128,7 +130,7 @@ struct PartitionedChainedHashtable
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_allocator Alloc = memory::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
+          concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
           bool concurrent = false>
 requires(sizeof(Slot) == 8)
 struct PartitionedSaltedHashtable
@@ -157,12 +159,12 @@ struct PartitionedSaltedHashtable
     }
 
     void aggregate(Key key, Value value, u64 key_hash)
-    requires(not concurrent and not std::is_pointer_v<Slot>)
+    requires(not concurrent and std::is_integral_v<Slot>)
     {
         // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
-        u64 partition_mask = mod | slots_mask;
+        u64 partition_mask = part_no << partition_shift;
         auto*& part_page = partitions[part_no];
         Slot slot = ht[mod];
         // use top bits for salt
@@ -176,8 +178,8 @@ struct PartitionedSaltedHashtable
                     return;
                 }
             }
-            mod = (mod + 1) & partition_mask;
-            slot = ht[mod];
+            mod = (mod + 1) & slots_mask;
+            slot = ht[mod | partition_mask];
         }
         if (part_page->full()) {
             // evict if full
@@ -185,8 +187,9 @@ struct PartitionedSaltedHashtable
             part_page = block_alloc.get_page();
             part_page->clear_tuples();
             mod = key_hash & ht_mask;
+            ASSERT(ht[mod] == EMPTY_SLOT);
         }
-        ht[mod] = (part_page->emplace_back_grp(key, value) << 16) | hash_prefix;
+        ht[mod | partition_mask] = (part_page->emplace_back_grp(key, value) << 16) | hash_prefix;
     }
 
     void aggregate(Key key, Value value, u64 key_hash)
@@ -196,17 +199,12 @@ struct PartitionedSaltedHashtable
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
         u64 partition_mask = part_no << partition_shift;
-        auto* part_page = partitions[part_no];
+        auto*& part_page = partitions[part_no];
         Slot slot = ht[mod];
         // use top bits for salt
         u16 hash_prefix = key_hash >> 48;
-        mod &= slots_mask;
-        u64 n = 0;
         while (slot != EMPTY_SLOT) {
             // walk chain of slots
-            if (n++ >= slots_mask + 1) {
-                int z = 2;
-            }
             if (hash_prefix == static_cast<u16>(reinterpret_cast<uintptr_t>(slot))) {
                 slot = reinterpret_cast<Slot>(reinterpret_cast<uintptr_t>(slot) >> 16);
                 auto group_pg = part_page->get_group(slot);
@@ -223,7 +221,6 @@ struct PartitionedSaltedHashtable
             evict(part_no, part_page);
             part_page = block_alloc.get_page();
             part_page->clear_tuples();
-            partitions[part_no] = part_page;
             mod = key_hash & ht_mask;
             ASSERT(ht[mod] == EMPTY_SLOT);
         }

@@ -75,8 +75,23 @@ template <typename T, std::size_t length>
 requires(not type_traits::is_tuple_v<T> and not type_traits::is_array_v<T>)
 void random_column(std::array<T, length>& column)
 {
-    for (auto& el : column) {
-        el = librand::random<T>(get_min<T>(), get_max<T>());
+    thread_local auto min = std::numeric_limits<T>::min();
+    thread_local auto max = std::numeric_limits<T>::max();
+    if constexpr (std::is_integral_v<T>) {
+        // sample groups from all range
+        thread_local std::uniform_int_distribution<T> dist(min, max);
+        thread_local std::vector<T> groups(FLAGS_groups);
+        std::generate(std::begin(groups), std::end(groups), [&] { return dist(rng); });
+        // sample from groups
+        thread_local std::uniform_int_distribution<u64> dist_idxs(0, FLAGS_groups - 1);
+        std::generate(std::begin(column), std::end(column), [&] { return groups[dist_idxs(rng)]; });
+    }
+    else if constexpr (std::is_floating_point_v<T>) {
+        thread_local std::uniform_real_distribution<T> dist(min, max);
+        std::generate(std::begin(column), std::end(column), [&] { return dist(rng); });
+    }
+    else {
+        __builtin_unreachable();
     }
 }
 
@@ -85,7 +100,7 @@ requires(type_traits::is_tuple_v<T> or type_traits::is_array_v<T>)
 void random_column(std::array<T, length>& column)
 {
     for (auto& el : column) {
-        el = librand::random<T>();
+        el = random<T>();
     }
 }
 
