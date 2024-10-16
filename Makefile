@@ -3,8 +3,10 @@
 BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
 BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
+HT_PAGE_SIZE_POWER=12
+NETWORK_PAGE_SIZE_POWER=17
 
-TARGETS=shuffle_homogeneous shuffle_heterogeneous groupby_homogeneous generate_data
+TARGETS=groupby_homogeneous shuffle_homogeneous shuffle_heterogeneous
 
 default: build-release
 
@@ -14,17 +16,17 @@ install:
 build-debug:
 	mkdir -p $(BUILD_DIR_DEB) && \
 	cd $(BUILD_DIR_DEB) && \
-	cmake -DCMAKE_BUILD_TYPE=Debug .. && \
+	cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DHT_PAGE_SIZE_POWER=$(HT_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Debug .. && \
 	make $(TARGETS)
 
 build-release:
 	mkdir -p $(BUILD_DIR_REL) && \
 	cd $(BUILD_DIR_REL) && \
-	cmake -DCMAKE_BUILD_TYPE=Release .. && \
+	cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DHT_PAGE_SIZE_POWER=$(HT_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=Release .. && \
 	make $(TARGETS)
 
 build-relwithdebinfo:
 	mkdir -p $(BUILD_DIR_RELWITHDEBINFO) && \
 	cd $(BUILD_DIR_RELWITHDEBINFO) && \
-	cmake -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
+	cmake -DNETWORK_PAGE_SIZE_POWER=$(NETWORK_PAGE_SIZE_POWER) -DHT_PAGE_SIZE_POWER=$(HT_PAGE_SIZE_POWER) -DCMAKE_BUILD_TYPE=RelWithDebInfo .. && \
 	make $(TARGETS)
