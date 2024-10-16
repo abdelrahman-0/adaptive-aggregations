@@ -11,7 +11,9 @@
 #include <tbb/scalable_allocator.h>
 
 #include "connection.h"
+#include "core/memory/alloc.h"
 #include "core/memory/allocators/rpmalloc/rpmalloc_allocator.h"
+#include "core/memory/block_allocator.h"
 #include "core/page.h"
 #include "misc/concepts_traits/concepts_page.h"
 #include "misc/exceptions/exceptions_io_uring.h"
@@ -85,6 +87,16 @@ class NetworkManager {
         buffers_start = reinterpret_cast<BufferPage*>(ptr);
         ::madvise(buffers_start, nbuffers * sizeof(BufferPage), MADV_HUGEPAGE);
 
+        init_ring(sqpoll);
+        if (not sockets.empty()) {
+            register_sockets(sockets);
+        }
+        init_buffers(register_bufs);
+    }
+
+    explicit NetworkManager(u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, bool register_bufs = false)
+        : nwdepth(nwdepth)
+    {
         init_ring(sqpoll);
         if (not sockets.empty()) {
             register_sockets(sockets);
@@ -178,7 +190,7 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
   public:
     IngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
                           ConsumerFn consumer_fn)
-        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10),
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10),
           consumer_fn(std::move(consumer_fn))
     {
         for (u32 peer{0u}; peer < npeers; peer++)
@@ -674,7 +686,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
 
   public:
     EgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false),
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false),
           cqes(nwdepth * 2), consume_page_fn(consume_page_fn)
     {
     }
