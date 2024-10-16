@@ -22,7 +22,7 @@ using namespace std::chrono_literals;
 
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(partitions, 16, "number of hashtable partitions to use");
-DEFINE_uint32(slots, 256, "number of slots to use per partition");
+DEFINE_uint32(slots, 512, "number of slots to use per partition");
 
 /* ----------- SCHEMA ----------- */
 
@@ -40,7 +40,7 @@ using AggregateAttributes = std::tuple<KEYS_AGG>;
 auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
-using HashTablePreAgg = hashtable::PartitionedSaltedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*>;
+using HashTablePreAgg = hashtable::PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -86,8 +86,8 @@ int main(int argc, char* argv[])
         file.set_offset(offset_begin, offset_end);
         table.bind_file(std::move(file));
         table.prepare_file_swips();
-        print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size,
-              "pages");
+        DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end,
+                        (offset_end - offset_begin) / defaults::local_page_size, "pages"));
     }
 
     auto& swips = table.get_swips();
@@ -107,16 +107,17 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u32> current_swip{0};
-    std::atomic<u64> tuples_processed{0};
-    std::atomic<u64> tuples_sent{0};
-    std::atomic<u64> tuples_received{0};
-    std::atomic<u64> pages_recv{0};
+    DEBUGGING(std::atomic<u64> tuples_processed{0});
+    DEBUGGING(std::atomic<u64> tuples_sent{0});
+    DEBUGGING(std::atomic<u64> tuples_received{0});
+    DEBUGGING(std::atomic<u64> pages_recv{0});
 
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
-                              &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
+        threads.emplace_back([=, &topology, &current_swip, &swips, &table, &barrier_start,
+                              &barrier_end DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received,
+                                                     &pages_recv)]() {
             if (FLAGS_pin) {
                 topology.pin_thread(thread_id);
             }
@@ -153,7 +154,7 @@ int main(int argc, char* argv[])
             /* ----------- NETWORK I/O ----------- */
 
             auto npeers = FLAGS_nodes - 1;
-            auto ingress_consumer_fn = [&tuple_buffer](BufferPage* p) { tuple_buffer.add_page(p); };
+            auto ingress_consumer_fn = [&tuple_buffer](BufferPage* pg) { tuple_buffer.add_page(pg); };
             IngressManager manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds, ingress_consumer_fn};
             EgressManager manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
@@ -162,33 +163,38 @@ int main(int argc, char* argv[])
 
             // setup local uring manager
             IO_Manager thread_io{FLAGS_depthio, FLAGS_sqpoll};
-            if (not FLAGS_path.empty()) {
+            if (not FLAGS_random and not FLAGS_path.empty()) {
                 thread_io.register_files({table.get_file().get_file_descriptor()});
             }
 
             /* ------------ GROUP BY ------------ */
 
+            u32 part_offset{0};
             std::vector<HashTablePreAgg::ConsumerFn> consumer_fns{};
             for (u32 part{0}; part < FLAGS_partitions; ++part) {
                 u16 dst = (part * FLAGS_nodes) / FLAGS_partitions;
+                auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
+                bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
+                part_offset += final_dst_partition ? parts_per_dst : 0;
                 if (dst == node_id) {
-                    consumer_fns.emplace_back([&tuple_buffer](BufferPage* p, bool) {
-                        p->retire();
-                        tuple_buffer.add_page(p);
+                    consumer_fns.emplace_back([&tuple_buffer](BufferPage* pg, bool) {
+                        if (not pg->empty()) {
+                            pg->retire();
+                            tuple_buffer.add_page(pg);
+                        }
                     });
                 }
                 else {
-                    auto partitions_per_dst =
-                        (FLAGS_partitions / FLAGS_nodes) + (node_id < (FLAGS_partitions % FLAGS_nodes));
-                    bool last_partition = ((part + 1) % partitions_per_dst) == 0;
                     auto actual_dst = dst - (dst > node_id);
                     consumer_fns.emplace_back(
-                        [&manager_send, actual_dst, last_partition](BufferPage* p, bool is_last = false) {
-                            p->retire();
-                            if (is_last and last_partition) {
-                                p->set_last_page();
+                        [&manager_send, actual_dst, final_dst_partition](BufferPage* pg, bool is_last = false) {
+                            if (not pg->empty() or final_dst_partition) {
+                                pg->retire();
+                                if (is_last and final_dst_partition) {
+                                    pg->set_last_page();
+                                }
+                                manager_send.try_flush(actual_dst, pg);
                             }
-                            manager_send.try_flush(actual_dst, p);
                         });
                 }
             }
@@ -196,12 +202,16 @@ int main(int argc, char* argv[])
 
             /* ------------ LAMBDAS ------------ */
 
-            auto process_local_page = [&ht](const TablePage& page) {
+            auto& ht_alloc = ht.get_alloc();
+            manager_send.register_page_consumer_fn([&ht_alloc](BufferPage* pg) { ht_alloc.return_page(pg); });
+
+            auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<KEYS_IDX>(j);
                     auto agg = std::make_tuple<u64>(1);
                     ht.aggregate(group, agg);
                 }
+                DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
             auto consume_ingress = [&manager_recv]() { return manager_recv.consume_pages(); };
@@ -271,9 +281,8 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);
 
-    DEBUGGING(print("tuples received:", tuples_received.load()));   //
-    DEBUGGING(print("tuples sent:", tuples_sent.load()));           //
-    DEBUGGING(print("tuples processed:", tuples_processed.load())); //
+    DEBUGGING(print("tuples received:", tuples_received.load())); //
+    DEBUGGING(print("tuples sent:", tuples_sent.load()));         //
     DEBUGGING(u64 pages_local =
                   (tuples_processed + TablePage::max_tuples_per_page - 1) / TablePage::max_tuples_per_page); //
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);                                       //
@@ -296,6 +305,7 @@ int main(int argc, char* argv[])
         .log("buffers per peer", FLAGS_bufs_per_peer)
         .log("cache (%)", FLAGS_cache)
         .log("time (ms)", swatch.time_ms)                                                            //
+        DEBUGGING(.log("local tuples processed", tuples_processed))                                  //
         DEBUGGING(.log("pages received", pages_recv))                                                //
         DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
