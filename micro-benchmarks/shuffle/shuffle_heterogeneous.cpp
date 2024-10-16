@@ -225,11 +225,7 @@ int main(int argc, char* argv[])
             auto [dedicated_network_thread, qthreads_per_nthread] = find_dedicated_nthread(thread_id);
             auto& manager_send = *egress_managers[dedicated_network_thread];
             auto& manager_recv = *ingress_managers[dedicated_network_thread];
-
-            {
-                std::unique_lock _{print_mtx};
-                print("assigning qthread", thread_id, "to nthread", dedicated_network_thread);
-            }
+            DEBUGGING(print("assigning qthread", thread_id, "to nthread", dedicated_network_thread));
 
             /* ----------- LOCAL I/O ----------- */
 

@@ -40,7 +40,7 @@ using AggregateAttributes = std::tuple<KEYS_AGG>;
 auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
-using HashTablePreAgg = hashtable::PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*>;
+using HashTablePreAgg = hashtable::PartitionedSaltedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -155,8 +155,8 @@ int main(int argc, char* argv[])
 
             auto npeers = FLAGS_nodes - 1;
             auto ingress_consumer_fn = [&tuple_buffer](BufferPage* pg) { tuple_buffer.add_page(pg); };
-            IngressManager manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds, ingress_consumer_fn};
-            EgressManager manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer, FLAGS_sqpoll, socket_fds};
+            IngressManager manager_recv{npeers, FLAGS_depthnw, 0, FLAGS_sqpoll, socket_fds, ingress_consumer_fn};
+            EgressManager manager_send{npeers, FLAGS_depthnw, 0, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
@@ -294,15 +294,16 @@ int main(int argc, char* argv[])
         .log("traffic", "both"s)
         .log("implementation", "groupby homogeneous"s)
         .log("threads", FLAGS_threads)
+        .log("partitions", FLAGS_partitions)
+        .log("slots", FLAGS_slots)
         .log("groups", FLAGS_groups)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)
         .log("tuples per local page", TablePage::max_tuples_per_page)
-        .log("network page size", defaults::hashtable_page_size)
+        .log("hashtable page size", defaults::hashtable_page_size)
         .log("tuples per network page", BufferPage::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
-        .log("buffers per peer", FLAGS_bufs_per_peer)
         .log("cache (%)", FLAGS_cache)
         .log("time (ms)", swatch.time_ms)                                                            //
         DEBUGGING(.log("local tuples processed", tuples_processed))                                  //
