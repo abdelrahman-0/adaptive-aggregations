@@ -39,7 +39,7 @@ struct BasePartitionedHashtable {
 
     BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
-          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions),
+          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions * 10),
           consumer_fns(std::move(_consumer_fns))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
