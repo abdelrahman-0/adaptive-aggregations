@@ -159,41 +159,7 @@ struct PartitionedSaltedHashtable
     }
 
     void aggregate(Key key, Value value, u64 key_hash)
-    requires(not concurrent and std::is_integral_v<Slot>)
-    {
-        // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
-        u64 part_no = mod >> partition_shift;
-        u64 partition_mask = part_no << partition_shift;
-        auto*& part_page = partitions[part_no];
-        Slot slot = ht[mod];
-        // use top bits for salt
-        u16 hash_prefix = key_hash >> 48;
-        while (slot != EMPTY_SLOT) {
-            // walk chain of slots
-            if (hash_prefix == static_cast<u16>(slot)) {
-                slot >>= 16;
-                if (part_page->get_group(slot) == key) {
-                    fn_agg(part_page->get_aggregates(slot), value);
-                    return;
-                }
-            }
-            mod = (mod + 1) & slots_mask;
-            slot = ht[mod | partition_mask];
-        }
-        if (part_page->full()) {
-            // evict if full
-            evict(part_no, part_page);
-            part_page = block_alloc.get_page();
-            part_page->clear_tuples();
-            mod = key_hash & ht_mask;
-            ASSERT(ht[mod] == EMPTY_SLOT);
-        }
-        ht[mod | partition_mask] = (part_page->emplace_back_grp(key, value) << 16) | hash_prefix;
-    }
-
-    void aggregate(Key key, Value value, u64 key_hash)
-    requires(not concurrent and std::is_pointer_v<Slot>)
+    requires(not concurrent)
     {
         // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
