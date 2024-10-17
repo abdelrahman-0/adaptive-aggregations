@@ -27,23 +27,25 @@ enum TagType : u8 { NONE, BLOOM, SALT };
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), bool is_entry_chained,
           concepts::is_slot Slot, concepts::is_allocator Alloc, bool is_heterogeneous, bool concurrent>
 struct BasePartitionedHashtable {
-    using PageAgg = PageAggHashTable<Slot, Key, Value, is_entry_chained, std::is_pointer_v<Slot>>;
+    using PageAgg = PageAggregation<Slot, Key, Value, is_entry_chained, std::is_pointer_v<Slot>>;
     using ConsumerFn = std::function<void(PageAgg*, bool)>;
+    using BlockAlloc = mem::BlockAllocator<PageAgg, Alloc, is_heterogeneous>;
 
   protected:
     static constexpr Slot EMPTY_SLOT = 0;
     std::vector<std::conditional_t<concurrent, std::atomic<PageAgg*>, PageAgg*>> partitions;
     std::vector<ConsumerFn> consumer_fns;
-    mem::BlockAllocator<PageAgg, Alloc, is_heterogeneous> block_alloc;
+    BlockAlloc& block_alloc;
     Slot* ht;
     u64 ht_mask;
     u32 partition_shift;
     u32 npartitions;
 
-    BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
-        : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
-          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions * FLAGS_bump, FLAGS_maxalloc),
-          consumer_fns(std::move(_consumer_fns))
+    BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns,
+                             BlockAlloc& block_alloc)
+        : consumer_fns(std::move(_consumer_fns)), block_alloc(block_alloc),
+          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), partition_shift(__builtin_ctz(_nslots)),
+          npartitions(_npartitions)
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
         ASSERT(_nslots == next_power_2(_nslots));
@@ -52,6 +54,7 @@ struct BasePartitionedHashtable {
         ht = Alloc::template alloc<Slot>(sizeof(Slot) * (ht_mask + 1));
 
         // alloc partitions
+        partitions.reserve(npartitions);
         for (u32 part{0}; part < npartitions; ++part) {
             partitions.push_back(block_alloc.get_page());
             partitions.back()->clear_tuples();
@@ -76,8 +79,6 @@ struct BasePartitionedHashtable {
             evict<false>(part_no, partitions[part_no], true);
         }
     }
-
-    auto& get_alloc() { return block_alloc; }
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
@@ -93,12 +94,14 @@ struct PartitionedChainedHashtable
     using BaseHashTable::ht_mask;
     using BaseHashTable::partition_shift;
     using BaseHashTable::partitions;
+    using typename BaseHashTable ::BlockAlloc;
     using typename BaseHashTable::ConsumerFn;
     using typename BaseHashTable::PageAgg;
 
   public:
-    PartitionedChainedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
-        : BaseHashTable(_npartitions, _nslots, _consumer_fns)
+    PartitionedChainedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns,
+                                BlockAlloc& block_alloc)
+        : BaseHashTable(_npartitions, _nslots, _consumer_fns, block_alloc)
     {
     }
 
@@ -147,6 +150,7 @@ struct PartitionedOpenHashtable
     using BaseHashTable::ht_mask;
     using BaseHashTable::partition_shift;
     using BaseHashTable::partitions;
+    using typename BaseHashTable::BlockAlloc;
     using typename BaseHashTable::ConsumerFn;
     using typename BaseHashTable::PageAgg;
 
@@ -154,8 +158,9 @@ struct PartitionedOpenHashtable
     u64 slots_mask;
 
   public:
-    PartitionedOpenHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
-        : BaseHashTable(_npartitions, _nslots, _consumer_fns), slots_mask(_nslots - 1)
+    PartitionedOpenHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns,
+                             BlockAlloc& block_alloc)
+        : BaseHashTable(_npartitions, _nslots, _consumer_fns, block_alloc), slots_mask(_nslots - 1)
     {
         if (_nslots <= PageAgg::max_tuples_per_page) {
             throw InvalidOptionError{"Salted hashtable needs more salt (slots)"};

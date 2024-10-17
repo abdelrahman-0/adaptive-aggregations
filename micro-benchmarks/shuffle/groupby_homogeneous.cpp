@@ -201,11 +201,12 @@ int main(int argc, char* argv[])
                         });
                 }
             }
-            HashTablePreAgg ht{FLAGS_partitions, FLAGS_slots, consumer_fns};
+            mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false> ht_alloc(
+                FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
+            HashTablePreAgg ht{FLAGS_partitions, FLAGS_slots, consumer_fns, ht_alloc};
 
             /* ------------ LAMBDAS ------------ */
 
-            auto& ht_alloc = ht.get_alloc();
             manager_send.register_page_consumer_fn([&ht_alloc](BufferPage* pg) { ht_alloc.return_page(pg); });
 
             auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {

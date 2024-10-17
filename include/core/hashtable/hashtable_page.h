@@ -29,7 +29,7 @@ using EntryOnPage = std::conditional_t<is_entry_chained, ChainedEntry<Next, Grou
 template <concepts::is_slot Next, typename GroupAttributes, typename AggregateAttributes, bool is_entry_chained,
           bool use_ptr = true>
 requires(type_traits::is_tuple_v<GroupAttributes> and type_traits::is_tuple_v<AggregateAttributes>)
-struct PageAggHashTable
+struct PageAggregation
     : public PageCommunication<defaults::hashtable_page_size,
                                EntryOnPage<Next, GroupAttributes, AggregateAttributes, is_entry_chained>, use_ptr> {
     using Entry = EntryOnPage<Next, GroupAttributes, AggregateAttributes, is_entry_chained>;
