@@ -23,6 +23,8 @@ using namespace std::chrono_literals;
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(partitions, 16, "number of hashtable partitions to use");
 DEFINE_uint32(slots, 512, "number of slots to use per partition");
+DEFINE_uint32(bump, 10, "bumping factor to use when allocating memory for partition pages");
+DEFINE_uint32(maxalloc, 100'000, "maximum number of calls the block allocator can be called");
 
 /* ----------- SCHEMA ----------- */
 
@@ -40,7 +42,8 @@ using AggregateAttributes = std::tuple<KEYS_AGG>;
 auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
-using HashTablePreAgg = hashtable::PartitionedSaltedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*>;
+using HashTablePreAgg =
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -268,6 +271,7 @@ int main(int argc, char* argv[])
             DEBUGGING(tuples_processed += local_tuples_processed);
             DEBUGGING(tuples_received += local_tuples_received);
             DEBUGGING(pages_recv += manager_recv.get_pages_recv());
+            DEBUGGING(tuple_buffer.print_pages());
         });
     }
 
@@ -301,7 +305,7 @@ int main(int argc, char* argv[])
         .log("local page size", defaults::local_page_size)
         .log("tuples per local page", TablePage::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per network page", BufferPage::max_tuples_per_page)
+        .log("tuples per hashtable page", BufferPage::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)
