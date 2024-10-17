@@ -1,9 +1,16 @@
 #pragma once
 
+#include <gflags/gflags.h>
 #include <queue>
+#include <tbb/concurrent_queue.h>
+
+#include "defaults.h"
+#include "misc/concepts_traits/concepts_alloc.h"
+#include "misc/exceptions/exceptions_alloc.h"
+
+DECLARE_uint32(bump);
 
 namespace mem {
-
 template <typename PageType, concepts::is_allocator Alloc, bool is_heterogeneous = false>
 class BlockAllocator {
     struct BlockAllocation {
@@ -30,7 +37,7 @@ class BlockAllocator {
     }
 
   public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations = 100'000)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations)
         : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);

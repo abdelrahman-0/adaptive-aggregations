@@ -190,7 +190,7 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
   public:
     IngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
                           ConsumerFn consumer_fn)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10),
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10, 10'000),
           consumer_fn(std::move(consumer_fn))
     {
         for (u32 peer{0u}; peer < npeers; peer++)
