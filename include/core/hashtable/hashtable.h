@@ -18,6 +18,8 @@
 #include "misc/exceptions/exceptions_misc.h"
 #include "ubench/debug.h"
 
+DECLARE_uint32(maxalloc);
+
 namespace hashtable {
 
 enum TagType : u8 { NONE, BLOOM, SALT };
@@ -40,7 +42,7 @@ struct BasePartitionedHashtable {
 
     BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
-          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions),
+          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions * FLAGS_bump, FLAGS_maxalloc),
           consumer_fns(std::move(_consumer_fns))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
@@ -131,10 +133,10 @@ struct PartitionedChainedHashtable
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
-          bool concurrent = false>
+          bool salted = true, concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>,
+          bool is_heterogeneous = false, bool concurrent = false>
 requires(sizeof(Slot) == 8)
-struct PartitionedSaltedHashtable
+struct PartitionedOpenHashtable
     : public BasePartitionedHashtable<Key, Value, fn_agg, false, Slot, Alloc, is_heterogeneous, concurrent> {
     using BaseHashTable =
         BasePartitionedHashtable<Key, Value, fn_agg, false, Slot, Alloc, is_heterogeneous, concurrent>;
@@ -152,7 +154,7 @@ struct PartitionedSaltedHashtable
     u64 slots_mask;
 
   public:
-    PartitionedSaltedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
+    PartitionedOpenHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : BaseHashTable(_npartitions, _nslots, _consumer_fns), slots_mask(_nslots - 1)
     {
         if (_nslots <= PageAgg::max_tuples_per_page) {
@@ -161,7 +163,7 @@ struct PartitionedSaltedHashtable
     }
 
     void aggregate(Key key, Value value, u64 key_hash)
-    requires(not concurrent)
+    requires(not concurrent and salted)
     {
         // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
@@ -169,10 +171,13 @@ struct PartitionedSaltedHashtable
         u64 partition_mask = part_no << partition_shift;
         auto*& part_page = partitions[part_no];
         Slot slot = ht[mod];
+
         // use top bits for salt
         u16 hash_prefix = key_hash >> 48;
+
+        // walk sequence of slots
         while (slot != EMPTY_SLOT) {
-            // walk chain of slots
+            // check salt
             if (hash_prefix == static_cast<u16>(reinterpret_cast<uintptr_t>(slot))) {
                 slot = reinterpret_cast<Slot>(reinterpret_cast<uintptr_t>(slot) >> 16);
                 auto group_pg = part_page->get_group(slot);
@@ -194,6 +199,37 @@ struct PartitionedSaltedHashtable
         }
         ht[mod | partition_mask] = reinterpret_cast<Slot>(
             (reinterpret_cast<uintptr_t>(part_page->emplace_back_grp(key, value)) << 16) | hash_prefix);
+    }
+
+    void aggregate(Key key, Value value, u64 key_hash)
+    requires(not concurrent and not salted)
+    {
+        // extract lower bits from hash
+        u64 mod = key_hash & ht_mask;
+        u64 part_no = mod >> partition_shift;
+        u64 partition_mask = part_no << partition_shift;
+        auto*& part_page = partitions[part_no];
+        Slot slot = ht[mod];
+
+        // walk sequence of slots
+        while (slot != EMPTY_SLOT) {
+            if (part_page->get_group(slot) == key) {
+                fn_agg(part_page->get_aggregates(slot), value);
+                return;
+            }
+            mod = (mod + 1) & slots_mask;
+            slot = ht[mod | partition_mask];
+        }
+        if (part_page->full()) {
+            // evict if full
+            evict(part_no, part_page);
+            part_page = block_alloc.get_page();
+            part_page->clear_tuples();
+            mod = key_hash & ht_mask;
+            ASSERT(ht[mod] == EMPTY_SLOT);
+        }
+        ht[mod | partition_mask] =
+            reinterpret_cast<Slot>(reinterpret_cast<uintptr_t>(part_page->emplace_back_grp(key, value)));
     }
 
     void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
