@@ -10,10 +10,15 @@ using namespace std::string_literals;
 
 class GenericError : public std::runtime_error {
   public:
-    explicit GenericError(const std::string& msg) : std::runtime_error(msg + " -- " + strerror(errno)) {}
+    explicit GenericError(const std::string& msg) : std::runtime_error(msg) {}
 };
 
 class GetResourceUsageError : public GenericError {
   public:
     GetResourceUsageError() : GenericError("Error getting resource usage"s) {}
+};
+
+class InvalidOptionError : public GenericError {
+  public:
+    explicit InvalidOptionError(const std::string& msg) : GenericError("Invalid option: " + msg) {}
 };

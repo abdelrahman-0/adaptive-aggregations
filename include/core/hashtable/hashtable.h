@@ -15,6 +15,7 @@
 #include "hashtable_page.h"
 #include "misc/concepts_traits/concepts_alloc.h"
 #include "misc/concepts_traits/concepts_hashtable.h"
+#include "misc/exceptions/exceptions_misc.h"
 #include "ubench/debug.h"
 
 namespace hashtable {
@@ -39,7 +40,7 @@ struct BasePartitionedHashtable {
 
     BasePartitionedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots)),
-          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions * 10),
+          ht_mask((_npartitions << __builtin_ctz(_nslots)) - 1), block_alloc(_npartitions),
           consumer_fns(std::move(_consumer_fns))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
@@ -154,8 +155,9 @@ struct PartitionedSaltedHashtable
     PartitionedSaltedHashtable(u32 _npartitions, u32 _nslots, std::vector<ConsumerFn>& _consumer_fns)
         : BaseHashTable(_npartitions, _nslots, _consumer_fns), slots_mask(_nslots - 1)
     {
-        using namespace std::string_literals;
-        ASSERT(_nslots > PageAgg::max_tuples_per_page);
+        if (_nslots <= PageAgg::max_tuples_per_page) {
+            throw InvalidOptionError{"Salted hashtable needs more salt (slots)"};
+        }
     }
 
     void aggregate(Key key, Value value, u64 key_hash)

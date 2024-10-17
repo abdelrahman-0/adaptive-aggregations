@@ -161,6 +161,13 @@ struct PageRowStore : public Page<page_size, Attribute> {
     }
 
     [[nodiscard]]
+    bool empty() const
+    requires(not use_ptr)
+    {
+        return num_tuples == 0;
+    }
+
+    [[nodiscard]]
     bool full() const
     requires(use_ptr)
     {
