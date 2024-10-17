@@ -64,11 +64,13 @@ void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence
     }());
 }
 
-template <char delimiter = ' ', typename... Ts>
+template <char delimiter = ' ', char end_char = '\n', typename... Ts>
 void print(Ts... args)
 {
     __print<delimiter>(std::cout, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
-    std::cout << '\n';
+    if constexpr (end_char) {
+        std::cout << end_char;
+    }
 }
 
 template <char delimiter = ' ', typename... Ts>
