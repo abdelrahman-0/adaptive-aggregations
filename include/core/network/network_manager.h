@@ -294,7 +294,6 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
         for (auto i{0u}; i < cqes_peeked; ++i) {
             auto user_data = io_uring_cqe_get_data(cqes[i]);
             auto* page_ptr = get_pointer<BufferPage>(user_data);
-            page_ptrs.push(page_ptr);
             if (page_ptr->is_last_page()) {
                 peers_left--;
             }
@@ -302,6 +301,7 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
                 has_inflight[get_tag(user_data)] = false;
                 post_recvs(get_tag(user_data));
             }
+            page_ptrs.push(page_ptr);
         }
         io_uring_cq_advance(&ring, cqes_peeked);
         pages_recv += cqes_peeked;
@@ -332,12 +332,11 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
     }
 };
 
-template <typename BufferPage, bool has_page_consumer_fn = false>
+template <typename BufferPage>
 class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
     // needed for dependent lookups
     using BaseNetworkManager = NetworkManager<BufferPage>;
     using BaseNetworkManager::ring;
-    using PageConsumerFn = std::function<void(BufferPage*)>;
 
   private:
     std::vector<io_uring_cqe*> cqes;
@@ -346,21 +345,18 @@ class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
     u64 pages_recv{0};
     u64 total_submitted{0};
     mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, true> block_alloc;
-    // TODO conditional/optional?
-    std::atomic<u16> peers_left;
-    std::conditional<has_page_consumer_fn, PageConsumerFn, void> consume_page_fn;
+    u16 peers_left;
+    std::atomic<bool> pending_peers;
 
   public:
     HeterogeneousIngressNetworkManager(u16 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), peers_left(npeers),
-          has_inflight(npeers, false), block_alloc(npeers * 10, 100)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), has_inflight(npeers, false),
+          block_alloc(npeers * 10, 100), peers_left(npeers), pending_peers(true)
     {
         for (auto dst{0u}; dst < npeers; ++dst) {
             post_recvs(dst);
         }
     }
-
-    void register_page_consumer_fn(PageConsumerFn _consume_page_fn) { consume_page_fn = _consume_page_fn; }
 
     DEBUGGING(auto get_pages_recv() const { return pages_recv; })
 
@@ -392,14 +388,14 @@ class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
             auto user_data = io_uring_cqe_get_data(cqes[i]);
             auto* page_ptr = get_pointer<BufferPage>(user_data);
             auto peeked_dst = get_tag(user_data);
-            page_ptrs.push(page_ptr);
             if (page_ptr->is_last_page()) {
-                peers_left--;
+                pending_peers = --peers_left;
             }
             else {
                 has_inflight[peeked_dst] = false;
                 post_recvs(peeked_dst);
             }
+            page_ptrs.push(page_ptr);
         }
         io_uring_cq_advance(&ring, cqes_peeked);
         DEBUGGING(pages_recv += cqes_peeked);
@@ -417,15 +413,9 @@ class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
     void done_page(BufferPage* page) { block_alloc.return_page(page); }
 
     [[nodiscard]]
-    bool pending_peers() const
+    bool pending() const
     {
-        return peers_left;
-    }
-
-    [[nodiscard]]
-    bool pending_pages() const
-    {
-        return not page_ptrs.empty();
+        return pending_peers or not page_ptrs.empty();
     }
 };
 
@@ -1095,16 +1085,21 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
         total_submitted++;
     }
 
-    void try_flush(u16 dst)
+    void flush(u16 dst)
     {
-        if (has_inflight[dst]) {
-            return;
-        }
         BufferPage* page;
         if (page_ptrs[dst].try_pop(page)) {
             has_inflight[dst] = true;
             _flush(dst, page);
         }
+    }
+
+    void try_flush(u16 dst)
+    {
+        if (has_inflight[dst]) {
+            return;
+        }
+        flush(dst);
     }
 
     void try_drain_done()
@@ -1120,7 +1115,7 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManager<BufferPage>
             free_pages.push(page_ptr);
             auto peeked_dst = get_tag(user_data);
             has_inflight[peeked_dst] = false;
-            try_flush(peeked_dst);
+            flush(peeked_dst);
         }
         io_uring_cq_advance(&ring, peeked);
         inflight_egress -= peeked;

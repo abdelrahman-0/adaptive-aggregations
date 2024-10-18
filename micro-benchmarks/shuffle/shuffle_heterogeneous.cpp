@@ -185,10 +185,8 @@ int main(int argc, char* argv[])
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.try_flush(dst);
                 }
-                if (manager_recv.pending_peers()) {
-                    for (auto dst{0u}; dst < npeers; ++dst) {
-                        manager_recv.try_post_recvs(dst);
-                    }
+                for (auto dst{0u}; dst < npeers; ++dst) {
+                    manager_recv.try_post_recvs(dst);
                 }
                 manager_send.try_drain_done();
             }
@@ -201,7 +199,7 @@ int main(int argc, char* argv[])
 
     // query processing
     std::atomic<u32> current_swip{0};
-    DEBUGGING(std::atomic<u64> tuples_processed{0});
+    DEBUGGING(std::atomic<u64> tuples_local{0});
     DEBUGGING(std::atomic<u64> tuples_sent{0});
     DEBUGGING(std::atomic<u64> tuples_received{0});
 
@@ -214,7 +212,7 @@ int main(int argc, char* argv[])
         threads_query.emplace_back(
             [=, &topology, &current_swip, &swips, &table, &barrier_start, &barrier_end, &added_last_page,
              &qthreads_done, &nthread_continue,
-             &thread_grps DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)]() {
+             &thread_grps DEBUGGING(, &tuples_local, &tuples_sent, &tuples_received, &pages_recv)]() {
                 if (FLAGS_pin) {
                     topology.pin_thread(thread_id + FLAGS_nthreads);
                 }
@@ -273,7 +271,7 @@ int main(int argc, char* argv[])
                 while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
                     morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
-                    if (manager_recv.pending_peers() or manager_recv.pending_pages()) {
+                    if (manager_recv.pending()) {
                         consume_ingress(manager_recv);
                     }
 
@@ -320,7 +318,7 @@ int main(int argc, char* argv[])
                 }
 
                 // wait for ingress
-                while (manager_recv.pending_peers() or manager_recv.pending_pages()) {
+                while (manager_recv.pending()) {
                     consume_ingress(manager_recv);
                 }
 
@@ -346,11 +344,11 @@ int main(int argc, char* argv[])
 
     DEBUGGING(print("tuples received:", tuples_received.load()));
     DEBUGGING(print("tuples sent:", tuples_sent.load()));
-    DEBUGGING(print("tuples processed:", tuples_processed.load()));
-    DEBUGGING(u64 pages_local =
-                  (tuples_processed + ResultPage::max_tuples_per_page - 1) / ResultPage::max_tuples_per_page);
+    DEBUGGING(print("tuples processed:", tuples_local.load()));
+    DEBUGGING(u64 pages_local = (tuples_local + ResultPage::max_tuples_per_page - 1) / ResultPage::max_tuples_per_page);
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);
+    DEBUGGING(u64 tuples_processed = tuples_received + tuples_local);
 
     Logger{FLAGS_print_header}
         .log("node id", node_id)
@@ -364,12 +362,10 @@ int main(int argc, char* argv[])
         .log("network page size", defaults::network_page_size)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
-        .log("buffers per peer", FLAGS_bufs_per_peer)
         .log("cache (%)", FLAGS_cache)
-        .log("time (ms)", swatch.time_ms)         //
-        DEBUGGING(.log("recv pages", pages_recv)) //
-        DEBUGGING(.log("tuple throughput (tuples/s)",
-                       ((tuples_received + tuples_processed) * 1000) / swatch.time_ms))              //
+        .log("time (ms)", swatch.time_ms)                                                            //
+        DEBUGGING(.log("recv pages", pages_recv))                                                    //
+        DEBUGGING(.log("tuple throughput (tuples/s)", (tuples_processed * 1000) / swatch.time_ms))   //
         DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
 }

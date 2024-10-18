@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
                 for (auto dst{0u}; dst < npeers; ++dst) {
                     manager_send.try_flush(dst);
                 }
-                if (manager_recv.pending_peers()) {
+                if (manager_recv.pending()) {
                     for (auto dst{0u}; dst < npeers; ++dst) {
                         manager_recv.post_recvs(dst);
                     }
@@ -275,7 +275,7 @@ int main(int argc, char* argv[])
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
-                if (manager_recv.pending_peers() or manager_recv.pending_pages()) {
+                if (manager_recv.pending() or manager_recv.pending_pages()) {
                     consume_ingress(manager_recv);
                 }
 
@@ -322,7 +322,7 @@ int main(int argc, char* argv[])
             }
 
             // wait for ingress
-            while (manager_recv.pending_peers() or manager_recv.pending_pages()) {
+            while (manager_recv.pending() or manager_recv.pending_pages()) {
                 consume_ingress(manager_recv);
             }
 
