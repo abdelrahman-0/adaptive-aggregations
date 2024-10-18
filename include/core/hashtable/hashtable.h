@@ -185,8 +185,7 @@ struct PartitionedOpenHashtable
             // check salt
             if (hash_prefix == static_cast<u16>(reinterpret_cast<uintptr_t>(slot))) {
                 slot = reinterpret_cast<Slot>(reinterpret_cast<uintptr_t>(slot) >> 16);
-                auto group_pg = part_page->get_group(slot);
-                if (group_pg == key) {
+                if (part_page->get_group(slot) == key) {
                     fn_agg(part_page->get_aggregates(slot), value);
                     return;
                 }
