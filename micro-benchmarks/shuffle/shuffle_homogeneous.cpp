@@ -115,6 +115,21 @@ int main(int argc, char* argv[])
     std::atomic<u64> tuples_received{0};
     std::atomic<u64> pages_recv{0};
 
+    /* ----------- DESTINATION ----------- */
+
+    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    auto npeers = FLAGS_nodes - 1;
+    u64 partition_mask = FLAGS_partitions - 1;
+    auto partitions_per_node = FLAGS_partitions / FLAGS_nodes;
+    auto extra_partitions = FLAGS_partitions % FLAGS_nodes;
+    std::vector<u16> destinations(FLAGS_partitions);
+    u16 partition_begin{0};
+    for (u16 dst{0}; dst < FLAGS_nodes; dst++) {
+        auto partition_sz = partitions_per_node + (dst < extra_partitions);
+        std::fill(destinations.begin() + partition_begin, destinations.begin() + partition_begin + partition_sz, dst);
+        partition_begin += partition_sz;
+    }
+
     // create threads
     std::vector<std::thread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
@@ -145,7 +160,6 @@ int main(int argc, char* argv[])
                 socket_fds.emplace_back(conn.socket_fds[0]);
             }
 
-            auto npeers = FLAGS_nodes - 1;
             IngressManager manager_recv{npeers, FLAGS_depthnw, npeers, FLAGS_sqpoll, socket_fds};
             EgressManager manager_send{npeers, FLAGS_depthnw, npeers * FLAGS_bufs_per_peer, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
@@ -168,14 +182,12 @@ int main(int argc, char* argv[])
 
             /* ------------ LAMBDAS ------------ */
 
-            auto process_local_page = [node_id, &manager_send](const TablePage& page) {
+            auto process_local_page = [node_id, partition_mask, destinations, &manager_send](const TablePage& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     // hash tuple
                     auto tup = page.get_tuple<0, 1, 2, 3>(j);
-                    auto dst = hash_key(std::get<0>(tup)) % FLAGS_nodes;
-                    if (dst == node_id) {
-                    }
-                    else {
+                    auto dst = destinations[hash_key(std::get<0>(tup)) & partition_mask];
+                    if (dst != node_id) {
                         auto actual_dst = dst - (dst > node_id);
                         auto dst_page = manager_send.get_page(actual_dst);
                         dst_page->emplace_back<0, 1, 2, 3>(tup);

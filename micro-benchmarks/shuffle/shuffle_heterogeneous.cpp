@@ -54,15 +54,6 @@ std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id)
     return {dedicated_nthread, qthreads_per_nthread};
 }
 
-ALWAYS_INLINE void consume_ingress(IngressManager& manager_recv)
-{
-    auto* network_page = manager_recv.try_dequeue_page();
-    while (network_page) {
-        manager_recv.done_page(network_page);
-        network_page = manager_recv.try_dequeue_page();
-    }
-}
-
 /* ----------- MAIN ----------- */
 
 int main(int argc, char* argv[])
@@ -130,8 +121,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_nthreads + FLAGS_qthreads + 1);
 
     // networking
-    std::vector<ThreadGroup> thread_grps(FLAGS_nthreads,
-                                         ThreadGroup{npeers * FLAGS_bufs_per_peer * 10, FLAGS_maxalloc});
+    std::vector<ThreadGroup> thread_grps(FLAGS_nthreads, ThreadGroup{npeers * 10, FLAGS_maxalloc});
     ::pthread_barrier_t barrier_network{};
     ::pthread_barrier_init(&barrier_network, nullptr, FLAGS_nthreads + 1);
     std::vector<std::jthread> threads_network{};
@@ -203,6 +193,20 @@ int main(int argc, char* argv[])
     DEBUGGING(std::atomic<u64> tuples_sent{0});
     DEBUGGING(std::atomic<u64> tuples_received{0});
 
+    /* ----------- DESTINATION ----------- */
+
+    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    auto partitions_per_node = FLAGS_partitions / FLAGS_nodes;
+    auto extra_partitions = FLAGS_partitions % FLAGS_nodes;
+    std::vector<u16> destinations(FLAGS_partitions);
+    u16 partition_begin{0};
+    for (u16 dst{0}; dst < FLAGS_nodes; dst++) {
+        auto partition_sz = partitions_per_node + (dst < extra_partitions);
+        std::fill(destinations.begin() + partition_begin, destinations.begin() + partition_begin + partition_sz, dst);
+        partition_begin += partition_sz;
+    }
+    u64 partition_mask = FLAGS_partitions - 1;
+
     std::vector<CachelineAlignedAtomic<u32>> qthreads_done(FLAGS_nthreads);
     std::vector<CachelineAlignedAtomic<u32>> added_last_page(FLAGS_nthreads);
     std::fill(qthreads_done.begin(), qthreads_done.end(), 0);
@@ -243,11 +247,11 @@ int main(int argc, char* argv[])
 
                 /* ------------ LAMBDAS ------------ */
 
-                auto process_local_page = [node_id, &manager_send, &active_buffers](const TablePage& page) {
+                auto process_local_page = [=, &manager_send, &active_buffers](const TablePage& page) {
                     for (auto j{0u}; j < page.num_tuples; ++j) {
                         // hash tuple
                         auto tup = page.get_tuple<0, 1, 2, 3>(j);
-                        auto dst = hash_key(std::get<0>(tup)) % FLAGS_nodes;
+                        auto dst = destinations[hash_key(std::get<0>(tup)) & partition_mask];
                         if (dst != node_id) {
                             auto actual_dst = dst - (dst > node_id);
                             auto* dst_page = active_buffers[actual_dst];
@@ -258,6 +262,14 @@ int main(int argc, char* argv[])
                             }
                             dst_page->emplace_back<0, 1, 2, 3>(tup);
                         }
+                    }
+                };
+
+                auto consume_ingress = [&manager_recv]() {
+                    auto* network_page = manager_recv.try_dequeue_page();
+                    while (network_page) {
+                        manager_recv.done_page(network_page);
+                        network_page = manager_recv.try_dequeue_page();
                     }
                 };
 
@@ -272,7 +284,7 @@ int main(int argc, char* argv[])
                     morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
                     if (manager_recv.pending()) {
-                        consume_ingress(manager_recv);
+                        consume_ingress();
                     }
 
                     // partition swips such that unswizzled swips are at the beginning of the morsel
@@ -319,7 +331,7 @@ int main(int argc, char* argv[])
 
                 // wait for ingress
                 while (manager_recv.pending()) {
-                    consume_ingress(manager_recv);
+                    consume_ingress();
                 }
 
                 if (last_thread) {

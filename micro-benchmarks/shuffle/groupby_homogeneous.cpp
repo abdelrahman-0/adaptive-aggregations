@@ -21,7 +21,6 @@ using namespace std::chrono_literals;
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_uint32(threads, 1, "number of threads to use");
-DEFINE_uint32(partitions, 16, "number of hashtable partitions to use");
 DEFINE_uint32(slots, 512, "number of slots to use per partition");
 DEFINE_uint32(bump, 10, "bumping factor to use when allocating memory for partition pages");
 
