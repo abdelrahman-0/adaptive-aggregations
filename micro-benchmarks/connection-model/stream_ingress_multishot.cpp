@@ -4,9 +4,9 @@
 #include "defaults.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
-#include "utils/stopwatch.h"
 #include "utils/utils.h"
 
 DEFINE_int32(connections, 1, "number of ingress nodes");
@@ -35,7 +35,7 @@ int main(int argc, char* argv[]) {
         throw IOUringRegisterFileError{ret};
     }
 
-    // register buffers
+    // register buffer ring
     auto* buf_ring = io_uring_setup_buf_ring(&ring, FLAGS_buffers, 0, 0, &ret);
     FLAGS_buffers = next_power_of_2(FLAGS_buffers);
     std::vector<NetworkPage> buffers(FLAGS_buffers);

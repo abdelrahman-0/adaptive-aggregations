@@ -1,10 +1,10 @@
 #include <gflags/gflags.h>
 
 #include "defaults.h"
+#include "performance/stopwatch.h"
 #include "storage/file.h"
 #include "storage/io_manager.h"
 #include "storage/page_local.h"
-#include "utils/stopwatch.h"
 #include "utils/utils.h"
 
 #define SCHEMA uint64_t, uint32_t, uint32_t, std::array<char, 4>
@@ -26,22 +26,22 @@ void generate_data() {
         while (remaining_tuples > 0) {
             p.clear();
             p.fill_random();
-            p.num_tuples = remaining_tuples >= p.max_num_tuples_per_page ? p.max_num_tuples_per_page : remaining_tuples;
+            p.num_tuples = remaining_tuples >= p.max_tuples_per_page ? p.max_tuples_per_page : remaining_tuples;
 //            p.print_contents();
             io.sync_io<WRITE>(file.get_file_descriptor(), offset, p);
             offset += defaults::local_page_size;
-            remaining_tuples -= p.max_num_tuples_per_page;
+            remaining_tuples -= p.max_tuples_per_page;
         }
     }
-    println("wrote ", offset / defaults::local_page_size, " pages to file: ", FLAGS_path);
+    print("wrote ", offset / defaults::local_page_size, " pages to file: ", FLAGS_path);
 }
 
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     if (FLAGS_path.empty()) {
-        println("example usage: ./generate_data --path=path/to/output --num_tuples=10000");
+        print("example usage: ./generate_data --path=path/to/output --num_tuples=10000");
         exit(1);
     }
-    println("generating", FLAGS_ntuples, "random tuples");
+    print("generating", FLAGS_ntuples, "random tuples");
     generate_data<SCHEMA>();
 }

@@ -34,8 +34,8 @@ int main(int argc, char* argv[]) {
         socket_fds = std::move(conn.socket_fds);
     }
 
-    IngressNetworkManager<NetworkPage> manager_recv{1, 256, 1, false, socket_fds};
-    SimpleEgressNetworkManager<NetworkPage> manager_send{1, 256, 1, false, socket_fds};
+    MultishotIngressNetworkManager<NetworkPage> manager_recv{1, 256, 256, false, socket_fds};
+    SimpleEgressNetworkManager<NetworkPage> manager_send{1, 256, 256, false, socket_fds};
 
     // track metrics
     Stopwatch swatch{};
@@ -45,54 +45,49 @@ int main(int argc, char* argv[]) {
     bool last_page{false};
 
     manager_recv.post_recvs(0);
+    void* begin;
+    void* end;
+    u16 buf_idx;
+    u16 peer;
 
     // loop
     swatch.start();
     while (pages_sent < FLAGS_pages) {
         auto* page = manager_send.get_page(0);
         page->num_tuples = NetworkPage::max_tuples_per_page;
-        while (not last_page) {
-            std::tie(network_page, std::ignore) = manager_recv.get_page();
-            if (network_page) {
-                last_page = network_page->is_last_page();
-                tuples_recv += network_page->get_num_tuples();
-                manager_recv.done_page(network_page);
-                if (not last_page) {
-                    manager_recv.post_recvs(0);
-                }
-                pages_recv++;
-            } else {
-                break;
-            }
+        std::tie(begin, end, buf_idx, peer) = manager_recv.get_page();
+        if (/*network_page*/ begin) {
+            manager_recv.done_page(peer, buf_idx);
+            pages_recv++;
         }
         pages_sent++;
         tuples_sent += page->get_num_tuples();
     }
     print("flushing");
     manager_send.flush_all();
-    print("listening for last page");
-    while (not last_page) {
-        std::tie(network_page, std::ignore) = manager_recv.get_page();
-        if (network_page) {
-            last_page = network_page->is_last_page();
-            tuples_recv += network_page->get_num_tuples();
-            manager_recv.done_page(network_page);
-            if (not last_page) {
-                manager_recv.post_recvs(0);
-            }
-            pages_recv++;
-        }
-    }
-    print("waiting");
-    manager_send.wait_all();
-    print("done");
+    //    print("listening for last page");
+    //    while (not last_page) {
+    //        std::tie(network_page, std::ignore) = manager_recv.get_page();
+    //        if (network_page) {
+    //            last_page = network_page->is_last_page();
+    //            tuples_recv += network_page->get_num_tuples();
+    //            manager_recv.done_page(network_page);
+    //            if (not last_page) {
+    //                manager_recv.post_recvs(0);
+    //            }
+    //            pages_recv++;
+    //        }
+    //    }
+    //    print("waiting");
+    //    manager_send.wait_all();
+    //    print("done");
 
     swatch.stop();
 
-    Logger logger{};
+    Logger logger{true};
     logger.log("traffic", "egress"s);
     logger.log("primitive", "send"s);
-    logger.log("implementation", "sync"s);
+    logger.log("implementation", "multishot"s);
     logger.log("threads", 1);
     logger.log("connections", 1);
     logger.log("page_size", defaults::network_page_size);

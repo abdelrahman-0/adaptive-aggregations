@@ -9,9 +9,9 @@
 #include "defaults.h"
 #include "exceptions/exceptions_misc.h"
 #include "network/connection.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
-#include "utils/stopwatch.h"
 
 // std::min(1u, std::thread::hardware_concurrency() - FLAGS_connections)
 DEFINE_uint32(connections, 5, "number of egress connections to open (1 thread per connection)");
@@ -58,8 +58,8 @@ int main(int argc, char* argv[]) {
     // spawn network threads
     for (auto i{0u}; i < FLAGS_connections; ++i) {
         done_pages[i] = 0;
-        tls_mpscs.emplace_back((FLAGS_workers / FLAGS_connections) + (i < FLAGS_workers % FLAGS_connections),
-                               FLAGS_mpsc);
+        tls_mpscs._emplace_back((FLAGS_workers / FLAGS_connections) + (i < FLAGS_workers % FLAGS_connections),
+                                FLAGS_mpsc);
         threads_network.emplace_back([i, dst_fd = conn.socket_fds[i], &done, &tls_mpscs, &done_pages, &wait]() {
             uint32_t local_pages_sent{0};
             auto level = 0u;
@@ -86,7 +86,7 @@ int main(int argc, char* argv[]) {
 
     // spawn worker threads
     for (auto i{0u}; i < FLAGS_workers; ++i) {
-        tls_pages.emplace_back();
+        tls_pages._emplace_back();
         tls_pages.back().num_tuples = NetworkPage::max_num_tuples_per_page;
         threads_workers.emplace_back([i, &done, &tls_mpscs, &tls_pages, &wait, &pages_sent, &pages_sent_actual,
                                       &tuples_sent, &workers_done, &done_pages]() {

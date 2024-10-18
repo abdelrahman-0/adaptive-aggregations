@@ -8,12 +8,12 @@
 #include "defaults.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "storage/policy.h"
 #include "storage/table.h"
 #include "utils/hash.h"
 #include "utils/logger.h"
-#include "utils/stopwatch.h"
 #include "utils/utils.h"
 
 DEFINE_int32(connections, 1, "number of ingress connections");

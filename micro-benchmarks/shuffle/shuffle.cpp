@@ -7,11 +7,11 @@
 #include "defaults.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "storage/policy.h"
 #include "storage/table.h"
 #include "utils/hash.h"
-#include "utils/stopwatch.h"
 #include "utils/utils.h"
 
 // table schema
@@ -146,7 +146,7 @@ int main(int argc, char* argv[]) {
             }
         }
     }
-    println("Sent", pages_sent, "pages");
-    println("Sent", tuples_sent, "tuples");
-    println("Sent", bytes_sent, "bytes");
+    print("Sent", pages_sent, "pages");
+    print("Sent", tuples_sent, "tuples");
+    print("Sent", bytes_sent, "bytes");
 }

@@ -9,10 +9,10 @@
 #include "network/connection.h"
 #include "network/network_manager_old.h"
 #include "network/page_communication.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
 #include "utils/logger.h"
-#include "utils/stopwatch.h"
 
 DEFINE_uint32(connections, 5, "number of ingress connections");
 
@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
                     throw NetworkRecvError{};
                 }
                 if (page.empty() || res == 0) {
-                    //                    println(res);
+                    //                    print(res);
                     goto done;
                 }
                 assert(res == defaults::network_page_size);

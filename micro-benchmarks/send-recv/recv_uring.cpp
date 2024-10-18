@@ -4,7 +4,7 @@
 #include "network/connection.h"
 #include "network/network_manager.h"
 #include "network/page_communication.h"
-#include "utils/stopwatch.h"
+#include "performance/stopwatch.h"
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
 

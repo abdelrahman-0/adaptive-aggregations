@@ -6,12 +6,12 @@
 #include <tbb/parallel_for.h>
 #include <tbb/task_arena.h>
 
-#include "common/page.h"
+#include "core/page.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
 #include "network/pointer_ring.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
-#include "utils/stopwatch.h"
 
 DEFINE_int32(ingress, 1, "number of sender nodes to accept requests from");
 
@@ -26,7 +26,7 @@ using NetworkPage = PageNetwork<ResultTuple>;
 static auto num_threads = 10u;
 
 static constexpr auto pages_per_thread = 10u;
-static constexpr auto pointer_ring_size = next_power_of_2(512u);
+static constexpr auto pointer_ring_size = next_power_2(512u);
 
 struct TLS {
     NetworkManagerOld network;
@@ -43,11 +43,11 @@ std::atomic<unsigned> total_num_bytes_received{0u};
 int main(int argc, char* argv[]) {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     // setup connection
-    println("Num threads:", num_threads);
+    print("Num threads:", num_threads);
     Connection conn_ingress{FLAGS_ingress};
     conn_ingress.setup_ingress();
 
-    println("=========");
+    print("=========");
 
     // prepare waiting threads
     std::atomic<bool> done{false};
@@ -90,7 +90,7 @@ int main(int argc, char* argv[]) {
                 num_pages++;
                 pr.insert(tagged_ptr);
                 current_page = (current_page + 1) % pages_per_thread;
-                //                println(total_num_pages_received + num_pages);
+                //                print(total_num_pages_received + num_pages);
             }
         done_goto:;
             total_num_pages_received += num_pages;
@@ -129,8 +129,8 @@ int main(int argc, char* argv[]) {
             auto received_bytes = cqe->res;
             io_uring_cqe_seen(&ring, cqe);
             while (received_bytes != defaults::network_page_size) {
-                println("FRAGMENTATION:", received_bytes, "/", defaults::network_page_size,
-                        defaults::network_page_size - received_bytes, "remaining | ", std::this_thread::get_id());
+                print("FRAGMENTATION:", received_bytes, "/", defaults::network_page_size,
+                      defaults::network_page_size - received_bytes, "remaining | ", std::this_thread::get_id());
                 sqe = io_uring_get_sqe(&ring);
                 io_uring_prep_recv(sqe, 0, reinterpret_cast<std::byte*>(page) + received_bytes,
                                    defaults::network_page_size - received_bytes, MSG_WAITALL);
@@ -139,7 +139,7 @@ int main(int argc, char* argv[]) {
                 assert(num_submitted == 1);
                 cqe = nullptr;
                 ret = io_uring_peek_cqe(&ring, &cqe);
-                println(cqe->res);
+                print(cqe->res);
                 io_uring_cqe_seen(&ring, cqe);
                 if (cqe == nullptr || cqe->res <= 0 || ret != 0) {
                     break;
@@ -158,7 +158,7 @@ int main(int argc, char* argv[]) {
         }
     }
 
-    println("Pages received:", total_num_pages_received);
-    println("Tuples received:", total_num_tuples_received);
-    println("Bytes received:", total_num_bytes_received);
+    print("Pages received:", total_num_pages_received);
+    print("Tuples received:", total_num_tuples_received);
+    print("Bytes received:", total_num_bytes_received);
 }

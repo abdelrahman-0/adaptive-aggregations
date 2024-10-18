@@ -6,11 +6,11 @@
 #include <tbb/parallel_for.h>
 #include <tbb/task_arena.h>
 
-#include "common/page.h"
+#include "core/page.h"
 #include "network/connection.h"
 #include "network/network_manager_old.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
-#include "utils/stopwatch.h"
 
 DEFINE_int32(ingress, 1, "number of sender nodes to accept requests from");
 
@@ -41,7 +41,7 @@ int main(int argc, char* argv[]) {
     //     setup connection
     Connection conn_ingress{FLAGS_ingress};
     conn_ingress.setup_ingress();
-    println("Num threads:", num_threads);
+    print("Num threads:", num_threads);
     std::vector<std::thread> threads;
     {
         Stopwatch _{};
@@ -73,10 +73,10 @@ int main(int argc, char* argv[]) {
                     }
                     auto received_bytes = cqe->res;
                     if (received_bytes != defaults::network_page_size) {
-                        println("oops: received", received_bytes);
+                        print("oops: received", received_bytes);
                     }
                     //                    while (received_bytes != defaults::network_page_size) {
-                    //                        println("fragmented size:", received_bytes, "on",
+                    //                        print("fragmented size:", received_bytes, "on",
                     //                        std::this_thread::get_id()); io_uring_prep_recv(sqe, 0,
                     //                        reinterpret_cast<std::byte*>(&page) + received_bytes,
                     //                                           defaults::network_page_size, MSG_WAITALL);
@@ -94,7 +94,7 @@ int main(int argc, char* argv[]) {
                     num_bytes_received += received_bytes;
                     num_pages_received++;
                     if (page.num_tuples > 682) {
-                        println("Unexpected", page.num_tuples);
+                        print("Unexpected", page.num_tuples);
                         //                        page.print_info();
                     }
                     num_tuples_received += page.num_tuples;
@@ -111,9 +111,9 @@ int main(int argc, char* argv[]) {
             t.join();
         }
     }
-    println("Pages received:", total_num_pages_received);
-    println("Tuples received:", total_num_tuples_received);
-    println("Bytes received:", total_num_bytes_received);
+    print("Pages received:", total_num_pages_received);
+    print("Tuples received:", total_num_tuples_received);
+    print("Bytes received:", total_num_bytes_received);
 
     // multi-threaded?
 

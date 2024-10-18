@@ -3,7 +3,7 @@
 #include "defaults.h"
 #include "network/connection.h"
 #include "network/page_communication.h"
-#include "utils/stopwatch.h"
+#include "performance/stopwatch.h"
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
 DEFINE_uint32(pages, 10'000, "total number of pages to send via egress traffic");
@@ -31,7 +31,7 @@ int main(int argc, char* argv[]) {
 
     NetworkPage page{};
     page.fill_random();
-    page.num_tuples = NetworkPage::max_num_tuples_per_page;
+    page.num_tuples = NetworkPage::max_tuples_per_page;
     ::ssize_t res;
 
     // send loop

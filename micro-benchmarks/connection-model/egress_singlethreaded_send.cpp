@@ -8,9 +8,9 @@
 #include "defaults.h"
 #include "exceptions/exceptions_misc.h"
 #include "network/connection.h"
+#include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
-#include "utils/stopwatch.h"
 
 DEFINE_int32(connections, 10, "number of egress connections");
 DEFINE_uint32(pages, 100'000, "total number of pages to send via egress traffic");

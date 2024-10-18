@@ -4,7 +4,7 @@
 #include "network/connection.h"
 #include "network/network_manager.h"
 #include "network/page_communication.h"
-#include "utils/stopwatch.h"
+#include "performance/stopwatch.h"
 
 DEFINE_bool(local, true, "run benchmark using loop-back interface");
 DEFINE_uint32(pages, 1'000, "total number of pages to send via egress traffic");
@@ -25,7 +25,7 @@ int main(int argc, char* argv[]) {
     Connection conn{node_id, 1, 0, destination_ip};
     conn.setup_egress(1);
 
-    EgressNetworkManager<NetworkPage> manager_send{1, 256, 20, false, conn.socket_fds};
+    SimpleEgressNetworkManager<NetworkPage> manager_send{1, 256, 20, false, conn.socket_fds};
 
     // track metrics
     Stopwatch swatch{};
@@ -36,7 +36,7 @@ int main(int argc, char* argv[]) {
     swatch.start();
     while (pages_sent < FLAGS_pages) {
         auto* page = manager_send.get_page(0);
-        page->num_tuples = NetworkPage::max_num_tuples_per_page;
+        page->num_tuples = NetworkPage::max_tuples_per_page;
         pages_sent++;
         tuples_sent += page->get_num_tuples();
     }
