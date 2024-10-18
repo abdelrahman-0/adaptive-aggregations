@@ -15,6 +15,7 @@
 #include "core/memory/allocators/rpmalloc/rpmalloc_allocator.h"
 #include "core/memory/block_allocator.h"
 #include "core/page.h"
+#include "misc/concepts_traits/concepts_network.h"
 #include "misc/concepts_traits/concepts_page.h"
 #include "misc/exceptions/exceptions_io_uring.h"
 #include "page_communication.h"
@@ -174,7 +175,7 @@ class SimpleIngressNetworkManager : public NetworkManager<BufferPage> {
 template <concepts::is_communication_page BufferPage>
 class IngressNetworkManager : public NetworkManager<BufferPage> {
     using BaseNetworkManager = NetworkManager<BufferPage>;
-    using ConsumerFn = std::function<void(BufferPage*)>;
+    using PageConsumerFn = std::function<void(BufferPage*)>;
 
   private:
     // needed for dependent lookups
@@ -185,11 +186,11 @@ class IngressNetworkManager : public NetworkManager<BufferPage> {
     std::vector<io_uring_cqe*> cqes;
     mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false> block_alloc;
     u64 pages_recv{0};
-    ConsumerFn consumer_fn;
+    PageConsumerFn consumer_fn;
 
   public:
     IngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
-                          ConsumerFn consumer_fn)
+                          PageConsumerFn consumer_fn)
         : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10, 10'000),
           consumer_fn(std::move(consumer_fn))
     {
@@ -260,6 +261,9 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
         for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
             free_pages.push(buffers_start + page_idx);
         }
+        for (auto dst{0u}; dst < npeers; ++dst) {
+            post_recvs(dst);
+        }
     }
 
     auto get_pages_recv() const { return pages_recv; }
@@ -314,6 +318,103 @@ class ConcurrentIngressNetworkManager : public NetworkManager<BufferPage> {
     }
 
     void done_page(BufferPage* page) { free_pages.push(page); }
+
+    [[nodiscard]]
+    bool pending_peers() const
+    {
+        return peers_left;
+    }
+
+    [[nodiscard]]
+    bool pending_pages() const
+    {
+        return not page_ptrs.empty();
+    }
+};
+
+template <typename BufferPage, bool has_page_consumer_fn = false>
+class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
+    // needed for dependent lookups
+    using BaseNetworkManager = NetworkManager<BufferPage>;
+    using BaseNetworkManager::ring;
+    using PageConsumerFn = std::function<void(BufferPage*)>;
+
+  private:
+    std::vector<io_uring_cqe*> cqes;
+    tbb::concurrent_queue<BufferPage*> page_ptrs;
+    std::vector<bool> has_inflight;
+    u64 pages_recv{0};
+    u64 total_submitted{0};
+    mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, true> block_alloc;
+    // TODO conditional/optional?
+    std::atomic<u16> peers_left;
+    std::conditional<has_page_consumer_fn, PageConsumerFn, void> consume_page_fn;
+
+  public:
+    HeterogeneousIngressNetworkManager(u16 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), peers_left(npeers),
+          has_inflight(npeers, false), block_alloc(npeers * 10, 100)
+    {
+        for (auto dst{0u}; dst < npeers; ++dst) {
+            post_recvs(dst);
+        }
+    }
+
+    void register_page_consumer_fn(PageConsumerFn _consume_page_fn) { consume_page_fn = _consume_page_fn; }
+
+    DEBUGGING(auto get_pages_recv() const { return pages_recv; })
+
+    void try_post_recvs(u16 dst)
+    {
+        if (has_inflight[dst]) {
+            return;
+        }
+        post_recvs(dst);
+    }
+
+    void post_recvs(u16 dst)
+    {
+        BufferPage* new_page = block_alloc.get_page();
+        auto* sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_recv(sqe, dst, new_page, sizeof(BufferPage), MSG_WAITALL);
+        auto* user_data = new_page;
+        io_uring_sqe_set_data(sqe, tag_pointer(user_data, dst));
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+        io_uring_submit(&ring);
+        has_inflight[dst] = true;
+        total_submitted++;
+    }
+
+    void try_drain_done()
+    {
+        auto cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+        for (auto i{0u}; i < cqes_peeked; ++i) {
+            auto user_data = io_uring_cqe_get_data(cqes[i]);
+            auto* page_ptr = get_pointer<BufferPage>(user_data);
+            auto peeked_dst = get_tag(user_data);
+            page_ptrs.push(page_ptr);
+            if (page_ptr->is_last_page()) {
+                peers_left--;
+            }
+            else {
+                has_inflight[peeked_dst] = false;
+                post_recvs(peeked_dst);
+            }
+        }
+        io_uring_cq_advance(&ring, cqes_peeked);
+        DEBUGGING(pages_recv += cqes_peeked);
+    }
+
+    BufferPage* try_dequeue_page()
+    {
+        BufferPage* page;
+        if (page_ptrs.try_pop(page)) {
+            return page;
+        }
+        return nullptr;
+    }
+
+    void done_page(BufferPage* page) { block_alloc.return_page(page); }
 
     [[nodiscard]]
     bool pending_peers() const
@@ -687,7 +788,7 @@ class EgressNetworkManager : public NetworkManager<BufferPage> {
   public:
     EgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
         : BaseNetworkManager(nwdepth, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false),
-          cqes(nwdepth * 2), consume_page_fn(consume_page_fn)
+          cqes(nwdepth * 2)
     {
     }
 

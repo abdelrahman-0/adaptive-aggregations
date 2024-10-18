@@ -8,10 +8,10 @@
 #include "misc/concepts_traits/concepts_alloc.h"
 #include "misc/exceptions/exceptions_alloc.h"
 
-DECLARE_uint32(bump);
-
 namespace mem {
-template <typename PageType, concepts::is_allocator Alloc, bool is_heterogeneous = false>
+
+template <typename PageType, concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>,
+          bool has_concurrent_free_pages = false>
 class BlockAllocator {
     struct BlockAllocation {
         u64 npages;
@@ -21,7 +21,7 @@ class BlockAllocator {
 
   private:
     // In a heterogeneous model, network threads (and not the query thread) can push to free_pages
-    std::conditional_t<is_heterogeneous, tbb::concurrent_queue<PageType*>, std::queue<PageType*>> free_pages;
+    std::conditional_t<has_concurrent_free_pages, tbb::concurrent_queue<PageType*>, std::queue<PageType*>> free_pages;
     std::vector<BlockAllocation> allocations;
     u64 allocations_budget;
     u32 block_sz;
@@ -37,8 +37,7 @@ class BlockAllocator {
     }
 
   public:
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations)
-        : block_sz(block_sz), allocations_budget(max_allocations)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations) : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);
         allocate(false);
@@ -62,7 +61,7 @@ class BlockAllocator {
     }
 
     PageType* get_page()
-    requires(not is_heterogeneous)
+    requires(not has_concurrent_free_pages)
     {
         PageType* page;
         if ((page = try_bump_pointer())) {
@@ -82,7 +81,7 @@ class BlockAllocator {
     }
 
     PageType* get_page()
-    requires(is_heterogeneous)
+    requires(has_concurrent_free_pages)
     {
         PageType* page;
         if ((page = try_bump_pointer()) or free_pages.try_pop(page)) {
