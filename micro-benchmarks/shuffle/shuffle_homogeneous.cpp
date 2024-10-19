@@ -32,7 +32,7 @@ using ResultPage = PageLocal<ResultTuple>;
 
 using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
 using IngressManager = SimpleIngressNetworkManager<NetworkPage>;
-using EgressManager = BufferedEgressNetworkManager<NetworkPage>;
+using EgressManager = EgressNetworkManager<NetworkPage>;
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -131,10 +131,10 @@ int main(int argc, char* argv[])
     }
 
     // create threads
-    std::vector<std::thread> threads{};
+    std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
-                              &tuples_received, &pages_recv, &barrier_start, &barrier_end]() {
+        threads.emplace_back([=, &topology, &current_swip, &swips, &table, &pages_recv, &barrier_start,
+                              &barrier_end DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received)]() {
             if (FLAGS_pin) {
                 topology.pin_thread(thread_id);
             }
@@ -180,17 +180,58 @@ int main(int argc, char* argv[])
                 manager_recv.post_recvs(peer);
             }
 
+            mem::BlockAllocator<NetworkPage> block_alloc{npeers * 10, FLAGS_maxalloc};
+            std::vector<NetworkPage*> partitions(FLAGS_partitions);
+            for (u32 part{0}; part < FLAGS_partitions; ++part) {
+                partitions[part] = block_alloc.get_page();
+                partitions[part]->clear_tuples();
+            }
+            manager_send.register_page_consumer_fn(
+                [&block_alloc](NetworkPage* page) { block_alloc.return_page(page); });
+
             /* ------------ LAMBDAS ------------ */
 
-            auto process_local_page = [node_id, partition_mask, destinations, &manager_send](const TablePage& page) {
+            u32 part_offset{0};
+            using ConsumerFn = std::function<void(NetworkPage*, bool)>;
+            std::vector<ConsumerFn> consumer_fns{};
+            for (u32 part{0}; part < FLAGS_partitions; ++part) {
+                u16 dst = (part * FLAGS_nodes) / FLAGS_partitions;
+                auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
+                bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
+                part_offset += final_dst_partition ? parts_per_dst : 0;
+                if (dst == node_id) {
+                    consumer_fns.emplace_back([](NetworkPage* pg, bool) {});
+                }
+                else {
+                    auto actual_dst = dst - (dst > node_id);
+                    consumer_fns.emplace_back(
+                        [&manager_send, actual_dst, final_dst_partition](NetworkPage* page, bool is_last = false) {
+                            if (not page->empty() or final_dst_partition) {
+                                page->retire();
+                                if (is_last and final_dst_partition) {
+                                    page->set_last_page();
+                                }
+                                manager_send.try_flush(actual_dst, page);
+                            }
+                        });
+                }
+            }
+
+            auto process_local_page = [node_id, partition_mask, destinations, &partitions, &block_alloc,
+                                       &consumer_fns](const TablePage& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     // hash tuple
                     auto tup = page.get_tuple<0, 1, 2, 3>(j);
-                    auto dst = destinations[hash_key(std::get<0>(tup)) & partition_mask];
+                    auto part = hash_key(std::get<0>(tup)) & partition_mask;
+                    auto dst = destinations[part];
                     if (dst != node_id) {
-                        auto actual_dst = dst - (dst > node_id);
-                        auto dst_page = manager_send.get_page(actual_dst);
-                        dst_page->emplace_back<0, 1, 2, 3>(tup);
+                        auto*& part_page = partitions[part];
+                        if (part_page->full()) {
+                            consumer_fns[part](part_page, false);
+                            part_page = block_alloc.get_page();
+                            part_page->clear_tuples();
+                        }
+                        part_page->emplace_back<0, 1, 2, 3>(tup);
                     }
                 }
             };
@@ -206,6 +247,7 @@ int main(int argc, char* argv[])
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
 
                 // handle ingress communication
+                manager_send.try_drain_pending();
                 if (peers_done < npeers) {
                     peers_done += consume_ingress(manager_recv);
                 }
@@ -231,7 +273,11 @@ int main(int argc, char* argv[])
                 }
             }
 
-            manager_send.flush_all();
+            // flush last page
+            for (u16 part{0}; part < FLAGS_partitions; ++part) {
+                consumer_fns[part](partitions[part], true);
+            }
+
             while (peers_done < npeers) {
                 peers_done += consume_ingress(manager_recv);
                 manager_send.try_drain_pending();
@@ -253,10 +299,6 @@ int main(int argc, char* argv[])
     swatch.start();
     ::pthread_barrier_wait(&barrier_end);
     swatch.stop();
-
-    for (auto& t : threads) {
-        t.join();
-    }
 
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);

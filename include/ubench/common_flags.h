@@ -20,5 +20,5 @@ DEFINE_uint64(partitions, 16, "number of hashtable partitions to use");
 DEFINE_uint64(groups, 10'000, "number of unique groups to use");
 
 DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
-DEFINE_uint32(maxalloc, 100'000, "maximum number of calls the block allocator can be called");
+DEFINE_uint32(maxalloc, 50'000, "maximum number of calls the block allocator can be called");
 DEFINE_bool(print_header, true, "whether to print metrics header");

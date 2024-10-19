@@ -201,7 +201,7 @@ int main(int argc, char* argv[])
             }
             mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false> ht_alloc(
                 FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
-            HashTablePreAgg ht{FLAGS_partitions, FLAGS_slots, consumer_fns, ht_alloc};
+            HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
             /* ------------ LAMBDAS ------------ */
 

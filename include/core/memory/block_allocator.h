@@ -4,6 +4,7 @@
 #include <queue>
 #include <tbb/concurrent_queue.h>
 
+#include "alloc.h"
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_alloc.h"
 #include "misc/exceptions/exceptions_alloc.h"

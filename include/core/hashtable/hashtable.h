@@ -61,6 +61,7 @@ struct BasePartitionedHashtable {
         }
     }
 
+    // TODO fill = !final_eviction
     template <bool fill = true>
     void evict(u64 part_no, PageAgg* page_to_evict, bool final_eviction = false)
     {
