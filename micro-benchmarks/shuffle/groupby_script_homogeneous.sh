@@ -8,7 +8,6 @@ PRINT_HEADER='--print_header'
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
   for THREADS in 1 4 6 12 24 30 32; do
     for NGROUPS in 1 10 100; do
-      echo $THREADS $GROUPS
       for TRY in $(seq 1 5); do
         if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
           sleep 1s
