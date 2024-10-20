@@ -25,8 +25,8 @@ using namespace std::chrono_literals;
 
 DEFINE_uint32(nthreads, 1, "number of network threads to use");
 DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
-DEFINE_uint32(slots, 16384, "number of slots to use per partition");
-DEFINE_uint32(bump, 10, "bumping factor to use when allocating memory for partition pages");
+DEFINE_uint32(slots, 8192, "number of slots to use per partition");
+DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 
 /* ----------- SCHEMA ----------- */
 
@@ -44,8 +44,9 @@ using AggregateAttributes = std::tuple<KEYS_AGG>;
 auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
-using HashTablePreAgg = hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*,
-                                                            true, mem::MMapMemoryAllocator<true>, true>;
+static constexpr bool is_salted = true;
+using HashTablePreAgg =
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -286,9 +287,8 @@ int main(int argc, char* argv[])
                 HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
                 /* ------------ LAMBDAS ------------ */
-                manager_send.register_page_consumer_fn(thread_id, [&ht_alloc, thread_id](BufferPage* pg) {
-                    ht_alloc.return_page(pg);
-                });
+                manager_send.register_page_consumer_fn(
+                    thread_id, [&ht_alloc, thread_id](BufferPage* pg) { ht_alloc.return_page(pg); });
 
                 auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
                     for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -395,11 +395,17 @@ int main(int argc, char* argv[])
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
         .log("implementation", "groupby heterogeneous"s)
+        .log("hashtable", HashTablePreAgg::get_type())
         .log("network threads", FLAGS_nthreads)
         .log("query threads", FLAGS_qthreads)
+        .log("partitions", FLAGS_partitions)
+        .log("slots", FLAGS_slots)
+        .log("groups", FLAGS_groups)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)
-        .log("network page size", defaults::network_page_size)
+        .log("tuples per local page", TablePage::max_tuples_per_page)
+        .log("hashtable page size", defaults::hashtable_page_size)
+        .log("tuples per hashtable page", BufferPage::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)

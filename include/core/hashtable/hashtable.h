@@ -83,8 +83,8 @@ struct BasePartitionedHashtable {
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
-          bool concurrent = false>
+          bool is_heterogeneous = false, bool is_salted = false, bool concurrent = false,
+          concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>>
 struct PartitionedChainedHashtable
     : public BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent> {
     using BaseHashTable = BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent>;
@@ -134,11 +134,17 @@ struct PartitionedChainedHashtable
     }
 
     void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
+
+    [[nodiscard]]
+    static std::string get_type()
+    {
+        return "chained-"s + (std::is_pointer_v<Slot> ? "direct" : "indirect");
+    }
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          bool salted = true, concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>,
-          bool is_heterogeneous = false, bool concurrent = false>
+          bool is_heterogeneous = false, bool salted = true, bool concurrent = false,
+          concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>>
 requires(sizeof(Slot) == 8)
 struct PartitionedOpenHashtable
     : public BasePartitionedHashtable<Key, Value, fn_agg, false, Slot, Alloc, is_heterogeneous, concurrent> {
@@ -238,6 +244,12 @@ struct PartitionedOpenHashtable
     }
 
     void aggregate(Key key, Value value) { aggregate(key, value, hash_tuple(key)); }
+
+    [[nodiscard]]
+    static std::string get_type()
+    {
+        return "open-"s + (std::is_pointer_v<Slot> ? "direct" : "indirect") + (salted ? "-salted" : "");
+    }
 };
 
 } // namespace hashtable

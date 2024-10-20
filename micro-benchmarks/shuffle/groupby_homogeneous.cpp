@@ -21,7 +21,7 @@ using namespace std::chrono_literals;
 /* ----------- CMD LINE PARAMS ----------- */
 
 DEFINE_uint32(threads, 1, "number of threads to use");
-DEFINE_uint32(slots, 512, "number of slots to use per partition");
+DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 
 /* ----------- SCHEMA ----------- */
@@ -40,8 +40,9 @@ using AggregateAttributes = std::tuple<KEYS_AGG>;
 auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
+static constexpr bool is_salted = true;
 using HashTablePreAgg =
-    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true>;
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, false, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -299,6 +300,7 @@ int main(int argc, char* argv[])
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
         .log("implementation", "groupby homogeneous"s)
+        .log("hashtable", HashTablePreAgg::get_type())
         .log("threads", FLAGS_threads)
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)
