@@ -11,7 +11,7 @@
 
 namespace mem {
 
-template <typename PageType, concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>,
+template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>,
           bool has_concurrent_free_pages = false>
 class BlockAllocator {
     struct BlockAllocation {
@@ -38,6 +38,8 @@ class BlockAllocator {
     }
 
   public:
+    BlockAllocator() = delete;
+
     explicit BlockAllocator(u32 block_sz, u64 max_allocations) : block_sz(block_sz), allocations_budget(max_allocations)
     {
         allocations.reserve(100);

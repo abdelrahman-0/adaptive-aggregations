@@ -7,13 +7,14 @@
 #include <tuple>
 #include <type_traits>
 
+#include "defaults.h"
 #include "misc/concepts_traits/concepts_common.h"
 #include "misc/concepts_traits/type_traits_common.h"
 
 // need 64-bit system for pointer tagging
 static_assert(sizeof(std::size_t) == 8 and sizeof(uintptr_t) == 8);
 
-static constexpr uint64_t pointer_tag_mask = (~static_cast<uint64_t>(0)) >> 16;
+static constexpr u64 pointer_tag_mask = (~static_cast<u64>(0)) >> 16;
 
 template <typename T>
 static inline auto get_pointer(void* tagged_ptr)
@@ -27,9 +28,9 @@ static inline auto get_pointer(uintptr_t tagged_ptr)
     return reinterpret_cast<T*>(tagged_ptr & pointer_tag_mask);
 }
 
-static inline uint16_t get_tag(void* tagged_ptr) { return reinterpret_cast<uintptr_t>(tagged_ptr) >> 48; }
+static inline u16 get_tag(void* tagged_ptr) { return reinterpret_cast<uintptr_t>(tagged_ptr) >> 48; }
 
-static inline uint16_t get_tag(uintptr_t tagged_ptr) { return tagged_ptr >> 48; }
+static inline u16 get_tag(uintptr_t tagged_ptr) { return tagged_ptr >> 48; }
 
 static inline auto tag_pointer(concepts::is_pointer auto ptr, std::integral auto tag)
 {
@@ -95,9 +96,9 @@ template <typename T>
 requires(sizeof(T) == 8)
 static void bin_print(T val)
 {
-    uint64_t new_val;
+    u64 new_val;
     if constexpr (std::is_pointer_v<T>) {
-        new_val = reinterpret_cast<uint64_t>(val);
+        new_val = reinterpret_cast<u64>(val);
     }
     else {
         new_val = val;

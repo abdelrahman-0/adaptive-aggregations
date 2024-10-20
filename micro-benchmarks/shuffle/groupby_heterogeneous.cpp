@@ -2,16 +2,20 @@
 #include <thread>
 
 #include "common/alignment.h"
+#include "core/buffer/tuple_buffer.h"
+#include "core/hashtable/hashtable.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
 #include "defaults.h"
+#include "misc/exceptions/exceptions_misc.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
 #include "ubench/common_flags.h"
 #include "ubench/debug.h"
+#include "ubench/heterogeneous_thread_group.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 
@@ -21,20 +25,34 @@ using namespace std::chrono_literals;
 
 DEFINE_uint32(nthreads, 1, "number of network threads to use");
 DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
+DEFINE_uint32(slots, 16384, "number of slots to use per partition");
+DEFINE_uint32(bump, 10, "bumping factor to use when allocating memory for partition pages");
 
 /* ----------- SCHEMA ----------- */
 
-#define SCHEMA u64, u32, u32, std::array<char, 4>
+#define KEYS_AGG u64
+#define KEYS_IDX 0
+#define KEYS_GRP u64
+#define SCHEMA KEYS_GRP, u32, u32, std::array<char, 4>
 
 using TablePage = PageLocal<SCHEMA>;
-using ResultTuple = std::tuple<SCHEMA>;
-using ResultPage = PageLocal<ResultTuple>;
+
+/* ----------- GROUP BY ----------- */
+
+using GroupAttributes = std::tuple<KEYS_GRP>;
+using AggregateAttributes = std::tuple<KEYS_AGG>;
+auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
+    std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
+};
+using HashTablePreAgg = hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*,
+                                                            true, mem::MMapMemoryAllocator<true>, true>;
+using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
 
-using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
-using IngressManager = ConcurrentIngressNetworkManager<NetworkPage>;
-using EgressManager = ConcurrentBufferedEgressNetworkManager<NetworkPage>;
+using IngressManager = HeterogeneousIngressNetworkManager<BufferPage>;
+using EgressManager = HeterogeneousEgressNetworkManager<BufferPage>;
+using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, BufferPage>;
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -51,20 +69,14 @@ std::tuple<u16, u16> find_dedicated_nthread(std::integral auto qthread_id)
     return {dedicated_nthread, qthreads_per_nthread};
 }
 
-ALWAYS_INLINE void consume_ingress(IngressManager& manager_recv)
-{
-    auto* network_page = manager_recv.try_dequeue_page();
-    while (network_page) {
-        manager_recv.done_page(network_page);
-        network_page = manager_recv.try_dequeue_page();
-    }
-}
-
 /* ----------- MAIN ----------- */
 
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    FLAGS_slots = next_power_2(FLAGS_slots);
 
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
@@ -76,15 +88,13 @@ int main(int argc, char* argv[])
     print("--------------");
 
     if (FLAGS_nthreads > FLAGS_qthreads) {
-        print("invalid combination of options!");
-        std::exit(0);
+        throw InvalidOptionError{"Number of query threads must not be less than number of network threads"};
     }
 
     /* ----------- DATA LOAD ----------- */
 
-    bool random_table = FLAGS_random;
-    Table table{random_table};
-    if (random_table) {
+    Table table{FLAGS_random};
+    if (FLAGS_random) {
         table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
     }
     else {
@@ -107,7 +117,7 @@ int main(int argc, char* argv[])
     auto& swips = table.get_swips();
 
     // prepare cache
-    u32 num_pages_cache = random_table ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
+    u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
     Cache<TablePage> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
@@ -120,7 +130,7 @@ int main(int argc, char* argv[])
     // control atomics
     std::vector<CachelineAlignedAtomic<bool>> nthread_continue(FLAGS_nthreads);
     std::fill(nthread_continue.begin(), nthread_continue.end(), true);
-    std::atomic<u64> pages_recv{0};
+    DEBUGGING(std::atomic<u64> pages_recv{0});
 
     // barriers
     ::pthread_barrier_t barrier_start{};
@@ -129,211 +139,237 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_nthreads + FLAGS_qthreads + 1);
 
     // networking
-    std::vector<EgressManager*> egress_managers(FLAGS_nthreads);
-    std::vector<IngressManager*> ingress_managers(FLAGS_nthreads);
+    std::vector<ThreadGroup> thread_grps(FLAGS_nthreads, ThreadGroup{npeers * 10, FLAGS_maxalloc});
     ::pthread_barrier_t barrier_network{};
     ::pthread_barrier_init(&barrier_network, nullptr, FLAGS_nthreads + 1);
-    std::vector<std::thread> threads_network{};
+    std::vector<std::jthread> threads_network{};
     for (auto thread_id{0u}; thread_id < FLAGS_nthreads; ++thread_id) {
-        threads_network.emplace_back([=, &topology, &egress_managers, &ingress_managers, &barrier_network, &barrier_end,
-                                      &nthread_continue, &pages_recv]() {
-            if (FLAGS_pin) {
-                topology.pin_thread(thread_id);
-            }
-
-            /* ----------- NETWORK I/O ----------- */
-
-            // setup connections to each node, forming a logical clique topology
-            // note that connections need to be setup in a particular order to avoid deadlocks!
-            std::vector<int> socket_fds{};
-
-            // accept from [0, node_id)
-            if (node_id) {
-                Connection conn{node_id, FLAGS_nthreads, thread_id, node_id};
-                conn.setup_ingress();
-                socket_fds = std::move(conn.socket_fds);
-            }
-
-            // connect to [node_id + 1, FLAGS_nodes)
-            for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
-                Connection conn{node_id, FLAGS_nthreads, thread_id, destination_ip, 1};
-                conn.setup_egress(i);
-                socket_fds.emplace_back(conn.socket_fds[0]);
-            }
-
-            auto qthreads_per_nthread =
-                (FLAGS_qthreads / FLAGS_nthreads) + (thread_id < (FLAGS_qthreads % FLAGS_nthreads));
-
-            EgressManager manager_send{
-                static_cast<u16>(npeers),         FLAGS_depthnw, npeers * FLAGS_bufs_per_peer * qthreads_per_nthread,
-                static_cast<u16>(FLAGS_nthreads), FLAGS_sqpoll,  socket_fds};
-            egress_managers[thread_id] = &manager_send;
-
-            IngressManager manager_recv{static_cast<u16>(npeers), FLAGS_depthnw,
-                                        npeers * FLAGS_bufs_per_peer * qthreads_per_nthread, FLAGS_sqpoll, socket_fds};
-            ingress_managers[thread_id] = &manager_recv;
-
-            for (auto dst{0u}; dst < npeers; ++dst) {
-                manager_recv.post_recvs(dst);
-            }
-
-            // barrier
-            ::pthread_barrier_wait(&barrier_network);
-
-            // network loop
-            while (nthread_continue[thread_id].val) {
-                manager_recv.try_drain_done();
-                for (auto dst{0u}; dst < npeers; ++dst) {
-                    manager_send.try_flush(dst);
+        threads_network.emplace_back(
+            [=, &topology, &thread_grps, &barrier_network, &barrier_end, &nthread_continue DEBUGGING(, &pages_recv)]() {
+                if (FLAGS_pin) {
+                    topology.pin_thread(thread_id);
                 }
-                if (manager_recv.pending()) {
+
+                /* ----------- NETWORK I/O ----------- */
+
+                // setup connections to each node, forming a logical clique topology
+                // note that connections need to be setup in a particular order to avoid deadlocks!
+                std::vector<int> socket_fds{};
+
+                // accept from [0, node_id)
+                if (node_id) {
+                    Connection conn{node_id, FLAGS_nthreads, thread_id, node_id};
+                    conn.setup_ingress();
+                    socket_fds = std::move(conn.socket_fds);
+                }
+
+                // connect to [node_id + 1, FLAGS_nodes)
+                for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
+                    auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
+                    Connection conn{node_id, FLAGS_nthreads, thread_id, destination_ip, 1};
+                    conn.setup_egress(i);
+                    socket_fds.emplace_back(conn.socket_fds[0]);
+                }
+
+                auto qthreads_per_nthread =
+                    (FLAGS_qthreads / FLAGS_nthreads) + (thread_id < (FLAGS_qthreads % FLAGS_nthreads));
+
+                EgressManager manager_send{static_cast<u16>(npeers),
+                                           FLAGS_depthnw,
+                                           static_cast<u16>(FLAGS_nthreads),
+                                           FLAGS_sqpoll,
+                                           socket_fds,
+                                           FLAGS_qthreads};
+                IngressManager manager_recv{static_cast<u16>(npeers), FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+
+                auto* recv_alloc = &(thread_grps[thread_id].ingress_block_alloc);
+
+                thread_grps[thread_id].egress_mgr = &manager_send;
+                thread_grps[thread_id].ingress_mgr = &manager_recv;
+
+                // barrier
+                ::pthread_barrier_wait(&barrier_network);
+
+                // network loop
+                while (nthread_continue[thread_id].val) {
+                    manager_recv.try_drain_done();
                     for (auto dst{0u}; dst < npeers; ++dst) {
-                        manager_recv.post_recvs(dst);
+                        manager_send.try_flush(dst);
                     }
+                    manager_send.try_drain_done();
                 }
-                manager_send.try_drain_done();
-            }
-            manager_send.wait_all();
-            ::pthread_barrier_wait(&barrier_end);
-            pages_recv += manager_recv.get_pages_recv();
-        });
+                manager_send.wait_all();
+                ::pthread_barrier_wait(&barrier_end);
+                DEBUGGING(pages_recv += manager_recv.get_pages_recv());
+            });
     }
     ::pthread_barrier_wait(&barrier_network);
 
     // query processing
     std::atomic<u32> current_swip{0};
-    std::atomic<u64> tuples_processed{0};
-    std::atomic<u64> tuples_sent{0};
-    std::atomic<u64> tuples_received{0};
+    DEBUGGING(std::atomic<u64> tuples_local{0});
+    DEBUGGING(std::atomic<u64> tuples_sent{0});
+    DEBUGGING(std::atomic<u64> tuples_received{0});
 
     std::vector<CachelineAlignedAtomic<u32>> qthreads_done(FLAGS_nthreads);
     std::vector<CachelineAlignedAtomic<u32>> added_last_page(FLAGS_nthreads);
     std::fill(qthreads_done.begin(), qthreads_done.end(), 0);
 
-    std::vector<std::thread> threads_query;
-    for (auto thread_id{0u}; thread_id < FLAGS_qthreads; ++thread_id) {
-        threads_query.emplace_back([=, &topology, &current_swip, &swips, &table, &tuples_processed, &tuples_sent,
-                                    &tuples_received, &pages_recv, &barrier_start, &barrier_end, &added_last_page,
-                                    &egress_managers, &qthreads_done, &nthread_continue]() {
-            if (FLAGS_pin) {
-                topology.pin_thread(thread_id + FLAGS_nthreads);
-            }
+    std::vector<std::jthread> threads_query;
+    for (u64 thread_id{0u}; thread_id < FLAGS_qthreads; ++thread_id) {
+        threads_query.emplace_back(
+            [=, &topology, &current_swip, &swips, &table, &barrier_start, &barrier_end, &added_last_page,
+             &qthreads_done, &nthread_continue,
+             &thread_grps DEBUGGING(, &tuples_local, &tuples_sent, &tuples_received, &pages_recv)]() {
+                if (FLAGS_pin) {
+                    topology.pin_thread(thread_id + FLAGS_nthreads);
+                }
 
-            /* -------- THREAD MAPPING -------- */
+                /* -------- THREAD MAPPING -------- */
 
-            auto [dedicated_network_thread, qthreads_per_nthread] = find_dedicated_nthread(thread_id);
-            auto& manager_send = *egress_managers[dedicated_network_thread];
-            auto& manager_recv = *ingress_managers[dedicated_network_thread];
-            DEBUGGING(print("assigning qthread", thread_id, "to nthread", dedicated_network_thread));
+                auto [dedicated_network_thread, qthreads_per_nthread] = find_dedicated_nthread(thread_id);
+                IngressManager& manager_recv = *thread_grps[dedicated_network_thread].ingress_mgr;
+                EgressManager& manager_send = *thread_grps[dedicated_network_thread].egress_mgr;
+                DEBUGGING(print("assigning qthread", thread_id, "to nthread", dedicated_network_thread));
 
-            /* ----------- LOCAL I/O ----------- */
+                /* ----------- BUFFERS ----------- */
 
-            // setup local uring manager
-            IO_Manager thread_io{FLAGS_depthio, FLAGS_sqpoll};
-            if (not FLAGS_path.empty()) {
-                thread_io.register_files({table.get_file().get_file_descriptor()});
-            }
+                TupleBuffer<BufferPage> tuple_buffer;
+                std::vector<TablePage> local_buffers(defaults::local_io_depth);
+                u64 local_tuples_processed{0};
+                u64 local_tuples_sent{0};
+                u64 local_tuples_received{0};
 
-            /* ------------ BUFFERS ------------ */
+                /* ----------- LOCAL I/O ----------- */
 
-            std::vector<NetworkPage*> active_buffers(npeers);
-            for (auto*& page_ptr : active_buffers) {
-                page_ptr = manager_send.get_new_page();
-            }
-            std::vector<TablePage> local_buffers(defaults::local_io_depth);
+                // setup local uring manager
+                IO_Manager thread_io{FLAGS_depthio, FLAGS_sqpoll};
+                if (not FLAGS_path.empty()) {
+                    thread_io.register_files({table.get_file().get_file_descriptor()});
+                }
 
-            /* ------------ LAMBDAS ------------ */
+                /* ------------ GROUP BY ------------ */
 
-            auto process_local_page = [node_id, &manager_send, &active_buffers](const TablePage& page) {
-                for (auto j{0u}; j < page.num_tuples; ++j) {
-                    // hash tuple
-                    auto tup = page.get_tuple<0, 1, 2, 3>(j);
-                    auto dst = hash_key(std::get<0>(tup)) % FLAGS_nodes;
+                u32 part_offset{0};
+                std::vector<HashTablePreAgg::ConsumerFn> consumer_fns{};
+                for (u32 part{0}; part < FLAGS_partitions; ++part) {
+                    u16 dst = (part * FLAGS_nodes) / FLAGS_partitions;
+                    auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
+                    bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
+                    part_offset += final_dst_partition ? parts_per_dst : 0;
                     if (dst == node_id) {
+                        consumer_fns.emplace_back([&tuple_buffer](BufferPage* pg, bool) {
+                            if (not pg->empty()) {
+                                pg->retire();
+                                tuple_buffer.add_page(pg);
+                            }
+                        });
                     }
                     else {
                         auto actual_dst = dst - (dst > node_id);
-                        auto* dst_page = active_buffers[actual_dst];
-                        if (dst_page->full()) {
-                            manager_send.enqueue_page(actual_dst, dst_page);
-                            dst_page = manager_send.get_new_page();
-                            active_buffers[actual_dst] = dst_page;
-                        }
-                        dst_page->emplace_back<0, 1, 2, 3>(tup);
+                        consumer_fns.emplace_back([&manager_send, actual_dst, final_dst_partition,
+                                                   thread_id](BufferPage* pg, bool is_last = false) {
+                            if (not pg->empty() or final_dst_partition) {
+                                pg->retire();
+                                if (is_last and final_dst_partition) {
+                                    pg->set_last_page();
+                                }
+                                manager_send.enqueue_page(actual_dst,
+                                                          reinterpret_cast<BufferPage*>(
+                                                              (reinterpret_cast<uintptr_t>(pg) | (thread_id << 56))));
+                            }
+                        });
                     }
                 }
-            };
+                mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, true> ht_alloc(
+                    FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
+                HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
-            // barrier
-            ::pthread_barrier_wait(&barrier_start);
+                /* ------------ LAMBDAS ------------ */
+                manager_send.register_page_consumer_fn(thread_id, [&ht_alloc, thread_id](BufferPage* pg) {
+                    ht_alloc.return_page(pg);
+                });
 
-            /* ----------- BEGIN ----------- */
+                auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
+                    for (auto j{0u}; j < page.num_tuples; ++j) {
+                        auto group = page.get_tuple<KEYS_IDX>(j);
+                        auto agg = std::make_tuple<KEYS_AGG>(1);
+                        ht.aggregate(group, agg);
+                    }
+                    DEBUGGING(local_tuples_processed += page.num_tuples);
+                };
 
-            // morsel loop
-            u32 morsel_begin, morsel_end;
-            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
+                auto consume_ingress = [&manager_recv, &tuple_buffer]() {
+                    BufferPage* page = manager_recv.try_dequeue_page();
+                    if (page) {
+                        tuple_buffer.add_page(page);
+                    }
+                };
 
-                if (manager_recv.pending() or manager_recv.pending_pages()) {
-                    consume_ingress(manager_recv);
+                // barrier
+                ::pthread_barrier_wait(&barrier_start);
+
+                /* ----------- BEGIN ----------- */
+
+                // morsel loop
+                u32 morsel_begin, morsel_end;
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
+
+                    if (manager_recv.pending()) {
+                        consume_ingress();
+                    }
+
+                    // partition swips such that unswizzled swips are at the beginning of the morsel
+                    auto swizzled_idx = std::stable_partition(swips.data() + morsel_begin, swips.data() + morsel_end,
+                                                              [](const Swip& swip) { return !swip.is_pointer(); }) -
+                                        swips.data();
+
+                    // submit io requests before processing in-memory pages to overlap I/O with computation
+                    if (swizzled_idx > morsel_begin) {
+                        thread_io.batch_async_io<READ>(
+                            table.segment_id, std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx},
+                            local_buffers, true);
+                    }
+
+                    TablePage* page_to_process;
+                    while (swizzled_idx < morsel_end) {
+                        page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
+                        process_local_page(*page_to_process);
+                    }
+                    while (thread_io.has_inflight_requests()) {
+                        page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
+                        process_local_page(*page_to_process);
+                    }
                 }
 
-                // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx = std::stable_partition(swips.data() + morsel_begin, swips.data() + morsel_end,
-                                                          [](const Swip& swip) { return !swip.is_pointer(); }) -
-                                    swips.data();
-
-                // submit io requests before processing in-memory pages to overlap I/O with computation
-                if (swizzled_idx > morsel_begin) {
-                    thread_io.batch_async_io<READ>(
-                        table.segment_id, std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx},
-                        local_buffers, true);
-                }
-
-                TablePage* page_to_process;
-                while (swizzled_idx < morsel_end) {
-                    page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
-                    process_local_page(*page_to_process);
-                }
-                while (thread_io.has_inflight_requests()) {
-                    page_to_process = thread_io.get_next_page<decltype(page_to_process)>();
-                    process_local_page(*page_to_process);
-                }
-            }
-
-            // flush all
-            bool last_thread{false};
-            if (qthreads_done[dedicated_network_thread].val++ == qthreads_per_nthread - 1) {
-                last_thread = true;
-                // wait for other qthreads to add their active pages
-                while (added_last_page[dedicated_network_thread].val != qthreads_per_nthread - 1)
-                    ;
-                for (auto dst{0u}; dst < npeers; ++dst) {
-                    manager_send.enqueue_page<true>(dst, active_buffers[dst]);
+                bool last_thread{false};
+                if (qthreads_done[dedicated_network_thread].val++ == qthreads_per_nthread - 1) {
+                    last_thread = true;
+                    // wait for other qthreads to add their active pages
+                    while (added_last_page[dedicated_network_thread].val != qthreads_per_nthread - 1)
+                        ;
+                    ht.finalize(true);
                     manager_send.finished_egress();
                 }
-            }
-            else {
-                for (auto dst{0u}; dst < npeers; ++dst) {
-                    manager_send.enqueue_page(dst, active_buffers[dst]);
+                else {
+                    ht.finalize(false);
+                    added_last_page[dedicated_network_thread].val++;
                 }
-                added_last_page[dedicated_network_thread].val++;
-            }
 
-            // wait for ingress
-            while (manager_recv.pending() or manager_recv.pending_pages()) {
-                consume_ingress(manager_recv);
-            }
+                // wait for ingress
+                while (manager_recv.pending()) {
+                    consume_ingress();
+                }
 
-            if (last_thread) {
-                nthread_continue[dedicated_network_thread] = false;
-            }
-            // barrier
-            ::pthread_barrier_wait(&barrier_end);
+                if (last_thread) {
+                    nthread_continue[dedicated_network_thread] = false;
+                }
+                // barrier
+                ::pthread_barrier_wait(&barrier_end);
 
-            /* ----------- END ----------- */
-        });
+                /* ----------- END ----------- */
+            });
     }
 
     Stopwatch swatch{};
@@ -342,46 +378,34 @@ int main(int argc, char* argv[])
     ::pthread_barrier_wait(&barrier_end);
     swatch.stop();
 
-    for (auto& t : threads_query) {
-        t.join();
-    }
-    for (auto& t : threads_network) {
-        t.join();
-    }
-
     ::pthread_barrier_destroy(&barrier_network);
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);
 
-    // clang-format off
-    DEBUGGING(
-        print("tuples received:", tuples_received.load());
-        print("tuples sent:", tuples_sent.load());
-        print("tuples processed:", tuples_processed.load());
-        u64 pages_local = (tuples_processed + ResultPage::max_tuples_per_page - 1) / ResultPage::max_tuples_per_page;
-        u64 local_sz = pages_local * defaults::local_page_size;
-        u64 recv_sz = pages_recv * defaults::network_page_size;
-    )
+    DEBUGGING(print("tuples received:", tuples_received.load()));
+    DEBUGGING(print("tuples sent:", tuples_sent.load()));
+    DEBUGGING(print("tuples processed:", tuples_local.load()));
+    DEBUGGING(u64 pages_local = (tuples_local + BufferPage::max_tuples_per_page - 1) / BufferPage::max_tuples_per_page);
+    DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);
+    DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);
+    DEBUGGING(u64 tuples_processed = tuples_received + tuples_local);
 
     Logger{FLAGS_print_header}
         .log("node id", node_id)
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
-        .log("implementation", "shuffle heterogeneous"s)
+        .log("implementation", "groupby heterogeneous"s)
         .log("network threads", FLAGS_nthreads)
         .log("query threads", FLAGS_qthreads)
         .log("total pages", FLAGS_npages)
-        .log("recv pages", pages_recv)
         .log("local page size", defaults::local_page_size)
         .log("network page size", defaults::network_page_size)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
-        .log("buffers per peer", FLAGS_bufs_per_peer)
         .log("cache (%)", FLAGS_cache)
-        .log("time (ms)", swatch.time_ms)
-        DEBUGGING(
-        .log("tuple throughput (tuples/s)", ((tuples_received + tuples_processed) * 1000) / swatch.time_ms)
-        .log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms))
-        .log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))
-        );
+        .log("time (ms)", swatch.time_ms)                                                            //
+        DEBUGGING(.log("recv pages", pages_recv))                                                    //
+        DEBUGGING(.log("tuple throughput (tuples/s)", (tuples_processed * 1000) / swatch.time_ms))   //
+        DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
+        DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
 }

@@ -45,24 +45,17 @@ class Table {
     auto& get_swips() { return swips; }
 
     template <concepts::is_page CachePage>
-    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io) {
+    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io)
+    {
         std::vector<std::jthread> threads;
         std::atomic<u32> current_swip;
         if (random_contents) {
-            // populate cache using all available threads
-            for (auto thread{0u}; thread < std::thread::hardware_concurrency(); ++thread) {
-                threads.emplace_back([&]() {
-                    u32 local_swip, end_swip, batch_sz{10};
-                    while ((local_swip = current_swip.fetch_add(batch_sz)) < num_pages_cache) {
-                        end_swip = std::min(num_pages_cache, local_swip + batch_sz);
-                        for (; local_swip < end_swip; ++local_swip) {
-                            auto& page = cache.get_page(local_swip);
-                            page.num_tuples = CachePage::max_tuples_per_page;
-                            page.fill_random();
-                            swips[local_swip].set_pointer(&page);
-                        }
-                    }
-                });
+            // populate cache using 1 thread
+            for (u64 idx{0}; idx < num_pages_cache; ++idx) {
+                auto& page = cache.get_page(idx);
+                page.num_tuples = CachePage::max_tuples_per_page;
+                page.fill_random();
+                swips[idx].set_pointer(&page);
             }
         }
         else {

@@ -25,7 +25,7 @@ namespace hashtable {
 enum TagType : u8 { NONE, BLOOM, SALT };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), bool is_entry_chained,
-          concepts::is_slot Slot, concepts::is_allocator Alloc, bool is_heterogeneous, bool concurrent>
+          concepts::is_slot Slot, concepts::is_mem_allocator Alloc, bool is_heterogeneous, bool concurrent>
 struct BasePartitionedHashtable {
     using PageAgg = PageAggregation<Slot, Key, Value, is_entry_chained, std::is_pointer_v<Slot>>;
     using ConsumerFn = std::function<void(PageAgg*, bool)>;
@@ -74,16 +74,16 @@ struct BasePartitionedHashtable {
     }
 
   public:
-    void finalize()
+    void finalize(bool last_thread = true)
     {
         for (u32 part_no{0}; part_no < npartitions; ++part_no) {
-            evict<false>(part_no, partitions[part_no], true);
+            evict<false>(part_no, partitions[part_no], last_thread);
         }
     }
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
+          concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>, bool is_heterogeneous = false,
           bool concurrent = false>
 struct PartitionedChainedHashtable
     : public BasePartitionedHashtable<Key, Value, fn_agg, true, Slot, Alloc, is_heterogeneous, concurrent> {
@@ -137,7 +137,7 @@ struct PartitionedChainedHashtable
 };
 
 template <typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_slot Slot = void*,
-          bool salted = true, concepts::is_allocator Alloc = mem::MMapMemoryAllocator<true>,
+          bool salted = true, concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>,
           bool is_heterogeneous = false, bool concurrent = false>
 requires(sizeof(Slot) == 8)
 struct PartitionedOpenHashtable

@@ -11,6 +11,8 @@ namespace concepts {
 // concept wrappers for type traits
 // needed for passing auto args
 template <typename T>
+concept is_void = std::is_void_v<T>;
+template <typename T>
 concept is_pointer = std::is_pointer_v<T>;
 template <typename T>
 concept is_array = type_traits::is_array_v<T>;
