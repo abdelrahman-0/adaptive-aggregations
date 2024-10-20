@@ -22,7 +22,7 @@ using namespace std::chrono_literals;
 
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, 512, "number of slots to use per partition");
-DEFINE_uint32(bump, 10, "bumping factor to use when allocating memory for partition pages");
+DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 
 /* ----------- SCHEMA ----------- */
 
@@ -46,7 +46,8 @@ using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
 
-using IngressManager = IngressNetworkManager<BufferPage>;
+using BlockAlloc = mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false>;
+using IngressManager = IngressNetworkManager<BufferPage, BlockAlloc>;
 using EgressManager = EgressNetworkManager<BufferPage>;
 
 /* ----------- MAIN ----------- */
@@ -156,7 +157,10 @@ int main(int argc, char* argv[])
 
             auto npeers = FLAGS_nodes - 1;
             auto ingress_consumer_fn = [&tuple_buffer](BufferPage* pg) { tuple_buffer.add_page(pg); };
-            IngressManager manager_recv{npeers, FLAGS_depthnw, 0, FLAGS_sqpoll, socket_fds, ingress_consumer_fn};
+
+            BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
+            IngressManager manager_recv{npeers,     FLAGS_depthnw,       FLAGS_sqpoll,
+                                        socket_fds, ingress_consumer_fn, recv_alloc};
             EgressManager manager_send{npeers, FLAGS_depthnw, 0, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
@@ -199,8 +203,7 @@ int main(int argc, char* argv[])
                         });
                 }
             }
-            mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false> ht_alloc(
-                FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
+            BlockAlloc ht_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
             /* ------------ LAMBDAS ------------ */

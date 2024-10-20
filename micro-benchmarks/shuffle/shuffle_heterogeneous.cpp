@@ -319,8 +319,8 @@ int main(int argc, char* argv[])
                         ;
                     for (auto dst{0u}; dst < npeers; ++dst) {
                         manager_send.enqueue_page<true>(dst, active_buffers[dst]);
-                        manager_send.finished_egress();
                     }
+                    manager_send.finished_egress();
                 }
                 else {
                     for (auto dst{0u}; dst < npeers; ++dst) {
