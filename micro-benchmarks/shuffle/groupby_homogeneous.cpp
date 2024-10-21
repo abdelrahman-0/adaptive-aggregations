@@ -42,7 +42,7 @@ auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& ag
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg =
-    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, false, is_salted>;
+    hashtable::PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, false, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */

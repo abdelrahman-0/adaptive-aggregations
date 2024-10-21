@@ -1,7 +1,5 @@
 // Abdelrahman Adel (2024)
 
-// inspired by Maximilian Kuschewski (2023)
-
 #pragma once
 #include <atomic>
 #include <cmath>
