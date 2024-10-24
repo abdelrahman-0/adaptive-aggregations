@@ -9,8 +9,8 @@
 #include "defaults.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
+#include "ubench/bench.h"
 #include "ubench/common_flags.h"
-#include "ubench/debug.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 

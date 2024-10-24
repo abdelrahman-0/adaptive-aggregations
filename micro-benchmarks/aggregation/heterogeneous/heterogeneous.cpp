@@ -13,9 +13,9 @@
 #include "misc/exceptions/exceptions_misc.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
-#include "ubench/common_flags.h"
-#include "ubench/debug.h"
-#include "ubench/heterogeneous_thread_group.h"
+#include "bench/bench.h"
+#include "bench/common_flags.h"
+#include "bench/heterogeneous_thread_group.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 
@@ -46,7 +46,7 @@ auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& ag
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg =
-    hashtable::PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true, is_salted>;
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -235,7 +235,7 @@ int main(int argc, char* argv[])
 
                 /* ----------- BUFFERS ----------- */
 
-                TupleBuffer<BufferPage> tuple_buffer;
+                PageBuffer<BufferPage> tuple_buffer;
                 std::vector<TablePage> local_buffers(defaults::local_io_depth);
                 u64 local_tuples_processed{0};
                 u64 local_tuples_sent{0};

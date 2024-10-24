@@ -58,11 +58,11 @@ struct Swip {
         return (val & highest_bit_mask) * defaults::local_page_size;
     }
 
-    template <concepts::is_pointer T>
+    template <typename T>
     [[nodiscard]]
     ALWAYS_INLINE auto get_pointer() const
     {
-        return reinterpret_cast<T>(val);
+        return reinterpret_cast<T*>(val);
     }
 
     std::ostream& operator<<(std::ostream& out) const

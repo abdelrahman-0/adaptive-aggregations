@@ -1,14 +1,14 @@
 #pragma once
 
+#include <tbb/concurrent_vector.h>
 #include <vector>
 
 #include "defaults.h"
 
-template <typename BufferPage>
-struct TupleBuffer {
+template <typename BufferPage, bool is_concurrent = false>
+struct PageBuffer {
     u64 num_tuples{0};
-    // TODO tbb::concurrent vector?
-    std::vector<BufferPage*> pages;
+    std::conditional_t<is_concurrent, tbb::concurrent_vector<BufferPage*>, std::vector<BufferPage*>> pages;
 
     void add_page(BufferPage* page)
     {

@@ -1,8 +1,8 @@
-// inspired by Maximilian Kuschewski (2023)
-
 #pragma once
 
 #include <cassert>
+
+#include "likwid-marker.h"
 
 #ifdef NDEBUG
 #define DEBUGGING(x...)
@@ -11,8 +11,3 @@
 #define DEBUGGING(x...) x
 #define ASSERT(expr) assert((expr))
 #endif
-
-namespace ubench{
-
-
-}

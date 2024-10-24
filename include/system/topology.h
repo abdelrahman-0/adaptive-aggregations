@@ -3,9 +3,12 @@
 #include <fstream>
 #include <thread>
 
+#include "bench/bench.h"
 #include "utils/utils.h"
 
 using namespace std::string_literals;
+
+namespace sys {
 
 struct NodeTopology {
     struct ThreadInfo {
@@ -14,18 +17,19 @@ struct NodeTopology {
     };
 
     std::vector<ThreadInfo> threads;
-    u16 nthreads_sys{0};
-    u16 nphysical_cores{0};
+    u32 nthreads_sys{0};
+    u32 requested_threads{0};
+    u32 nphysical_cores{0};
     u16 threads_per_core{0};
-    u16 requested_threads{0};
     bool compact_assignment{false};
     std::mutex print_mut{};
 
-    explicit NodeTopology(u16 requested_threads) : requested_threads(requested_threads) {};
+    explicit NodeTopology(u32 requested_threads) : requested_threads(requested_threads) {};
 
     // inspired by LIKWID's topology parsing
     // https://github.com/RRZE-HPC/likwid/blob/master/src/topology_proc.c#L606
-    void init() {
+    void init()
+    {
         nthreads_sys = std::thread::hardware_concurrency();
         threads.resize(nthreads_sys);
         for (auto tid{0}; tid < nthreads_sys; ++tid) {
@@ -59,19 +63,16 @@ struct NodeTopology {
     // set affinity of calling thread
     // (core granularity is used to allow threads to float between different hyper-threads) as recommended here:
     // https://www.intel.com/content/www/us/en/docs/dpcpp-cpp-compiler/developer-guide-reference/2023-0/thread-affinity-interface.html
-    void pin_thread(int tid) {
-        if (tid >= nthreads_sys) {
-            logln("oversubscription: reduce number of threads");
-            std::exit(0);
-        }
-
+    void pin_thread(int tid)
+    {
         ::cpu_set_t mask;
         CPU_ZERO(&mask);
         int cpu;
         if (threads_per_core == 1) {
             cpu = tid;
             CPU_SET(cpu, &mask);
-        } else {
+        }
+        else {
             // first determine physical core
             auto num_siblings = (requested_threads > nphysical_cores) ? requested_threads - nphysical_cores : 0;
             bool has_sibling = (tid / threads_per_core) < num_siblings;
@@ -80,11 +81,11 @@ struct NodeTopology {
             // then determine the logical CPU (pin to both hyper-threads)
             cpu = compact_assignment ? physical_core * threads_per_core : physical_core;
             CPU_SET(cpu, &mask);
-            log_thread_pinned(tid, cpu);
+            DEBUGGING(log_thread_pinned(tid, cpu));
 
             cpu += compact_assignment ? 1 : nphysical_cores;
             CPU_SET(cpu, &mask);
-            log_thread_pinned(tid, cpu);
+            DEBUGGING(log_thread_pinned(tid, cpu));
         }
 
         if (::sched_setaffinity(0, sizeof(mask), &mask)) {
@@ -93,8 +94,11 @@ struct NodeTopology {
         }
     }
 
-    void log_thread_pinned(std::integral auto tid, std::integral auto cpu) {
+    void log_thread_pinned(std::integral auto tid, std::integral auto cpu)
+    {
         std::unique_lock _{print_mut};
         print("pinning thread", tid, "to cpu", cpu);
     }
 };
+
+} // namespace sys

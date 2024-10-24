@@ -6,20 +6,40 @@
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_alloc.h"
 
-template <typename BufferPage>
+template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc,
+          typename ConsumerFn = std::function<void(BufferPage*, bool /* final eviction? */)>>
 class PartitionBuffer {
-    using ConsumerFn = std::function<void(BufferPage*, bool)>;
 
   private:
     std::vector<BufferPage*> partitions;
-    mem::BlockAllocator<BufferPage> block_alloc;
+    std::vector<ConsumerFn> consumer_fns;
+    BlockAlloc& block_alloc;
 
   public:
-    PartitionBuffer(u16 npartitions, u32 block_sz, u64 max_allocations)
-        : partitions(npartitions), block_alloc(block_sz, max_allocations)
+    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc) : partitions(npartitions), block_alloc(block_alloc)
     {
+        // alloc partitions
         for (auto& part : partitions) {
             part = block_alloc.get_page();
+            part->clear_tuples();
+        }
+    }
+
+    ALWAYS_INLINE BufferPage* get_partition_page(u32 part) const { return partitions[part]; }
+
+    [[maybe_unused]]
+    BufferPage* evict(u64 part_no, bool final_eviction = false)
+    {
+        auto*& part_page = partitions[part_no];
+        consumer_fns[part_no](part_page, final_eviction);
+        part_page = block_alloc.get_page();
+        return part_page;
+    }
+
+    void finalize(bool final_eviction = true)
+    {
+        for (u32 part_no{0}; part_no < partitions.size(); ++part_no) {
+            evict(part_no, final_eviction);
         }
     }
 };

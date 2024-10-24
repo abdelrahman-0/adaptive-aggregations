@@ -2,6 +2,8 @@
 #include <span>
 #include <thread>
 
+#include "bench/bench.h"
+#include "bench/common_flags.h"
 #include "core/buffer/tuple_buffer.h"
 #include "core/hashtable/hashtable.h"
 #include "core/network/connection.h"
@@ -11,8 +13,6 @@
 #include "defaults.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
-#include "ubench/common_flags.h"
-#include "ubench/debug.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 
@@ -42,7 +42,7 @@ auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& ag
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg =
-    hashtable::PartitionedChainedHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, false, is_salted>;
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, false, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -103,8 +103,7 @@ int main(int argc, char* argv[])
     /* ----------- THREAD SETUP ----------- */
 
     // control atomics
-    NodeTopology topology{static_cast<u16>(FLAGS_threads)};
-    topology.init();
+
     ::pthread_barrier_t barrier_start{};
     ::pthread_barrier_t barrier_end{};
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
@@ -148,7 +147,7 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
-            TupleBuffer<BufferPage> tuple_buffer;
+            PageBuffer<BufferPage> tuple_buffer;
             std::vector<TablePage> local_buffers(defaults::local_io_depth);
             u64 local_tuples_processed{0};
             u64 local_tuples_sent{0};

@@ -75,12 +75,11 @@ class IO_Manager {
         }
     }
 
-    template <typename BufferPagePtr>
-    requires std::is_pointer_v<BufferPagePtr>
+    template <typename BufferPage>
     auto* get_next_page()
     {
         wait(1);
-        auto* result = reinterpret_cast<BufferPagePtr>(cqes[0]->user_data);
+        auto* result = reinterpret_cast<BufferPage*>(cqes[0]->user_data);
         seen(1);
         return result;
     }
