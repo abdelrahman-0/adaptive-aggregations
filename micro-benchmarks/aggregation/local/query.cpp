@@ -50,8 +50,10 @@ int main(int argc, char* argv[])
 
     // control atomics
     ::pthread_barrier_t barrier_start{};
+    ::pthread_barrier_t barrier_preagg{};
     ::pthread_barrier_t barrier_end{};
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
+    ::pthread_barrier_init(&barrier_preagg, nullptr, FLAGS_threads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     DEBUGGING(std::atomic<u64> tuples_processed{0});
@@ -59,7 +61,7 @@ int main(int argc, char* argv[])
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &barrier_start,
+        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &barrier_start, &barrier_preagg,
                               &barrier_end DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
@@ -133,9 +135,12 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<TablePage>());
                 }
             }
+
+            // barrier
+            ::pthread_barrier_wait(&barrier_preagg);
             partition_buffer.finalize();
             // TODO global HT
-
+            // TODO measure both pre-aggregation time and global time
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
@@ -152,6 +157,7 @@ int main(int argc, char* argv[])
     swatch.stop();
 
     ::pthread_barrier_destroy(&barrier_start);
+    ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
     Logger{FLAGS_print_header}
         .log("node id", node_id)
@@ -159,7 +165,7 @@ int main(int argc, char* argv[])
         .log("traffic", "both"s)
         .log("operator", "aggregation"s)
         .log("implementation", "local"s)
-        .log("hashtable", HashtableLocal::get_type())
+        .log("hashtable local", HashtableLocal::get_type())
         .log("threads", FLAGS_threads)
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)

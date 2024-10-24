@@ -35,4 +35,18 @@ struct MMapMemoryAllocator {
 
     static void dealloc(void* ptr, u64 size) noexcept { ::munmap(ptr, size); }
 };
+
+// TODO
+template <bool huge = true>
+struct JEMALLOCAllocator {
+
+    template <typename T = void>
+    static auto alloc(u64 size)
+    {
+//        return reinterpret_cast<T*>(ptr);
+    }
+
+    static void dealloc(void* ptr, u64 size) noexcept {  }
+};
+
 } // namespace memory

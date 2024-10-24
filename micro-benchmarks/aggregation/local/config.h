@@ -40,6 +40,7 @@ auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& ag
 };
 
 using MemAlloc = mem::MMapMemoryAllocator<true>;
+
 static constexpr bool salted = true;
 using HashtableLocal = hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, void*, salted,
                                                            aggregate, MemAlloc, false>;
