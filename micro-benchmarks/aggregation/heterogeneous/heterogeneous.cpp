@@ -1,8 +1,11 @@
 #include <span>
 #include <thread>
 
+#include "bench/bench.h"
+#include "bench/common_flags.h"
+#include "bench/heterogeneous_thread_group.h"
 #include "common/alignment.h"
-#include "core/buffer/tuple_buffer.h"
+#include "core/buffer/page_buffer.h"
 #include "core/hashtable/hashtable.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
@@ -13,9 +16,6 @@
 #include "misc/exceptions/exceptions_misc.h"
 #include "system/stopwatch.h"
 #include "system/topology.h"
-#include "bench/bench.h"
-#include "bench/common_flags.h"
-#include "bench/heterogeneous_thread_group.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 
@@ -41,12 +41,12 @@ using TablePage = PageLocal<SCHEMA>;
 
 using GroupAttributes = std::tuple<KEYS_GRP>;
 using AggregateAttributes = std::tuple<KEYS_AGG>;
-auto aggregate = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
+auto aggregate_fn = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg =
-    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate, void*, true, is_salted>;
+    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, true, is_salted>;
 using BufferPage = HashTablePreAgg::PageAgg;
 
 /* ----------- NETWORK ----------- */
@@ -294,7 +294,7 @@ int main(int argc, char* argv[])
                     for (auto j{0u}; j < page.num_tuples; ++j) {
                         auto group = page.get_tuple<KEYS_IDX>(j);
                         auto agg = std::make_tuple<KEYS_AGG>(1);
-                        ht.aggregate(group, agg);
+                        ht.aggregate_fn(group, agg);
                     }
                     DEBUGGING(local_tuples_processed += page.num_tuples);
                 };

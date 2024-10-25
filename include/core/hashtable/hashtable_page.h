@@ -39,6 +39,8 @@ struct PageAggregation
     using PageBase::get_value;
     using PageBase::num_tuples;
 
+    static constexpr Next EMPTY_SLOT = 0;
+
     ALWAYS_INLINE GroupAttributes& get_group(std::integral auto idx) { return std::get<0>(get_value(idx).val); }
 
     ALWAYS_INLINE GroupAttributes& get_group(concepts::is_pointer auto tuple_ptr)
@@ -72,6 +74,12 @@ struct PageAggregation
     requires(is_entry_chained)
     {
         return emplace_back(Entry{offset, std::make_tuple(key, value)});
+    }
+
+    ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value)
+    requires(is_entry_chained)
+    {
+        return emplace_back(Entry{EMPTY_SLOT, std::make_tuple(key, value)});
     }
 
     ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value)

@@ -16,7 +16,8 @@ class PartitionBuffer {
     BlockAlloc& block_alloc;
 
   public:
-    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc) : partitions(npartitions), block_alloc(block_alloc)
+    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<ConsumerFn>& consumer_fns)
+        : partitions(npartitions), block_alloc(block_alloc), consumer_fns(std::move(consumer_fns))
     {
         // alloc partitions
         for (auto& part : partitions) {

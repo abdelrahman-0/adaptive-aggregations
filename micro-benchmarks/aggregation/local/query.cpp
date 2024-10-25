@@ -17,34 +17,31 @@ int main(int argc, char* argv[])
     // TODO cleanup -> refactor
     auto npeers = sys::Node::get_npeers();
     auto node_id = local_node.get_id();
-    bool random_table = FLAGS_random;
-    Table table{random_table};
-    if (random_table) {
+    Table table{FLAGS_random};
+    if (FLAGS_random) {
         table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
     }
     else {
         // prepare local IO at node offset (adjusted for page boundaries)
         File file{FLAGS_path, FileMode::READ};
-        auto offset_begin =
-            (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
-        auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) *
-                          defaults::local_page_size;
+        auto offset_begin = (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
+        auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) * defaults::local_page_size;
         if (node_id == FLAGS_nodes - 1) {
             offset_end = file.get_total_size();
         }
         file.set_offset(offset_begin, offset_end);
         table.bind_file(std::move(file));
         table.prepare_file_swips();
-        DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end,
-                        (offset_end - offset_begin) / defaults::local_page_size, "pages"));
+        DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
     }
 
     auto& swips = table.get_swips();
 
     // prepare cache
-    u32 num_pages_cache = random_table ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
+    u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
     Cache<TablePage> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
+    DEBUGGING(print("finished populating cache"));
 
     /* ----------- THREAD SETUP ----------- */
 
@@ -56,12 +53,14 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_preagg, nullptr, FLAGS_threads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
+    StorageGlobal storage_global;
+    HashtableGlobal ht_global{FLAGS_partitions, FLAGS_slots};
     DEBUGGING(std::atomic<u64> tuples_processed{0});
 
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &barrier_start, &barrier_preagg,
+        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_global, &barrier_start, &barrier_preagg,
                               &barrier_end DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
@@ -69,7 +68,7 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
-            PageBuffer<BufferPage> tuple_buffer;
+            StorageLocal storage_local;
             std::vector<TablePage> io_buffers(defaults::local_io_depth);
             DEBUGGING(u64 local_tuples_processed{0});
 
@@ -84,14 +83,14 @@ int main(int argc, char* argv[])
             /* ------------ GROUP BY ------------ */
 
             std::vector<std::function<void(BufferPage*, bool)>> consumer_fns(FLAGS_partitions);
-            std::fill(consumer_fns.begin(), consumer_fns.end(), [&tuple_buffer](BufferPage* pg, bool) {
+            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_global](BufferPage* pg, bool) {
                 if (not pg->empty()) {
                     pg->retire();
-                    tuple_buffer.add_page(pg);
+                    storage_global.add_page(pg);
                 }
             });
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
-            Buffer partition_buffer{FLAGS_partitions, block_alloc};
+            Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
             HashtableLocal ht{FLAGS_partitions, FLAGS_slots, partition_buffer};
 
             /* ------------ LAMBDAS ------------ */
@@ -121,9 +120,8 @@ int main(int argc, char* argv[])
                                     swips.data();
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
-                thread_io.batch_async_io<READ>(table.segment_id,
-                                               std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx},
-                                               io_buffers, true);
+                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx}, io_buffers,
+                                               true);
 
                 // process swizzled pages
                 while (swizzled_idx < morsel_end) {
@@ -135,10 +133,10 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<TablePage>());
                 }
             }
+            partition_buffer.finalize();
 
             // barrier
             ::pthread_barrier_wait(&barrier_preagg);
-            partition_buffer.finalize();
             // TODO global HT
             // TODO measure both pre-aggregation time and global time
             // barrier

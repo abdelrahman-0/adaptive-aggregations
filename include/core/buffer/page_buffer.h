@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <tbb/concurrent_vector.h>
 #include <vector>
 
@@ -7,7 +8,7 @@
 
 template <typename BufferPage, bool is_concurrent = false>
 struct PageBuffer {
-    u64 num_tuples{0};
+    std::conditional_t<is_concurrent, std::atomic<u64>, u64> num_tuples{0};
     std::conditional_t<is_concurrent, tbb::concurrent_vector<BufferPage*>, std::vector<BufferPage*>> pages;
 
     void add_page(BufferPage* page)
