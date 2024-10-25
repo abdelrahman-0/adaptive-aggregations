@@ -14,8 +14,6 @@ include_directories(include)
 find_package(gflags REQUIRED)
 find_package(TBB REQUIRED)
 
-add_library(rpmalloc include/core/memory/allocators/rpmalloc/rpmalloc.c)
-
 if(NOT DEFINED HT_PAGE_SIZE_POWER)
     set(HT_PAGE_SIZE_POWER 16)
 endif()
