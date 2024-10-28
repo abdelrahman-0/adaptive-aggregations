@@ -24,7 +24,7 @@ DEFINE_uint32(threads, 1, "number of threads to use");
 
 #define SCHEMA u64, u32, u32, std::array<char, 4>
 
-using TablePage = PageLocal<SCHEMA>;
+using PageTable = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
 
@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
 
     // prepare cache
     u32 num_pages_cache = random_table ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
-    Cache<TablePage> cache{num_pages_cache};
+    Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
     /* ----------- THREAD SETUP ----------- */
@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
-            std::vector<TablePage> local_buffers(defaults::local_io_depth);
+            std::vector<PageTable> local_buffers(defaults::local_io_depth);
 
             for (auto peer{0u}; peer < npeers; ++peer) {
                 manager_recv.post_recvs(peer);
@@ -219,7 +219,7 @@ int main(int argc, char* argv[])
             }
 
             auto process_local_page = [node_id, partition_mask, destinations, &partitions, &block_alloc,
-                                       &consumer_fns](const TablePage& page) {
+                                       &consumer_fns](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     // hash tuple
                     auto tup = page.get_tuple<0, 1, 2, 3>(j);
@@ -263,7 +263,7 @@ int main(int argc, char* argv[])
                                                std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx},
                                                local_buffers, true);
 
-                TablePage* page_to_process;
+                PageTable* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
                     process_local_page(*page_to_process);

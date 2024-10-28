@@ -17,7 +17,7 @@
 // table schema
 #define SCHEMA int64_t, int64_t, int32_t, std::array<unsigned char, 4>
 
-using TablePage = PageLocal<SCHEMA>;
+using PageTable = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
 using NetworkPage = PageNetwork<ResultTuple>;
@@ -33,7 +33,7 @@ DEFINE_bool(random, false, "randomize order of cached swips");
 struct TLS {
     IO_Manager io{};
     NetworkManagerOld network;
-    std::vector<TablePage> buffer{defaults::local_io_depth};
+    std::vector<PageTable> buffer{defaults::local_io_depth};
     PageChunkedList<ResultPage> result{};
 
     explicit TLS(const Connection& conn) : network(conn) {}
@@ -97,7 +97,7 @@ int main(int argc, char* argv[]) {
                 auto processed_in_memory = middle_idx;
                 bool wait_for_cqes = false;
                 while (processed_in_memory < range.end() || (wait_for_cqes = thread_io.has_inflight_requests())) {
-                    TablePage* page_to_process{nullptr};
+                    PageTable* page_to_process{nullptr};
                     if (wait_for_cqes) {
                         // process completion events
                         page_to_process = thread_io.get_next_cqe_data<decltype(page_to_process)>();

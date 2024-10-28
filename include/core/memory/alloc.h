@@ -38,7 +38,7 @@ struct MMapMemoryAllocator {
 
 // TODO
 template <bool huge = true>
-struct JEMALLOCAllocator {
+struct JEMALLOCator {
 
     template <typename T = void>
     static auto alloc(u64 size)

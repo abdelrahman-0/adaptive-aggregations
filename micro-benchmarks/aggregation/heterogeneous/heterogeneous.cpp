@@ -6,7 +6,7 @@
 #include "bench/heterogeneous_thread_group.h"
 #include "common/alignment.h"
 #include "core/buffer/page_buffer.h"
-#include "core/hashtable/hashtable.h"
+#include "core/hashtable/hashtable_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/network/page_communication.h"
@@ -30,30 +30,29 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 
 /* ----------- SCHEMA ----------- */
 
-#define KEYS_AGG u64
-#define KEYS_IDX 0
-#define KEYS_GRP u64
-#define SCHEMA KEYS_GRP, u32, u32, std::array<char, 4>
+#define AGG_KEYS u64
+#define GPR_KEYS_IDX 0
+#define GRP_KEYS u64
+#define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 
-using TablePage = PageLocal<SCHEMA>;
+using PageTable = PageLocal<SCHEMA>;
 
 /* ----------- GROUP BY ----------- */
 
-using GroupAttributes = std::tuple<KEYS_GRP>;
-using AggregateAttributes = std::tuple<KEYS_AGG>;
+using GroupAttributes = std::tuple<GRP_KEYS>;
+using AggregateAttributes = std::tuple<AGG_KEYS>;
 auto aggregate_fn = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
 static constexpr bool is_salted = true;
-using HashTablePreAgg =
-    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, true, is_salted>;
-using BufferPage = HashTablePreAgg::PageAgg;
+using HashTablePreAgg = ht::PartitionedOpenAggregationHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, true, is_salted>;
+using PageHashtable = HashTablePreAgg::page_t;
 
 /* ----------- NETWORK ----------- */
 
-using IngressManager = HeterogeneousIngressNetworkManager<BufferPage>;
-using EgressManager = HeterogeneousEgressNetworkManager<BufferPage>;
-using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, BufferPage>;
+using IngressManager = HeterogeneousIngressNetworkManager<PageHashtable>;
+using EgressManager = HeterogeneousEgressNetworkManager<PageHashtable>;
+using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, PageHashtable>;
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -119,7 +118,7 @@ int main(int argc, char* argv[])
 
     // prepare cache
     u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
-    Cache<TablePage> cache{num_pages_cache};
+    Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
     /* ----------- THREAD SETUP ----------- */
@@ -235,8 +234,8 @@ int main(int argc, char* argv[])
 
                 /* ----------- BUFFERS ----------- */
 
-                PageBuffer<BufferPage> tuple_buffer;
-                std::vector<TablePage> local_buffers(defaults::local_io_depth);
+                PageBuffer<PageHashtable> tuple_buffer;
+                std::vector<PageTable> local_buffers(defaults::local_io_depth);
                 u64 local_tuples_processed{0};
                 u64 local_tuples_sent{0};
                 u64 local_tuples_received{0};
@@ -259,7 +258,7 @@ int main(int argc, char* argv[])
                     bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
                     part_offset += final_dst_partition ? parts_per_dst : 0;
                     if (dst == node_id) {
-                        consumer_fns.emplace_back([&tuple_buffer](BufferPage* pg, bool) {
+                        consumer_fns.emplace_back([&tuple_buffer](PageHashtable* pg, bool) {
                             if (not pg->empty()) {
                                 pg->retire();
                                 tuple_buffer.add_page(pg);
@@ -269,38 +268,38 @@ int main(int argc, char* argv[])
                     else {
                         auto actual_dst = dst - (dst > node_id);
                         consumer_fns.emplace_back([&manager_send, actual_dst, final_dst_partition,
-                                                   thread_id](BufferPage* pg, bool is_last = false) {
+                                                   thread_id](PageHashtable* pg, bool is_last = false) {
                             if (not pg->empty() or final_dst_partition) {
                                 pg->retire();
                                 if (is_last and final_dst_partition) {
                                     pg->set_last_page();
                                 }
                                 manager_send.enqueue_page(actual_dst,
-                                                          reinterpret_cast<BufferPage*>(
+                                                          reinterpret_cast<PageHashtable*>(
                                                               (reinterpret_cast<uintptr_t>(pg) | (thread_id << 56))));
                             }
                         });
                     }
                 }
-                mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, true> ht_alloc(
+                mem::BlockAllocator<PageHashtable, mem::MMapMemoryAllocator<true>, true> ht_alloc(
                     FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
                 HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
                 /* ------------ LAMBDAS ------------ */
                 manager_send.register_page_consumer_fn(
-                    thread_id, [&ht_alloc, thread_id](BufferPage* pg) { ht_alloc.return_page(pg); });
+                    thread_id, [&ht_alloc, thread_id](PageHashtable* pg) { ht_alloc.return_page(pg); });
 
-                auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
+                auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                     for (auto j{0u}; j < page.num_tuples; ++j) {
-                        auto group = page.get_tuple<KEYS_IDX>(j);
-                        auto agg = std::make_tuple<KEYS_AGG>(1);
+                        auto group = page.get_tuple<GPR_KEYS_IDX>(j);
+                        auto agg = std::make_tuple<AGG_KEYS>(1);
                         ht.aggregate_fn(group, agg);
                     }
                     DEBUGGING(local_tuples_processed += page.num_tuples);
                 };
 
                 auto consume_ingress = [&manager_recv, &tuple_buffer]() {
-                    BufferPage* page = manager_recv.try_dequeue_page();
+                    PageHashtable* page = manager_recv.try_dequeue_page();
                     if (page) {
                         tuple_buffer.add_page(page);
                     }
@@ -332,7 +331,7 @@ int main(int argc, char* argv[])
                             local_buffers, true);
                     }
 
-                    TablePage* page_to_process;
+                    PageTable* page_to_process;
                     while (swizzled_idx < morsel_end) {
                         page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
                         process_local_page(*page_to_process);
@@ -385,7 +384,7 @@ int main(int argc, char* argv[])
     DEBUGGING(print("tuples received:", tuples_received.load()));
     DEBUGGING(print("tuples sent:", tuples_sent.load()));
     DEBUGGING(print("tuples processed:", tuples_local.load()));
-    DEBUGGING(u64 pages_local = (tuples_local + BufferPage::max_tuples_per_page - 1) / BufferPage::max_tuples_per_page);
+    DEBUGGING(u64 pages_local = (tuples_local + PageHashtable::max_tuples_per_page - 1) / PageHashtable::max_tuples_per_page);
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);
     DEBUGGING(u64 tuples_processed = tuples_received + tuples_local);
@@ -403,9 +402,9 @@ int main(int argc, char* argv[])
         .log("groups", FLAGS_groups)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)
-        .log("tuples per local page", TablePage::max_tuples_per_page)
+        .log("tuples per local page", PageTable::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", BufferPage::max_tuples_per_page)
+        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)

@@ -39,7 +39,7 @@ int main(int argc, char* argv[])
 
     // prepare cache
     u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
-    Cache<TablePage> cache{num_pages_cache};
+    Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
     DEBUGGING(print("finished populating cache"));
 
@@ -53,6 +53,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_preagg, nullptr, FLAGS_threads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
+    std::atomic<bool> global_ht_construction_complete{false};
     StorageGlobal storage_global;
     HashtableGlobal ht_global{FLAGS_partitions, FLAGS_slots};
     DEBUGGING(std::atomic<u64> tuples_processed{0});
@@ -60,8 +61,8 @@ int main(int argc, char* argv[])
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_global, &barrier_start, &barrier_preagg,
-                              &barrier_end DEBUGGING(, &tuples_processed)]() {
+        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_global, &barrier_start, &barrier_preagg, &barrier_end,
+                              &ht_global, &global_ht_construction_complete DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -69,7 +70,7 @@ int main(int argc, char* argv[])
             /* ----------- BUFFERS ----------- */
 
             StorageLocal storage_local;
-            std::vector<TablePage> io_buffers(defaults::local_io_depth);
+            std::vector<PageTable> io_buffers(defaults::local_io_depth);
             DEBUGGING(u64 local_tuples_processed{0});
 
             /* ----------- LOCAL I/O ----------- */
@@ -82,8 +83,8 @@ int main(int argc, char* argv[])
 
             /* ------------ GROUP BY ------------ */
 
-            std::vector<std::function<void(BufferPage*, bool)>> consumer_fns(FLAGS_partitions);
-            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_global](BufferPage* pg, bool) {
+            std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
+            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_global](PageHashtable* pg, bool) {
                 if (not pg->empty()) {
                     pg->retire();
                     storage_global.add_page(pg);
@@ -93,15 +94,21 @@ int main(int argc, char* argv[])
             Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
             HashtableLocal ht{FLAGS_partitions, FLAGS_slots, partition_buffer};
 
-            /* ------------ LAMBDAS ------------ */
+            /* ------------ AGGREGATION LAMBDAS ------------ */
 
-            auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
+            auto process_page_local = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    auto group = page.get_tuple<KEYS_IDX>(j);
-                    auto agg = std::make_tuple<u64>(1);
+                    auto group = page.get_tuple<GPR_KEYS_IDX>(j);
+                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VAL);
                     ht.aggregate(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
+            };
+
+            auto process_page_global = [&ht_global](PageHashtable& page) {
+                for (auto j{0u}; j < page.num_tuples; ++j) {
+                    ht_global.aggregate(page.get_tuple_ref(j));
+                }
             };
 
             // barrier
@@ -111,34 +118,53 @@ int main(int argc, char* argv[])
 
             // morsel loop
             u64 morsel_begin, morsel_end;
-            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, swips.size());
+            const u64 nswips = swips.size();
+            auto* swips_begin = swips.data();
+            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < nswips) {
+                morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx = std::stable_partition(swips.data() + morsel_begin, swips.data() + morsel_end,
-                                                          [](const Swip& swip) { return !swip.is_pointer(); }) -
-                                    swips.data();
+                auto swizzled_idx =
+                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) -
+                    swips.data();
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
-                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx}, io_buffers,
-                                               true);
+                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
 
                 // process swizzled pages
                 while (swizzled_idx < morsel_end) {
-                    process_local_page(*swips[swizzled_idx++].get_pointer<TablePage>());
+                    process_page_local(*swips[swizzled_idx++].get_pointer<PageTable>());
                 }
 
                 // process unswizzled pages
                 while (thread_io.has_inflight_requests()) {
-                    process_local_page(*thread_io.get_next_page<TablePage>());
+                    process_page_local(*thread_io.get_next_page<PageTable>());
                 }
             }
             partition_buffer.finalize();
 
             // barrier
-            ::pthread_barrier_wait(&barrier_preagg);
-            // TODO global HT
-            // TODO measure both pre-aggregation time and global time
+            ::pthread_barrier_wait(&barrier_preagg); // TODO relax this barrier? (90% threads done? -> scheduler)
+//            // TODO measure both pre-aggregation time and global time
+//            if (thread_id == 0) {
+//                ht_global.initialize(FLAGS_partitions, next_power_2(static_cast<u64>(1.7 * storage_global.num_tuples)));
+//                // reset morsel
+//                current_swip = 0;
+//                global_ht_construction_complete = true;
+//                global_ht_construction_complete.notify_all();
+//            }
+//            else {
+//                global_ht_construction_complete.wait(false);
+//            }
+//
+//            const u64 npages = storage_global.pages.size();
+//            while ((morsel_begin = current_swip.fetch_add(1)) < npages) {
+//                morsel_end = std::min(morsel_begin + 1, npages);
+//                while (morsel_begin < morsel_end) {
+//                    process_page_global(*storage_global.pages[morsel_begin++]);
+//                }
+//            }
+
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
@@ -157,6 +183,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
+
     Logger{FLAGS_print_header}
         .log("node id", node_id)
         .log("nodes", FLAGS_nodes)
@@ -170,9 +197,9 @@ int main(int argc, char* argv[])
         .log("groups", FLAGS_groups)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)
-        .log("tuples per local page", TablePage::max_tuples_per_page)
+        .log("tuples per local page", PageTable::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", BufferPage::max_tuples_per_page)
+        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)

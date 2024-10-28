@@ -5,7 +5,7 @@
 #include "bench/bench.h"
 #include "bench/common_flags.h"
 #include "core/buffer/page_buffer.h"
-#include "core/hashtable/hashtable.h"
+#include "core/hashtable/hashtable_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/storage/page_local.h"
@@ -26,30 +26,29 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 
 /* ----------- SCHEMA ----------- */
 
-#define KEYS_AGG u64
-#define KEYS_IDX 0
-#define KEYS_GRP u64
-#define SCHEMA KEYS_GRP, u32, u32, std::array<char, 4>
+#define AGG_KEYS u64
+#define GPR_KEYS_IDX 0
+#define GRP_KEYS u64
+#define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 
-using TablePage = PageLocal<SCHEMA>;
+using PageTable = PageLocal<SCHEMA>;
 
 /* ----------- GROUP BY ----------- */
 
-using GroupAttributes = std::tuple<KEYS_GRP>;
-using AggregateAttributes = std::tuple<KEYS_AGG>;
+using GroupAttributes = std::tuple<GRP_KEYS>;
+using AggregateAttributes = std::tuple<AGG_KEYS>;
 auto aggregate_fn = [](AggregateAttributes& aggs_grp, const AggregateAttributes& aggs_tup) {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 };
 static constexpr bool is_salted = true;
-using HashTablePreAgg =
-    hashtable::PartitionedOpenHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, false, is_salted>;
-using BufferPage = HashTablePreAgg::PageAgg;
+using HashTablePreAgg = ht::PartitionedOpenAggregationHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, false, is_salted>;
+using PageHashtable = HashTablePreAgg::page_t;
 
 /* ----------- NETWORK ----------- */
 
-using BlockAlloc = mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, false>;
-using IngressManager = IngressNetworkManager<BufferPage, BlockAlloc>;
-using EgressManager = EgressNetworkManager<BufferPage>;
+using BlockAlloc = mem::BlockAllocator<PageHashtable, mem::MMapMemoryAllocator<true>, false>;
+using IngressManager = IngressNetworkManager<PageHashtable, BlockAlloc>;
+using EgressManager = EgressNetworkManager<PageHashtable>;
 
 /* ----------- MAIN ----------- */
 
@@ -97,7 +96,7 @@ int main(int argc, char* argv[])
 
     // prepare cache
     u32 num_pages_cache = random_table ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
-    Cache<TablePage> cache{num_pages_cache};
+    Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
     /* ----------- THREAD SETUP ----------- */
@@ -147,8 +146,8 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
-            PageBuffer<BufferPage> tuple_buffer;
-            std::vector<TablePage> local_buffers(defaults::local_io_depth);
+            PageBuffer<PageHashtable> tuple_buffer;
+            std::vector<PageTable> local_buffers(defaults::local_io_depth);
             u64 local_tuples_processed{0};
             u64 local_tuples_sent{0};
             u64 local_tuples_received{0};
@@ -156,7 +155,7 @@ int main(int argc, char* argv[])
             /* ----------- NETWORK I/O ----------- */
 
             auto npeers = FLAGS_nodes - 1;
-            auto ingress_consumer_fn = [&tuple_buffer](BufferPage* pg) { tuple_buffer.add_page(pg); };
+            auto ingress_consumer_fn = [&tuple_buffer](PageHashtable* pg) { tuple_buffer.add_page(pg); };
 
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
             IngressManager manager_recv{npeers,     FLAGS_depthnw,       FLAGS_sqpoll,
@@ -182,7 +181,7 @@ int main(int argc, char* argv[])
                 bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
                 part_offset += final_dst_partition ? parts_per_dst : 0;
                 if (dst == node_id) {
-                    consumer_fns.emplace_back([&tuple_buffer](BufferPage* pg, bool) {
+                    consumer_fns.emplace_back([&tuple_buffer](PageHashtable* pg, bool) {
                         if (not pg->empty()) {
                             pg->retire();
                             tuple_buffer.add_page(pg);
@@ -192,7 +191,7 @@ int main(int argc, char* argv[])
                 else {
                     auto actual_dst = dst - (dst > node_id);
                     consumer_fns.emplace_back(
-                        [&manager_send, actual_dst, final_dst_partition](BufferPage* pg, bool is_last = false) {
+                        [&manager_send, actual_dst, final_dst_partition](PageHashtable* pg, bool is_last = false) {
                             if (not pg->empty() or final_dst_partition) {
                                 pg->retire();
                                 if (is_last and final_dst_partition) {
@@ -208,11 +207,11 @@ int main(int argc, char* argv[])
 
             /* ------------ LAMBDAS ------------ */
 
-            manager_send.register_page_consumer_fn([&ht_alloc](BufferPage* pg) { ht_alloc.return_page(pg); });
+            manager_send.register_page_consumer_fn([&ht_alloc](PageHashtable* pg) { ht_alloc.return_page(pg); });
 
-            auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const TablePage& page) {
+            auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    auto group = page.get_tuple<KEYS_IDX>(j);
+                    auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<u64>(1);
                     ht.aggregate_fn(group, agg);
                 }
@@ -247,7 +246,7 @@ int main(int argc, char* argv[])
                                                std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx},
                                                local_buffers, true);
 
-                TablePage* page_to_process;
+                PageTable* page_to_process;
                 while (swizzled_idx < morsel_end) {
                     page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
                     process_local_page(*page_to_process);
@@ -290,7 +289,7 @@ int main(int argc, char* argv[])
     DEBUGGING(print("tuples received:", tuples_received.load())); //
     DEBUGGING(print("tuples sent:", tuples_sent.load()));         //
     DEBUGGING(u64 pages_local =
-                  (tuples_processed + TablePage::max_tuples_per_page - 1) / TablePage::max_tuples_per_page); //
+                  (tuples_processed + PageTable::max_tuples_per_page - 1) / PageTable::max_tuples_per_page); //
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);                                       //
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);                                       //
 
@@ -306,9 +305,9 @@ int main(int argc, char* argv[])
         .log("groups", FLAGS_groups)
         .log("total pages", FLAGS_npages)
         .log("local page size", defaults::local_page_size)
-        .log("tuples per local page", TablePage::max_tuples_per_page)
+        .log("tuples per local page", PageTable::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", BufferPage::max_tuples_per_page)
+        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)

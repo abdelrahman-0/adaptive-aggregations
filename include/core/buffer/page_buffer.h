@@ -6,7 +6,7 @@
 
 #include "defaults.h"
 
-template <typename BufferPage, bool is_concurrent = false>
+template <typename BufferPage, bool is_concurrent>
 struct PageBuffer {
     std::conditional_t<is_concurrent, std::atomic<u64>, u64> num_tuples{0};
     std::conditional_t<is_concurrent, tbb::concurrent_vector<BufferPage*>, std::vector<BufferPage*>> pages;

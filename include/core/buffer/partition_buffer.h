@@ -7,16 +7,18 @@
 #include "misc/concepts_traits/concepts_alloc.h"
 
 template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc,
-          typename ConsumerFn = std::function<void(BufferPage*, bool /* final eviction? */)>>
+          typename Fn = std::function<void(BufferPage*, bool /* final eviction? */)>>
 class PartitionBuffer {
 
   private:
     std::vector<BufferPage*> partitions;
-    std::vector<ConsumerFn> consumer_fns;
+    std::vector<Fn> consumer_fns;
     BlockAlloc& block_alloc;
 
   public:
-    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<ConsumerFn>& consumer_fns)
+    using ConsumerFn = Fn;
+
+    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& consumer_fns)
         : partitions(npartitions), block_alloc(block_alloc), consumer_fns(std::move(consumer_fns))
     {
         // alloc partitions
@@ -26,7 +28,10 @@ class PartitionBuffer {
         }
     }
 
-    ALWAYS_INLINE BufferPage* get_partition_page(u32 part) const { return partitions[part]; }
+    ALWAYS_INLINE BufferPage* get_partition_page(u32 part) const
+    {
+        return partitions[part];
+    }
 
     [[maybe_unused]]
     BufferPage* evict(u64 part_no, bool final_eviction = false)

@@ -28,7 +28,7 @@ DEFINE_uint32(qthreads, 1, "number of query-processing threads to use");
 
 #define SCHEMA u64, u32, u32, std::array<char, 4>
 
-using TablePage = PageLocal<SCHEMA>;
+using PageTable = PageLocal<SCHEMA>;
 using ResultTuple = std::tuple<SCHEMA>;
 using ResultPage = PageLocal<ResultTuple>;
 
@@ -100,7 +100,7 @@ int main(int argc, char* argv[])
 
     // prepare cache
     u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages;
-    Cache<TablePage> cache{num_pages_cache};
+    Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
 
     /* ----------- THREAD SETUP ----------- */
@@ -243,11 +243,11 @@ int main(int argc, char* argv[])
                 for (auto*& page_ptr : active_buffers) {
                     page_ptr = manager_send.get_new_page();
                 }
-                std::vector<TablePage> local_buffers(defaults::local_io_depth);
+                std::vector<PageTable> local_buffers(defaults::local_io_depth);
 
                 /* ------------ LAMBDAS ------------ */
 
-                auto process_local_page = [=, &manager_send, &active_buffers](const TablePage& page) {
+                auto process_local_page = [=, &manager_send, &active_buffers](const PageTable& page) {
                     for (auto j{0u}; j < page.num_tuples; ++j) {
                         // hash tuple
                         auto tup = page.get_tuple<0, 1, 2, 3>(j);
@@ -299,7 +299,7 @@ int main(int argc, char* argv[])
                             local_buffers, true);
                     }
 
-                    TablePage* page_to_process;
+                    PageTable* page_to_process;
                     while (swizzled_idx < morsel_end) {
                         page_to_process = swips[swizzled_idx++].get_pointer<decltype(page_to_process)>();
                         process_local_page(*page_to_process);
