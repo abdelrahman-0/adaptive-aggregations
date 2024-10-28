@@ -7,6 +7,7 @@
 #include "core/buffer/page_buffer.h"
 #include "core/buffer/partition_buffer.h"
 #include "core/hashtable/hashtable_base.h"
+#include "core/hashtable/hashtable_global.h"
 #include "core/hashtable/hashtable_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
@@ -55,7 +56,7 @@ using MemAlloc = mem::MMapMemoryAllocator<true>;
 static constexpr bool is_salted = true;
 static constexpr bool is_chained = true;
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<ht::DIRECT, Groups, Aggregates, fn_agg, MemAlloc, is_salted, is_chained>;
-using HashtableGlobal = ht::PartitionedChainedAggregationHashtable<ht::DIRECT, Groups, Aggregates, fn_agg, MemAlloc>;
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg, MemAlloc>;
 
 /* ----------- STORAGE ----------- */
 

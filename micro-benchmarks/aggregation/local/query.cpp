@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
     StorageGlobal storage_global;
-    HashtableGlobal ht_global{FLAGS_partitions, FLAGS_slots};
+    HashtableGlobal ht_global;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
 
     // create threads
@@ -145,25 +145,25 @@ int main(int argc, char* argv[])
 
             // barrier
             ::pthread_barrier_wait(&barrier_preagg); // TODO relax this barrier? (90% threads done? -> scheduler)
-//            // TODO measure both pre-aggregation time and global time
-//            if (thread_id == 0) {
-//                ht_global.initialize(FLAGS_partitions, next_power_2(static_cast<u64>(1.7 * storage_global.num_tuples)));
-//                // reset morsel
-//                current_swip = 0;
-//                global_ht_construction_complete = true;
-//                global_ht_construction_complete.notify_all();
-//            }
-//            else {
-//                global_ht_construction_complete.wait(false);
-//            }
-//
-//            const u64 npages = storage_global.pages.size();
-//            while ((morsel_begin = current_swip.fetch_add(1)) < npages) {
-//                morsel_end = std::min(morsel_begin + 1, npages);
-//                while (morsel_begin < morsel_end) {
-//                    process_page_global(*storage_global.pages[morsel_begin++]);
-//                }
-//            }
+                                                     //            // TODO measure both pre-aggregation time and global time
+            if (thread_id == 0) {
+                ht_global.initialize(next_power_2(static_cast<u64>(1.7 * storage_global.num_tuples)));
+                // reset morsel
+                current_swip = 0;
+                global_ht_construction_complete = true;
+                global_ht_construction_complete.notify_all();
+            }
+            else {
+                global_ht_construction_complete.wait(false);
+            }
+
+            const u64 npages = storage_global.pages.size();
+            while ((morsel_begin = current_swip.fetch_add(1)) < npages) {
+                morsel_end = std::min(morsel_begin + 1, npages);
+                while (morsel_begin < morsel_end) {
+                    process_page_global(*storage_global.pages[morsel_begin++]);
+                }
+            }
 
             // barrier
             ::pthread_barrier_wait(&barrier_end);

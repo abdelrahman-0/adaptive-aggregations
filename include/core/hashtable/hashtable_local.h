@@ -57,11 +57,11 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<mode
     }
 };
 
-template <IDX_MODE mode, typename Key, typename Value, void fn_agg(Value&, const Value&), concepts::is_mem_allocator Alloc,
+template <IDX_MODE mode, typename key_t, typename value_t, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc,
           bool is_heterogeneous = false>
 struct PartitionedChainedAggregationHashtable
-    : public PartitionedAggregationHashtable<mode, Key, Value, Alloc, true, mode == DIRECT, is_heterogeneous> {
-    using base_t = PartitionedAggregationHashtable<mode, Key, Value, Alloc, true, mode == DIRECT, is_heterogeneous>;
+    : public PartitionedAggregationHashtable<mode, key_t, value_t, Alloc, true, mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<mode, key_t, value_t, Alloc, true, mode == DIRECT, is_heterogeneous>;
     using base_t::evict;
     using base_t::ht_mask;
     using base_t::part_buffer;
@@ -77,7 +77,7 @@ struct PartitionedChainedAggregationHashtable
     {
     }
 
-    void aggregate(Key& key, Value& value, u64 key_hash)
+    void aggregate(key_t& key, value_t& value, u64 key_hash)
     {
         // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
@@ -102,7 +102,7 @@ struct PartitionedChainedAggregationHashtable
         slot = part_page->emplace_back_grp(key, value, offset);
     }
 
-    void aggregate(Key& key, Value& value)
+    void aggregate(key_t& key, value_t& value)
     {
         aggregate(key, value, hash_tuple(key));
     }
