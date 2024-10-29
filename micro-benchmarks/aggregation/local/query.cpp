@@ -57,19 +57,41 @@ int main(int argc, char* argv[])
     StorageGlobal storage_global;
     HashtableGlobal ht_global;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
+    Logger logger{FLAGS_print_header};
+    logger.log("node id", node_id)
+        .log("nodes", FLAGS_nodes)
+        .log("traffic", "both"s)
+        .log("operator", "aggregation"s)
+        .log("implementation", "local"s)
+        .log("cache (%)", FLAGS_cache)
+        .log("pin", FLAGS_pin)
+        .log("morsel size", FLAGS_morselsz)
+        .log("total pages", FLAGS_npages)
+        .log("local page size", defaults::local_page_size)
+        .log("tuples per local page", PageTable::max_tuples_per_page)
+        .log("hashtable page size", defaults::hashtable_page_size)
+        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
+        .log("hashtable local", HashtableLocal::get_type())
+        .log("partitions", FLAGS_partitions)
+        .log("slots", FLAGS_slots)
+        .log("ht factor", FLAGS_htfactor)
+        .log("threads", FLAGS_threads)
+        .log("groups", FLAGS_groups);
+    tbb::concurrent_vector<u64> times_preagg;
+    times_preagg.resize(FLAGS_threads);
 
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_global, &barrier_start, &barrier_preagg, &barrier_end,
-                              &ht_global, &global_ht_construction_complete DEBUGGING(, &tuples_processed)]() {
+                              &ht_global, &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
 
             /* ----------- BUFFERS ----------- */
 
-            StorageLocal storage_local;
+            //            StorageLocal storage_local;
             std::vector<PageTable> io_buffers(defaults::local_io_depth);
             DEBUGGING(u64 local_tuples_processed{0});
 
@@ -92,15 +114,15 @@ int main(int argc, char* argv[])
             });
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
-            HashtableLocal ht{FLAGS_partitions, FLAGS_slots, partition_buffer};
+            HashtableLocal ht_local{FLAGS_partitions, FLAGS_slots, partition_buffer};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 
-            auto process_page_local = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto process_page_local = [&ht_local DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<AGG_KEYS>(AGG_VAL);
-                    ht.aggregate(group, agg);
+                    ht_local.aggregate(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
@@ -113,6 +135,8 @@ int main(int argc, char* argv[])
 
             // barrier
             ::pthread_barrier_wait(&barrier_start);
+            Stopwatch swatch_preagg{};
+            swatch_preagg.start();
 
             /* ----------- BEGIN ----------- */
 
@@ -143,11 +167,12 @@ int main(int argc, char* argv[])
             }
             partition_buffer.finalize();
 
+            swatch_preagg.stop();
             // barrier
             ::pthread_barrier_wait(&barrier_preagg); // TODO relax this barrier? (90% threads done? -> scheduler)
                                                      //            // TODO measure both pre-aggregation time and global time
             if (thread_id == 0) {
-                ht_global.initialize(next_power_2(static_cast<u64>(1.7 * storage_global.num_tuples)));
+                ht_global.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * storage_global.num_tuples)));
                 // reset morsel
                 current_swip = 0;
                 global_ht_construction_complete = true;
@@ -158,8 +183,8 @@ int main(int argc, char* argv[])
             }
 
             const u64 npages = storage_global.pages.size();
-            while ((morsel_begin = current_swip.fetch_add(1)) < npages) {
-                morsel_end = std::min(morsel_begin + 1, npages);
+            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
                 while (morsel_begin < morsel_end) {
                     process_page_global(*storage_global.pages[morsel_begin++]);
                 }
@@ -171,6 +196,7 @@ int main(int argc, char* argv[])
             /* ----------- END ----------- */
 
             DEBUGGING(tuples_processed += local_tuples_processed);
+            times_preagg[thread_id] = swatch_preagg.time_ms;
         });
     }
 
@@ -184,25 +210,12 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
 
-    Logger{FLAGS_print_header}
-        .log("node id", node_id)
-        .log("nodes", FLAGS_nodes)
-        .log("traffic", "both"s)
-        .log("operator", "aggregation"s)
-        .log("implementation", "local"s)
-        .log("hashtable local", HashtableLocal::get_type())
-        .log("threads", FLAGS_threads)
-        .log("partitions", FLAGS_partitions)
-        .log("slots", FLAGS_slots)
-        .log("groups", FLAGS_groups)
-        .log("total pages", FLAGS_npages)
-        .log("local page size", defaults::local_page_size)
-        .log("tuples per local page", PageTable::max_tuples_per_page)
-        .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
-        .log("morsel size", FLAGS_morselsz)
-        .log("pin", FLAGS_pin)
-        .log("cache (%)", FLAGS_cache)
-        .log("time (ms)", swatch.time_ms)                            //
+    logger.log("tuples pre-agg", storage_global.num_tuples)
+        .log("pages pre-agg", storage_global.pages.size())           //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
+
+    for (u32 tid{0}; tid < FLAGS_threads; tid++) {
+        logger.log("thread "s + std::to_string(tid) + " pre-agg (ms)", times_preagg[tid]);
+    }
+    logger.log("time (ms)", swatch.time_ms);
 }

@@ -7,7 +7,7 @@
 
 struct Stopwatch {
     std::chrono::time_point<std::chrono::high_resolution_clock> begin;
-    uint64_t time_ms{0};
+    u64 time_ms{0};
 
     Stopwatch() = default;
 

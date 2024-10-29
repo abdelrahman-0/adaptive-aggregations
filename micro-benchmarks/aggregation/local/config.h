@@ -25,6 +25,7 @@
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
+DEFINE_double(htfactor, 1.8, "growth factor to use when allocating global hashtable");
 
 /* --------------------------------------- */
 
@@ -32,9 +33,13 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 
 #define AGG_VAL 1
 #define AGG_KEYS u64
-
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
+
+using MemAlloc = mem::MMapMemoryAllocator<true>;
+
+/* ----------- HASHTABLE ----------- */
+
 
 using Groups = std::tuple<GRP_KEYS>;
 using Aggregates = std::tuple<AGG_KEYS>;
@@ -49,18 +54,14 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-using MemAlloc = mem::MMapMemoryAllocator<true>;
-
-/* ----------- HASHTABLE ----------- */
-
 static constexpr bool is_salted = true;
 static constexpr bool is_chained = true;
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<ht::DIRECT, Groups, Aggregates, fn_agg, MemAlloc, is_salted, is_chained>;
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg, MemAlloc>;
+using PageHashtable = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
-using PageHashtable = HashtableLocal::page_t;
 using BlockAlloc = mem::BlockAllocator<PageHashtable, MemAlloc, false>;
 using Buffer = PartitionBuffer<PageHashtable, BlockAlloc>;
 using StorageLocal = PageBuffer<PageHashtable, false>;

@@ -46,6 +46,12 @@ struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<D
         auto& next = entry.get_next();
         aggregate(key, agg, next, hash_tuple(key), &entry);
     }
+
+    [[nodiscard]]
+    static std::string get_type()
+    {
+        return "concurrent-chaining";
+    }
 };
 
 } // namespace ht
