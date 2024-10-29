@@ -34,7 +34,7 @@ struct Page {
     void clear_tuples() { num_tuples = 0; }
 
     template <u16 col_idx = 0>
-    auto& get_tuple_ref(std::integral auto row_idx)
+    auto& get_attribute_ref(std::integral auto row_idx)
     {
         return std::get<col_idx>(columns)[row_idx];
     }
@@ -149,7 +149,7 @@ struct PageRowStore : public Page<page_size, Attribute> {
     auto emplace_back(std::size_t row_idx, const PageRowStore<other_page_size, OtherAttributes>& page)
     requires(use_ptr)
     {
-        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(page.template get_tuple_ref<0>(row_idx));
+        _emplace_back<sizeof...(other_idxs), 0, other_idxs...>(page.template get_attribute_ref<0>(row_idx));
         return ptr++;
     }
 

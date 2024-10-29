@@ -129,7 +129,7 @@ int main(int argc, char* argv[])
 
             auto process_page_global = [&ht_global](PageHashtable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    ht_global.aggregate(page.get_tuple_ref(j));
+                    ht_global.aggregate(page.get_attribute_ref(j));
                 }
             };
 

@@ -5,7 +5,7 @@
 #include "bench/bench.h"
 #include "bench/common_flags.h"
 #include "core/buffer/page_buffer.h"
-#include "core/hashtable/hashtable_local.h"
+#include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/storage/page_local.h"

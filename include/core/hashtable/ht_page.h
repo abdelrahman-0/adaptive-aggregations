@@ -64,8 +64,7 @@ struct EntryAggregation : public BaseEntryAggregation<mode, GroupAttributes, Agg
         return std::get<1>(base_t::val);
     }
 
-    ALWAYS_INLINE auto& get_next()
-    requires(is_chained)
+    ALWAYS_INLINE auto& get_next() requires(is_chained)
     {
         return base_t::next;
     }
@@ -79,7 +78,7 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
     using base_t = PageCommunication<defaults::hashtable_page_size, entry_t, use_ptr>;
     using base_t::columns;
     using base_t::emplace_back;
-    using base_t::get_tuple_ref;
+    using base_t::get_attribute_ref;
     using base_t::num_tuples;
     using idx_t = entry_agg_idx_type<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>;
 
@@ -87,34 +86,34 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
 
     ALWAYS_INLINE GroupAttributes& get_group(std::integral auto idx)
     {
-        return get_tuple_ref(idx).get_group();
+        return get_attribute_ref(idx).get_group();
     }
 
-    ALWAYS_INLINE GroupAttributes& get_group(concepts::is_pointer auto tuple_ptr) // TODO remove cast and auto param
+    ALWAYS_INLINE GroupAttributes& get_group(entry_t* tuple_ptr)
     {
-        return reinterpret_cast<entry_t*>(tuple_ptr)->get_group();
+        return tuple_ptr->get_group();
     }
 
     ALWAYS_INLINE AggregateAttributes& get_aggregates(std::integral auto idx)
     {
-        return get_tuple_ref(idx).get_aggregates();
+        return get_attribute_ref(idx).get_aggregates();
     }
 
-    ALWAYS_INLINE AggregateAttributes& get_aggregates(concepts::is_pointer auto tuple_ptr) // TODO remove cast and auto param
+    ALWAYS_INLINE AggregateAttributes& get_aggregates(entry_t* tuple_ptr)
     {
-        return reinterpret_cast<entry_t*>(tuple_ptr)->get_aggregates();
+        return tuple_ptr->get_aggregates();
     }
 
     ALWAYS_INLINE auto& get_next(std::integral auto idx)
     requires(is_chained)
     {
-        return get_tuple_ref(idx).get_next();
+        return get_attribute_ref(idx).get_next();
     }
 
-    ALWAYS_INLINE auto& get_next(concepts::is_pointer auto tuple_ptr) // TODO remove cast and auto param
+    ALWAYS_INLINE auto& get_next(entry_t* tuple_ptr)
     requires(is_chained)
     {
-        return reinterpret_cast<entry_t*>(tuple_ptr)->get_next();
+        return tuple_ptr->get_next();
     }
 
     ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value, idx_t offset = EMPTY_SLOT)

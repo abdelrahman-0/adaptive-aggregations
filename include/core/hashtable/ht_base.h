@@ -1,6 +1,6 @@
 #pragma once
 
-#include "hashtable_page.h"
+#include "ht_page.h"
 #include "misc/concepts_traits/concepts_hashtable.h"
 
 namespace ht {

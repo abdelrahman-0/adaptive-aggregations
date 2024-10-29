@@ -6,7 +6,7 @@
 #include "bench/heterogeneous_thread_group.h"
 #include "common/alignment.h"
 #include "core/buffer/page_buffer.h"
-#include "core/hashtable/hashtable_local.h"
+#include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/network/page_communication.h"
