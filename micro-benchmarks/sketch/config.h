@@ -14,8 +14,3 @@
 
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint64(n, 100'000, "total number of entries");
-
- using sketch_t = ht::HLLSketch;
-//using sketch_t = ht::CPCSketch;
-
-using union_sketches_t = std::conditional_t<std::is_same_v<sketch_t, ht::CPCSketch>, ht::CPCUnion, sketch_t>;

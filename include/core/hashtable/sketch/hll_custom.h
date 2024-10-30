@@ -74,7 +74,7 @@ struct HLLSketch {
     [[nodiscard]]
     static std::string get_type()
     {
-        return "HyperLogLog";
+        return "HLL";
     }
 };
 

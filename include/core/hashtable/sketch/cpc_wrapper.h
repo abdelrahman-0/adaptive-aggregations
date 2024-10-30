@@ -30,7 +30,7 @@ struct CPCSketch {
     [[nodiscard]]
     static std::string get_type()
     {
-        return "Compressed Probability Counting";
+        return "CPC";
     }
 };
 
@@ -58,7 +58,7 @@ struct CPCUnion {
     [[nodiscard]]
     static std::string get_type()
     {
-        return "Compressed Probability Counting";
+        return "CPC";
     }
 };
 

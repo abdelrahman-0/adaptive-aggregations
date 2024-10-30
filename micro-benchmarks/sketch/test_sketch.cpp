@@ -1,9 +1,10 @@
 #include "config.h"
 
-int main(int argc, char* argv[])
+using entry_t = u64;
+
+template <typename sketch_t, typename union_sketches_t>
+void test_sketch(u64 total_grps)
 {
-    gflags::ParseCommandLineFlags(&argc, &argv, true);
-    using entry_t = u64;
 
     union_sketches_t sketch_glob{};
     // control atomics
@@ -11,10 +12,6 @@ int main(int argc, char* argv[])
     ::pthread_barrier_t barrier_end{};
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
-
-    // total number of groups should be constant
-    auto total_grps = FLAGS_groups;
-    FLAGS_groups /= FLAGS_threads;
 
     entry_t step = std::numeric_limits<entry_t>::max() / FLAGS_threads;
 
@@ -57,4 +54,16 @@ int main(int argc, char* argv[])
         .log("estimate", estimate)
         .log("threads", FLAGS_threads)
         .log("time (ms)", swatch.time_ms);
+    FLAGS_print_header = false;
+}
+
+int main(int argc, char* argv[])
+{
+    gflags::ParseCommandLineFlags(&argc, &argv, true);
+
+    FLAGS_groups = std::max(1ul, FLAGS_groups / FLAGS_threads);
+    auto total_grps = FLAGS_groups * FLAGS_threads;
+
+    test_sketch<ht::HLLSketch, ht::HLLSketch>(total_grps);
+    test_sketch<ht::CPCSketch, ht::CPCUnion>(total_grps);
 }
