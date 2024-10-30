@@ -1,8 +1,9 @@
 #pragma once
 
+#include <ranges>
+
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
 #define DEFAULTS_AUTO static constexpr auto
-
 #define CACHELINE_SZ 64
 
 using s8 = int8_t;

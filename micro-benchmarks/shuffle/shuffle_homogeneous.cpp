@@ -1,13 +1,13 @@
 #include <span>
 #include <thread>
 
+#include "bench/stopwatch.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
 #include "defaults.h"
-#include "system/stopwatch.h"
 #include "system/topology.h"
 #include "ubench/bench.h"
 #include "ubench/common_flags.h"

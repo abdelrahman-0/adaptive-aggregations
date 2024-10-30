@@ -11,6 +11,16 @@
 #include "misc/concepts_traits/concepts_common.h"
 #include "misc/concepts_traits/type_traits_common.h"
 
+auto range(std::integral auto start, std::integral auto end)
+{
+    return std::ranges::iota_view{start, end};
+}
+
+auto range(std::integral auto end)
+{
+    return std::ranges::iota_view{static_cast<decltype(end)>(0), end};
+}
+
 // need 64-bit system for pointer tagging
 static_assert(sizeof(std::size_t) == 8 and sizeof(uintptr_t) == 8);
 
@@ -28,9 +38,15 @@ static inline auto get_pointer(uintptr_t tagged_ptr)
     return reinterpret_cast<T*>(tagged_ptr & pointer_tag_mask);
 }
 
-static inline u16 get_tag(void* tagged_ptr) { return reinterpret_cast<uintptr_t>(tagged_ptr) >> 48; }
+static inline u16 get_tag(void* tagged_ptr)
+{
+    return reinterpret_cast<uintptr_t>(tagged_ptr) >> 48;
+}
 
-static inline u16 get_tag(uintptr_t tagged_ptr) { return tagged_ptr >> 48; }
+static inline u16 get_tag(uintptr_t tagged_ptr)
+{
+    return tagged_ptr >> 48;
+}
 
 static inline auto tag_pointer(concepts::is_pointer auto ptr, std::integral auto tag)
 {
@@ -45,8 +61,7 @@ void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence
         if constexpr (concepts::is_iterable<Ts>) {
             auto iter_idx = 0u;
             for (auto&& el : std::get<indexes>(args)) {
-                __print(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)),
-                        std::make_index_sequence<1>{});
+                __print(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)), std::make_index_sequence<1>{});
                 stream << ((iter_idx++ < std::get<indexes>(args).size() - 1) ? std::string{delimiter} : "");
             }
         }
@@ -59,8 +74,7 @@ void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence
                 std::get<indexes>(args));
         }
         else {
-            stream << std::get<indexes>(args)
-                   << ((delimiter and indexes < sizeof...(Ts) - 1) ? std::string{delimiter} : ""s);
+            stream << std::get<indexes>(args) << ((delimiter and indexes < sizeof...(Ts) - 1) ? std::string{delimiter} : ""s);
         }
     }());
 }
@@ -77,8 +91,7 @@ void print(Ts... args)
 template <char delimiter = ' ', typename... Ts>
 void logln(Ts... args)
 {
-    __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...),
-                       std::index_sequence_for<Ts...>{});
+    __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
     std::cerr << '\n';
 }
 

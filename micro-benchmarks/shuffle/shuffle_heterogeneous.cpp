@@ -1,6 +1,7 @@
 #include <span>
 #include <thread>
 
+#include "bench/stopwatch.h"
 #include "common/alignment.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
@@ -9,7 +10,6 @@
 #include "core/storage/table.h"
 #include "defaults.h"
 #include "misc/exceptions/exceptions_misc.h"
-#include "system/stopwatch.h"
 #include "system/topology.h"
 #include "ubench/bench.h"
 #include "ubench/common_flags.h"

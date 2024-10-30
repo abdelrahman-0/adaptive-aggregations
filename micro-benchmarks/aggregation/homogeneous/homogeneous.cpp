@@ -4,6 +4,7 @@
 
 #include "bench/bench.h"
 #include "bench/common_flags.h"
+#include "bench/stopwatch.h"
 #include "core/buffer/page_buffer.h"
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
@@ -11,7 +12,6 @@
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
 #include "defaults.h"
-#include "system/stopwatch.h"
 #include "system/topology.h"
 #include "utils/hash.h"
 #include "utils/utils.h"

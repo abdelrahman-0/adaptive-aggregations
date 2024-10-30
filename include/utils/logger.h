@@ -1,5 +1,6 @@
 #pragma once
 
+#include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
@@ -16,7 +17,8 @@ class Logger {
   public:
     explicit Logger(bool print_header) : print_header(print_header) {};
 
-    ~Logger() {
+    ~Logger()
+    {
         if (print_header) {
             logln<','>(header);
         }
@@ -25,12 +27,14 @@ class Logger {
 
     template <typename T>
     requires std::is_same_v<std::string, T> or requires(T t) { std::to_string(t); }
-    auto& log(const std::string& param, T&& val) {
+    auto& log(const std::string& param, T&& val)
+    {
         std::unique_lock<std::mutex> _{mutex};
         header.push_back(param);
         if constexpr (std::is_same_v<std::string, T>) {
             row.push_back(val);
-        } else {
+        }
+        else {
             row.push_back(std::to_string(val));
         }
         return *this;

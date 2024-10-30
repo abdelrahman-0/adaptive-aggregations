@@ -64,7 +64,8 @@ struct EntryAggregation : public BaseEntryAggregation<mode, GroupAttributes, Agg
         return std::get<1>(base_t::val);
     }
 
-    ALWAYS_INLINE auto& get_next() requires(is_chained)
+    ALWAYS_INLINE auto& get_next()
+    requires(is_chained)
     {
         return base_t::next;
     }

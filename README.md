@@ -25,8 +25,12 @@ set `/proc/sys/net/core/wmem_max` to be large enough (e.g. 1<<28)\
 
 echo 1 | sudo tee /proc/sys/kernel/sched_schedstats
 
-TODO:
-add option for compiling with:
+TO DO:
+
+- update datasketch dependency (local installation)
+  - https://github.com/apache/datasketches-cpp/
+
+- update option for compiling with:
 
 `-stdlib=libc++` for forward-layout `std::tuple`s
 

@@ -90,7 +90,7 @@ struct Page {
 
     void fill_random()
     {
-        std::apply([](auto&&... args) { ((librand::random_column(args)), ...); }, columns);
+        std::apply([](auto&&... args) { ((librand::random_iterable(args)), ...); }, columns);
     }
 };
 
