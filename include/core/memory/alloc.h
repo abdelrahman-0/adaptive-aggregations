@@ -28,25 +28,34 @@ struct MMapMemoryAllocator {
             ::madvise(ptr, size, MADV_HUGEPAGE);
         }
         if (ptr == MAP_FAILED) {
-            throw MMapAllocError(size);
+            throw MMapAllocError{size};
         }
         return reinterpret_cast<T*>(ptr);
     }
 
-    static void dealloc(void* ptr, u64 size) noexcept { ::munmap(ptr, size); }
+    static void dealloc(void* ptr, u64 size = 0) noexcept
+    {
+        ::munmap(ptr, size);
+    }
 };
 
-// TODO
 template <bool huge = true>
 struct JEMALLOCator {
 
     template <typename T = void>
     static auto alloc(u64 size)
     {
-//        return reinterpret_cast<T*>(ptr);
+        void* ptr = ::malloc(size);
+        if (not ptr) {
+            throw JEMALLOCError{size};
+        }
+        //        return reinterpret_cast<T*>(ptr);
     }
 
-    static void dealloc(void* ptr, u64 size) noexcept {  }
+    static void dealloc(void* ptr, u64 = 0) noexcept
+    {
+        free(ptr);
+    }
 };
 
-} // namespace memory
+} // namespace mem

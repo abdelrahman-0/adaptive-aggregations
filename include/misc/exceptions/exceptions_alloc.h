@@ -29,6 +29,12 @@ class MMapAllocError : public AllocError {
     explicit MMapAllocError(u64 alloc_sz) : AllocError("mmap", alloc_sz) {}
 };
 
+class JEMALLOCError : public AllocError {
+  public:
+    explicit JEMALLOCError(const std::string& msg = "") : AllocError("jemalloc", msg) {}
+    explicit JEMALLOCError(u64 alloc_sz) : AllocError("jemalloc", alloc_sz) {}
+};
+
 class BlockAllocError : public AllocError {
   public:
     explicit BlockAllocError(const std::string& msg = "") : AllocError("block", msg) {}

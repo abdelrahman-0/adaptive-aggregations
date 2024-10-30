@@ -1,5 +1,6 @@
 #pragma once
 
+#include <DataSketches/MurmurHash3.h>
 #include <gflags/gflags.h>
 #include <thread>
 
@@ -9,6 +10,7 @@
 #include "core/hashtable/sketch/hll_custom.h"
 #include "defaults.h"
 #include "misc/librand/random.h"
+#include "utils/hash.h"
 #include "utils/logger.h"
 #include "utils/utils.h"
 

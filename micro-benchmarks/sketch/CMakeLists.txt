@@ -1,3 +1,3 @@
-add_executable(sketch test_sketch.cpp)
+add_executable(sketch sketch.cpp)
 
 target_link_libraries(sketch gflags)

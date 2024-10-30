@@ -22,6 +22,11 @@ struct BaseAggregationHashtable {
         initialize(size);
     }
 
+    ~BaseAggregationHashtable()
+    {
+        Alloc::dealloc(slots);
+    }
+
   public:
     void initialize(u64 size)
     {

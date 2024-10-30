@@ -43,7 +43,7 @@ int main(int argc, char* argv[])
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
     DEBUGGING(print("finished populating cache"));
 
-    /* ----------- THREAD SETUP ----------- */
+    /* ----------- SETUP ----------- */
 
     // control atomics
     ::pthread_barrier_t barrier_start{};
@@ -57,26 +57,7 @@ int main(int argc, char* argv[])
     StorageGlobal storage_global;
     HashtableGlobal ht_global;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
-    Logger logger{FLAGS_print_header};
-    logger.log("node id", node_id)
-        .log("nodes", FLAGS_nodes)
-        .log("traffic", "both"s)
-        .log("operator", "aggregation"s)
-        .log("implementation", "local"s)
-        .log("cache (%)", FLAGS_cache)
-        .log("pin", FLAGS_pin)
-        .log("morsel size", FLAGS_morselsz)
-        .log("total pages", FLAGS_npages)
-        .log("local page size", defaults::local_page_size)
-        .log("tuples per local page", PageTable::max_tuples_per_page)
-        .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
-        .log("hashtable local", HashtableLocal::get_type())
-        .log("partitions", FLAGS_partitions)
-        .log("slots", FLAGS_slots)
-        .log("ht factor", FLAGS_htfactor)
-        .log("threads", FLAGS_threads)
-        .log("groups", FLAGS_groups);
+
     tbb::concurrent_vector<u64> times_preagg;
     times_preagg.resize(FLAGS_threads);
 
@@ -190,13 +171,13 @@ int main(int argc, char* argv[])
                 }
             }
 
+            times_preagg[thread_id] = swatch_preagg.time_ms;
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
             /* ----------- END ----------- */
 
             DEBUGGING(tuples_processed += local_tuples_processed);
-            times_preagg[thread_id] = swatch_preagg.time_ms;
         });
     }
 
@@ -210,7 +191,28 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
 
-    logger.log("tuples pre-agg", storage_global.num_tuples)
+    Logger logger{FLAGS_print_header};
+    logger.log("node id", node_id)
+        .log("nodes", FLAGS_nodes)
+        .log("traffic", "both"s)
+        .log("operator", "aggregation"s)
+        .log("implementation", "local"s)
+        .log("cache (%)", FLAGS_cache)
+        .log("pin", FLAGS_pin)
+        .log("morsel size", FLAGS_morselsz)
+        .log("total pages", FLAGS_npages)
+        .log("local page size", defaults::local_page_size)
+        .log("tuples (local page)", PageTable::max_tuples_per_page)
+        .log("hashtable page size", defaults::hashtable_page_size)
+        .log("tuples (hashtable page)", PageHashtable::max_tuples_per_page)
+        .log("hashtable type (local)", HashtableLocal::get_type())
+        .log("hashtable type (global)", HashtableGlobal::get_type())
+        .log("partitions", FLAGS_partitions)
+        .log("slots", FLAGS_slots)
+        .log("ht factor", FLAGS_htfactor)
+        .log("threads", FLAGS_threads)
+        .log("groups", FLAGS_groups)
+        .log("tuples pre-agg", storage_global.num_tuples)
         .log("pages pre-agg", storage_global.pages.size())           //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 

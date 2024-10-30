@@ -27,7 +27,7 @@ void test_sketch(u64 total_grps)
             ::pthread_barrier_wait(&barrier_start);
             /////////////////////////
             for (auto v : values) {
-                sketch_loc.update(v);
+                sketch_loc.update(murmur_hash(v));
             }
             /////////////////////////
             sketch_glob.merge_concurrent(sketch_loc);
@@ -47,11 +47,14 @@ void test_sketch(u64 total_grps)
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);
 
+    auto error_percentage = (100.0 * std::abs(static_cast<s64>(total_grps) - static_cast<s64>(estimate))) / total_grps;
+
     Logger{FLAGS_print_header}
         .log("type", sketch_t::get_type())
-        .log("total", FLAGS_n)
-        .log("requested", total_grps)
+        .log("num entries", FLAGS_n)
+        .log("num groups", total_grps)
         .log("estimate", estimate)
+        .log("error (%)", error_percentage)
         .log("threads", FLAGS_threads)
         .log("time (ms)", swatch.time_ms);
     FLAGS_print_header = false;

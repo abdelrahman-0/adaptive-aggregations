@@ -55,8 +55,7 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 }
 
 static constexpr bool is_salted = true;
-static constexpr bool is_chained = true;
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<ht::DIRECT, Groups, Aggregates, fn_agg, MemAlloc, is_salted, is_chained>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<ht::DIRECT, Groups, Aggregates, fn_agg, MemAlloc, is_salted, true>;
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg, MemAlloc>;
 using PageHashtable = HashtableLocal::page_t;
 
