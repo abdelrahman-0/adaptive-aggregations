@@ -22,7 +22,7 @@ auto range(std::unsigned_integral auto end)
 }
 
 // need 64-bit system for pointer tagging
-static_assert(sizeof(std::size_t) == 8 and sizeof(uintptr_t) == 8);
+static_assert(sizeof(void*) == 8);
 
 static constexpr u64 pointer_tag_mask = (~static_cast<u64>(0)) >> 16;
 
@@ -67,10 +67,7 @@ void __print(std::ostream& stream, std::tuple<Ts&&...> args, std::index_sequence
         }
         else if constexpr (type_traits::is_tuple_v<Ts>) {
             std::apply(
-                [&](auto el) {
-                    __print<','>(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)),
-                                 std::make_index_sequence<1>{});
-                },
+                [&](auto el) { __print<','>(stream, std::forward_as_tuple(std::forward<std::remove_reference_t<decltype(el)>>(el)), std::make_index_sequence<1>{}); },
                 std::get<indexes>(args));
         }
         else {

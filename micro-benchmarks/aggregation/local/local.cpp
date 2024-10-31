@@ -60,7 +60,7 @@ int main(int argc, char* argv[])
 
     // create threads
     std::vector<std::jthread> threads{};
-    for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
+    for (u32 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
                               &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
@@ -221,7 +221,7 @@ int main(int argc, char* argv[])
         .log("pages pre-agg", storage_glob.pages.size())             //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
-    for (u32 tid{0}; tid < FLAGS_threads; tid++) {
+    for (u32 tid : range(FLAGS_threads)) {
         logger.log("thread "s + std::to_string(tid) + " pre-agg (ms)", times_preagg[tid]);
     }
     logger.log("time (ms)", swatch.time_ms);
