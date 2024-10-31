@@ -217,4 +217,13 @@ int main(int argc, char* argv[])
         logger.log("thread "s + std::to_string(tid) + " pre-agg (ms)", times_preagg[tid]);
     }
     logger.log("time (ms)", swatch.time_ms);
+    auto sum = 0;
+    for (u64 i : range(ht_global.ht_mask + 1)) {
+        auto slot = ht_global.slots[i].load();
+        while (slot) {
+            sum += std::get<0>(slot->get_aggregates());
+            slot = slot->get_next();
+        }
+    }
+    print("TOTAL COUNT:", sum);
 }

@@ -53,8 +53,8 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-static constexpr bool is_salted = true;
-static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
+static constexpr bool is_salted = false;
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
 using HashtableLocal =
     ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, is_salted, true>;
