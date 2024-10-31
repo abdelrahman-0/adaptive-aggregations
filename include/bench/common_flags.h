@@ -21,4 +21,5 @@ DEFINE_uint64(groups, 1, "number of unique groups to use");
 
 DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
 DEFINE_uint32(maxalloc, 50'000, "maximum number of calls the block allocator can be called");
-DEFINE_bool(print_header, true, "whether to print metrics header");
+DEFINE_bool(print_header, true, "whether to print metrics header (only valid for csv output, see 'csv' flag)");
+DEFINE_bool(csv, true, "whether to print output metrics as csv");

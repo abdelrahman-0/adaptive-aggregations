@@ -2,7 +2,7 @@
 
 #include <chrono>
 
-#include "utils/logger.h"
+#include "logger.h"
 #include "utils/utils.h"
 
 struct Stopwatch {

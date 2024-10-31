@@ -5,13 +5,13 @@
 #include <thread>
 
 #include "bench/common_flags.h"
+#include "bench/logger.h"
 #include "bench/stopwatch.h"
 #include "core/hashtable/sketch/cpc_wrapper.h"
 #include "core/hashtable/sketch/hll_custom.h"
 #include "defaults.h"
 #include "misc/librand/random.h"
 #include "utils/hash.h"
-#include "utils/logger.h"
 #include "utils/utils.h"
 
 DEFINE_uint32(threads, 1, "number of threads to use");

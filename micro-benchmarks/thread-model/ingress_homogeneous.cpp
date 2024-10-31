@@ -4,6 +4,7 @@
 #include <tbb/enumerable_thread_specific.h>
 #include <thread>
 
+#include "bench/logger.h"
 #include "defaults.h"
 #include "exceptions/exceptions_misc.h"
 #include "network/connection.h"
@@ -12,7 +13,6 @@
 #include "performance/stopwatch.h"
 #include "storage/chunked_list.h"
 #include "utils/hash.h"
-#include "utils/logger.h"
 
 DEFINE_uint32(connections, 5, "number of ingress connections");
 

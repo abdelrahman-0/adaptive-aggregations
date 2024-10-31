@@ -187,7 +187,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
 
-    Logger logger{FLAGS_print_header};
+    Logger logger{FLAGS_print_header, FLAGS_csv};
     logger.log("node id", node_id)
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
