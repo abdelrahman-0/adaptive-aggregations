@@ -50,8 +50,9 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
-    StorageGlobal storage_global;
-    HashtableGlobal ht_global;
+    StorageGlobal storage_glob;
+    SketchGlobal sketch_glob;
+    HashtableGlobal ht_glob;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
 
     tbb::concurrent_vector<u64> times_preagg;
@@ -60,8 +61,8 @@ int main(int argc, char* argv[])
     // create threads
     std::vector<std::jthread> threads{};
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_global, &barrier_start, &barrier_preagg, &barrier_end,
-                              &ht_global, &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
+        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
+                              &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -83,30 +84,30 @@ int main(int argc, char* argv[])
             /* ------------ GROUP BY ------------ */
 
             std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
-            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_global](PageHashtable* pg, bool) {
+            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_glob](PageHashtable* pg, bool) {
                 if (not pg->empty()) {
                     pg->retire();
-                    storage_global.add_page(pg);
+                    storage_glob.add_page(pg);
                 }
             });
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
-            HashtableLocal ht_local{FLAGS_partitions, FLAGS_slots, partition_buffer};
+            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 
-            auto process_page_local = [&ht_local DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto process_page_local = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
-                    ht_local.aggregate(group, agg);
+                    ht_loc.aggregate(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
-            auto process_page_global = [&ht_global](PageHashtable& page) {
+            auto process_page_glob = [&ht_glob](PageHashtable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    ht_global.aggregate(page.get_attribute_ref(j));
+                    ht_glob.aggregate(page.get_attribute_ref(j));
                 }
             };
 
@@ -126,8 +127,7 @@ int main(int argc, char* argv[])
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
                 auto swizzled_idx =
-                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) -
-                    swips.data();
+                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips.data();
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
                 thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
@@ -143,13 +143,14 @@ int main(int argc, char* argv[])
                 }
             }
             partition_buffer.finalize();
+            sketch_glob.merge_concurrent(ht_loc.sketch);
 
             swatch_preagg.stop();
             // barrier
             ::pthread_barrier_wait(&barrier_preagg);
 
             if (thread_id == 0) {
-                ht_global.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * storage_global.num_tuples)));
+                ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
                 // reset morsel
                 current_swip = 0;
                 global_ht_construction_complete = true;
@@ -159,11 +160,11 @@ int main(int argc, char* argv[])
                 global_ht_construction_complete.wait(false);
             }
 
-            const u64 npages = storage_global.pages.size();
+            const u64 npages = storage_glob.pages.size();
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
                 while (morsel_begin < morsel_end) {
-                    process_page_global(*storage_global.pages[morsel_begin++]);
+                    process_page_glob(*storage_glob.pages[morsel_begin++]);
                 }
             }
 
@@ -187,6 +188,9 @@ int main(int argc, char* argv[])
     ::pthread_barrier_destroy(&barrier_preagg);
     ::pthread_barrier_destroy(&barrier_end);
 
+    auto groups_estimate = sketch_glob.get_estimate();
+    auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
+
     Logger logger{FLAGS_print_header, FLAGS_csv};
     logger.log("node id", node_id)
         .log("nodes", FLAGS_nodes)
@@ -194,23 +198,27 @@ int main(int argc, char* argv[])
         .log("operator", "aggregation"s)
         .log("implementation", "local"s)
         .log("allocator", MemAlloc::get_type())
+        .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
+        .log("page size (hashtable)", defaults::hashtable_page_size)
         .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
+        .log("hashtable (local)", HashtableLocal::get_type())
+        .log("sketch (local)", SketchLocal::get_type())
+        .log("sketch (global)", SketchGlobal::get_type())
+        .log("allocator", MemAlloc::get_type())
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
         .log("morsel size", FLAGS_morselsz)
         .log("total pages", FLAGS_npages)
-        .log("page size (local)", defaults::local_page_size)
-        .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("hashtable (local)", HashtableLocal::get_type())
-        .log("hashtable (global)", HashtableGlobal::get_type())
         .log("ht factor", FLAGS_htfactor)
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
-        .log("groups", FLAGS_groups)
-        .log("tuples pre-agg", storage_global.num_tuples)
-        .log("pages pre-agg", storage_global.pages.size())           //
+        .log("groups (actual)", FLAGS_groups)
+        .log("groups (estimate)", groups_estimate)
+        .log("groups estimate error (%)", error_percentage)
+        .log("tuples pre-agg", storage_glob.num_tuples)
+        .log("pages pre-agg", storage_glob.pages.size())             //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
     for (u32 tid{0}; tid < FLAGS_threads; tid++) {
@@ -218,8 +226,8 @@ int main(int argc, char* argv[])
     }
     logger.log("time (ms)", swatch.time_ms);
     auto sum = 0;
-    for (u64 i : range(ht_global.ht_mask + 1)) {
-        auto slot = ht_global.slots[i].load();
+    for (u64 i : range(ht_glob.ht_mask + 1)) {
+        auto slot = ht_glob.slots[i].load();
         while (slot) {
             sum += std::get<0>(slot->get_aggregates());
             slot = slot->get_next();

@@ -2,7 +2,8 @@
 // 2023 Maximilian Kuschewski
 // -----------------------------------------------------------------------------
 
-// Modified signature of some functions to match cpc sketch and simplified struct to use u64 as register type
+// - Modified signature of some functions to match cpc sketch
+// - Simplified struct to use u64 as register type
 
 #pragma once
 
@@ -26,7 +27,7 @@ struct HLLSketch {
     static constexpr float EST_CORRECT = REG_CNT * REG_CNT * ALPHA;
     static constexpr double EST_MIN_LIM = 2.5 * REG_CNT;
 
-    std::array<u8, REG_CNT> registers;
+    std::array<u8, REG_CNT> registers{};
 
     HLLSketch()
     {

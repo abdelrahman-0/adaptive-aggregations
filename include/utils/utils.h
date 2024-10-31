@@ -16,7 +16,7 @@ auto range(std::integral auto start, std::integral auto end)
     return std::ranges::iota_view{start, end};
 }
 
-auto range(std::integral auto end)
+auto range(std::unsigned_integral auto end)
 {
     return std::ranges::iota_view{static_cast<decltype(end)>(0), end};
 }

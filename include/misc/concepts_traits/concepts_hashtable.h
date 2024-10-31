@@ -13,4 +13,10 @@ concept is_partition_buffer = requires(T t, u64 part, BufferPage* page_to_evict)
     { t.evict(part, page_to_evict) } -> concepts::is_pointer;
 };
 
+template <typename T>
+concept is_sketch = requires(T t, u64 hash) {
+    { t.update(hash) } -> concepts::is_void;
+    { t.get_estimate() } -> std::unsigned_integral;
+};
+
 } // namespace concepts

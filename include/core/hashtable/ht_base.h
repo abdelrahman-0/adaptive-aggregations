@@ -5,9 +5,10 @@
 
 namespace ht {
 
-template <typename Key, typename Value, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool is_chained, bool use_ptr,
-          bool is_concurrent = false, bool next_first = true>
+template <typename Key, typename Value, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool use_ptr, bool is_concurrent = false,
+          bool next_first = true>
 struct BaseAggregationHashtable {
+    static constexpr bool is_chained = entry_mode == DIRECT;
     using page_t = PageAggregation<Key, Value, entry_mode, is_chained, use_ptr>;
     using entry_t = page_t::entry_t;
     using idx_t = page_t::idx_t;

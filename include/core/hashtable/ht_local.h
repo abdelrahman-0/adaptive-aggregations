@@ -21,12 +21,10 @@
 
 namespace ht {
 
-// TODO is_chained can be inferred from mode
-template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool is_chained, bool use_ptr,
+template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool use_ptr,
           bool is_heterogeneous>
-struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, is_chained, use_ptr> {
-
-    using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, is_chained, use_ptr>;
+struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, use_ptr> {
+    using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, use_ptr>;
     using base_t::slots;
     using typename base_t::idx_t;
     using typename base_t::page_t;
@@ -36,6 +34,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
 
   protected:
     // global hashtables are non-inserters
+    sketch_t sketch;
     part_buf_t& part_buffer;
     u32 partition_shift{0};
 
@@ -65,15 +64,16 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     }
 };
 
-template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&),
-          concepts::is_mem_allocator Alloc, bool is_heterogeneous = false>
+template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc,
+          concepts::is_sketch sketch_t, bool is_heterogeneous = false>
 struct PartitionedChainedAggregationHashtable
-    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, slots_mode == DIRECT, is_heterogeneous> {
-    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, slots_mode == DIRECT, is_heterogeneous>;
+    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, slots_mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, slots_mode == DIRECT, is_heterogeneous>;
     using base_t::evict;
     using base_t::ht_mask;
     using base_t::part_buffer;
     using base_t::partition_shift;
+    using base_t::sketch;
     using base_t::slots;
     using typename base_t::idx_t;
     using typename base_t::page_t;
@@ -113,7 +113,9 @@ struct PartitionedChainedAggregationHashtable
 
     void aggregate(key_t& key, value_t& value)
     {
-        aggregate(key, value, hash_tuple(key));
+        u64 hash = hash_tuple(key);
+        sketch.update(hash);
+        aggregate(key, value, hash);
     }
 
     [[nodiscard]]
@@ -123,16 +125,18 @@ struct PartitionedChainedAggregationHashtable
     }
 };
 
-template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&),
-          concepts::is_mem_allocator Alloc, bool is_salted = true, bool is_chained = false, bool is_heterogeneous = false>
+template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc,
+          concepts::is_sketch sketch_t, bool is_salted = true, bool is_heterogeneous = false>
 requires(not is_salted or entry_mode != INDIRECT_16) // need at least 32 bits for 16-bit salt
 struct PartitionedOpenAggregationHashtable
-    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, is_chained, slots_mode == DIRECT, is_heterogeneous> {
-    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, is_chained, slots_mode == DIRECT, is_heterogeneous>;
+    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, slots_mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, slots_mode == DIRECT, is_heterogeneous>;
     using base_t::evict;
     using base_t::ht_mask;
+    using base_t::is_chained;
     using base_t::part_buffer;
     using base_t::partition_shift;
+    using base_t::sketch;
     using base_t::slots;
     using typename base_t::idx_t;
     using typename base_t::page_t;
@@ -146,8 +150,7 @@ struct PartitionedOpenAggregationHashtable
     u64 slots_mask;
 
   public:
-    PartitionedOpenAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer)
-        : base_t(_npartitions, _nslots, _part_buffer), slots_mask(_nslots - 1)
+    PartitionedOpenAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer) : base_t(_npartitions, _nslots, _part_buffer), slots_mask(_nslots - 1)
     {
         if (_nslots <= page_t::max_tuples_per_page) {
             throw InvalidOptionError{"Open-addressing hashtable needs more slots"};
@@ -251,7 +254,9 @@ struct PartitionedOpenAggregationHashtable
 
     void aggregate(key_t& key, value_t& value)
     {
-        aggregate(key, value, hash_tuple(key));
+        u64 hash = hash_tuple(key);
+        sketch.update(hash);
+        aggregate(key, value, hash);
     }
 
     [[nodiscard]]

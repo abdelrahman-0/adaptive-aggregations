@@ -80,7 +80,7 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
     // TODO -1 for not DIRECT
     static constexpr idx_t EMPTY_SLOT = 0;
 
-    ALWAYS_INLINE GroupAttributes& get_group(std::integral auto idx)
+    ALWAYS_INLINE GroupAttributes& get_group(std::unsigned_integral auto idx)
     {
         return get_attribute_ref(idx).get_group();
     }
@@ -90,7 +90,7 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
         return tuple_ptr->get_group();
     }
 
-    ALWAYS_INLINE AggregateAttributes& get_aggregates(std::integral auto idx)
+    ALWAYS_INLINE AggregateAttributes& get_aggregates(std::unsigned_integral auto idx)
     {
         return get_attribute_ref(idx).get_aggregates();
     }
@@ -100,7 +100,7 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
         return tuple_ptr->get_aggregates();
     }
 
-    ALWAYS_INLINE auto& get_next(std::integral auto idx)
+    ALWAYS_INLINE auto& get_next(std::unsigned_integral auto idx)
     requires(is_chained)
     {
         return get_attribute_ref(idx).get_next();

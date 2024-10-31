@@ -34,13 +34,13 @@ struct Page {
     void clear_tuples() { num_tuples = 0; }
 
     template <u16 col_idx = 0>
-    auto& get_attribute_ref(std::integral auto row_idx)
+    auto& get_attribute_ref(std::unsigned_integral auto row_idx)
     {
         return std::get<col_idx>(columns)[row_idx];
     }
 
     template <u16... col_idxs>
-    auto get_tuple(std::integral auto row_idx) const
+    auto get_tuple(std::unsigned_integral auto row_idx) const
     {
         return std::make_tuple(std::get<col_idxs>(columns)[row_idx]...);
     }

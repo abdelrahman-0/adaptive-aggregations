@@ -12,6 +12,8 @@
 #include "core/hashtable/ht_base.h"
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
+#include "core/hashtable/sketch/cpc_wrapper.h"
+#include "core/hashtable/sketch/hll_custom.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
 #include "core/storage/page_local.h"
@@ -27,7 +29,7 @@
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
-DEFINE_double(htfactor, 1.8, "growth factor to use when allocating global hashtable");
+DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 
 /* --------------------------------------- */
 
@@ -56,9 +58,14 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 static constexpr bool is_salted = true;
 static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
-// using HashtableLocal =
-//     ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, is_salted, true>;
-using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc>;
+
+using SketchLocal = ht::HLLSketch;
+// using SketchLocal = ht::CPCSketch;
+
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
+// using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+
+using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 using PageHashtable = HashtableLocal::page_t;
