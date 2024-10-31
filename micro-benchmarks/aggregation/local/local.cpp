@@ -98,7 +98,7 @@ int main(int argc, char* argv[])
             auto process_page_local = [&ht_local DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
-                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VAL);
+                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     ht_local.aggregate(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);

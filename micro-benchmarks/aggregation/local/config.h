@@ -31,7 +31,7 @@ DEFINE_double(htfactor, 1.8, "growth factor to use when allocating global hashta
 
 /* --------------------------------------- */
 
-#define AGG_VAL 1
+#define AGG_VALS 1
 #define AGG_KEYS u64
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
@@ -53,11 +53,12 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-static constexpr bool is_salted = false;
-static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
+static constexpr bool is_salted = true;
+static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
-using HashtableLocal =
-    ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, is_salted, true>;
+// using HashtableLocal =
+//     ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, is_salted, true>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc>;
 
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 using PageHashtable = HashtableLocal::page_t;

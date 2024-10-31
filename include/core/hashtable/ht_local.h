@@ -68,8 +68,8 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&),
           concepts::is_mem_allocator Alloc, bool is_heterogeneous = false>
 struct PartitionedChainedAggregationHashtable
-    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, entry_mode == DIRECT, is_heterogeneous> {
-    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, entry_mode == DIRECT, is_heterogeneous>;
+    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, slots_mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, true, slots_mode == DIRECT, is_heterogeneous>;
     using base_t::evict;
     using base_t::ht_mask;
     using base_t::part_buffer;
@@ -91,23 +91,24 @@ struct PartitionedChainedAggregationHashtable
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
         auto* part_page = part_buffer.get_partition_page(part_no);
-        idx_t& slot = slots[mod];
-        idx_t next_offset = slot, offset = slot;
-        while (next_offset != page_t::EMPTY_SLOT) {
+        slot_idx_t& slot = slots[mod];
+        auto next_offset = slot;
+        auto offset = next_offset;
+        while (next_offset != reinterpret_cast<slot_idx_t>(page_t::EMPTY_SLOT)) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
                 return;
             }
-            next_offset = part_page->get_next(next_offset);
+            next_offset = reinterpret_cast<slot_idx_t>(part_page->get_next(next_offset));
         }
         if (part_page->full()) {
             // evict if full
             part_page = evict(part_no);
             part_page->clear_tuples();
-            offset = page_t::EMPTY_SLOT;
+            offset = reinterpret_cast<slot_idx_t>(page_t::EMPTY_SLOT);
         }
-        slot = part_page->emplace_back_grp(key, value, offset);
+        slot = part_page->emplace_back_grp(key, value, reinterpret_cast<idx_t>(offset));
     }
 
     void aggregate(key_t& key, value_t& value)
@@ -118,7 +119,7 @@ struct PartitionedChainedAggregationHashtable
     [[nodiscard]]
     static std::string get_type()
     {
-        return "chained-"s + (entry_mode == DIRECT ? "direct" : "indirect"); // TODO include mode and slot_mode
+        return "chained-"s + ht::get_idx_mode_str(entry_mode) + "_entry-" + ht::get_idx_mode_str(slots_mode) + "_slots";
     }
 };
 
