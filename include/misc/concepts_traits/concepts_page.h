@@ -6,6 +6,7 @@ template <typename T>
 concept is_page = requires(T t) {
     { t.num_tuples };
     { t.full() } -> std::convertible_to<bool>;
+    { T::max_tuples_per_page };
 };
 
 template <typename T>

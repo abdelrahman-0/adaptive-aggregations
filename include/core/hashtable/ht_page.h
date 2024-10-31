@@ -3,17 +3,11 @@
 #include "core/network/page_communication.h"
 #include "core/page.h"
 #include "defaults.h"
+#include "ht_utils.h"
 #include "misc/concepts_traits/concepts_hashtable.h"
 #include "utils/hash.h"
 
 namespace ht {
-
-enum IDX_MODE : u8 {
-    DIRECT = 0,
-    INDIRECT_16,
-    INDIRECT_32,
-    INDIRECT_64,
-};
 
 template <typename... Attributes>
 struct Entry {
@@ -34,25 +28,25 @@ template <concepts::is_slot Next, typename... Attributes>
 struct EntryChained : public Entry<Attributes...>, public Chained<Next> {};
 
 // forward declaration
-template <IDX_MODE mode, typename GroupAttributes, typename AggregateAttributes, bool is_chained, bool next_first>
+template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first>
 struct EntryAggregation;
 
-template <IDX_MODE mode, typename GroupAttributes, typename AggregateAttributes, bool is_chained, bool next_first>
-using entry_agg_idx_type = std::conditional_t<mode == DIRECT, EntryAggregation<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>*,
-                                              std::conditional_t<mode == INDIRECT_16, u16, std::conditional_t<mode == INDIRECT_32, u32, u64>>>;
+template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first>
+using agg_entry_idx_t = std::conditional_t<mode == DIRECT, EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>*,
+                                           std::conditional_t<mode == INDIRECT_16, u16, std::conditional_t<mode == INDIRECT_32, u32, u64>>>;
 
-template <IDX_MODE mode, typename GroupAttributes, typename AggregateAttributes, bool is_chained, bool next_first>
+template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first>
 using BaseEntryAggregation = std::conditional_t<
     is_chained,
     std::conditional_t<
         next_first,
-        ChainedEntry<entry_agg_idx_type<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>, GroupAttributes, AggregateAttributes>,
-        EntryChained<entry_agg_idx_type<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>, GroupAttributes, AggregateAttributes>>,
+        ChainedEntry<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>,
+        EntryChained<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>>,
     Entry<GroupAttributes, AggregateAttributes>>;
 
-template <IDX_MODE mode, typename GroupAttributes, typename AggregateAttributes, bool is_chained, bool next_first = true>
-struct EntryAggregation : public BaseEntryAggregation<mode, GroupAttributes, AggregateAttributes, is_chained, next_first> {
-    using base_t = BaseEntryAggregation<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>;
+template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first = true>
+struct EntryAggregation : public BaseEntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first> {
+    using base_t = BaseEntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
 
     ALWAYS_INLINE GroupAttributes& get_group()
     {
@@ -71,18 +65,19 @@ struct EntryAggregation : public BaseEntryAggregation<mode, GroupAttributes, Agg
     }
 };
 
-template <IDX_MODE mode, typename GroupAttributes, typename AggregateAttributes, bool is_chained, bool use_ptr = true, bool next_first = true>
+template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool use_ptr = true, bool next_first = true>
 requires(type_traits::is_tuple_v<GroupAttributes> and type_traits::is_tuple_v<AggregateAttributes>)
 struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
-                                                  EntryAggregation<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>, use_ptr> {
-    using entry_t = EntryAggregation<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>;
+                                                  EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, use_ptr> {
+    using entry_t = EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
     using base_t = PageCommunication<defaults::hashtable_page_size, entry_t, use_ptr>;
     using base_t::columns;
     using base_t::emplace_back;
     using base_t::get_attribute_ref;
     using base_t::num_tuples;
-    using idx_t = entry_agg_idx_type<mode, GroupAttributes, AggregateAttributes, is_chained, next_first>;
+    using idx_t = agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
 
+    // TODO -1 for not DIRECT
     static constexpr idx_t EMPTY_SLOT = 0;
 
     ALWAYS_INLINE GroupAttributes& get_group(std::integral auto idx)

@@ -3,13 +3,14 @@
 namespace ht {
 
 template <typename key_t, typename value_t, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc>
-struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<DIRECT, key_t, value_t, Alloc, true, true, true> {
-    using base_t = BaseAggregationHashtable<DIRECT, key_t, value_t, Alloc, true, true, true>;
+struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, DIRECT, DIRECT, Alloc, true, true, true> {
+    using base_t = BaseAggregationHashtable<key_t, value_t, DIRECT, DIRECT, Alloc, true, true, true>;
     using base_t::ht_mask;
     using base_t::slots;
     using typename base_t::entry_t;
     using typename base_t::idx_t;
     using typename base_t::page_t;
+    using typename base_t::slot_idx_t;
 
     ConcurrentChainedAggregationHashtable() = default;
 
@@ -54,4 +55,8 @@ struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<D
     }
 };
 
+template <typename key_t, typename value_t, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc>
+struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, NO_IDX, DIRECT, Alloc, true, true, true> {
+    // TODO
+};
 } // namespace ht

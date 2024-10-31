@@ -343,7 +343,7 @@ class HeterogeneousIngressNetworkManager : public NetworkManager<BufferPage> {
     std::vector<io_uring_cqe*> cqes;
     tbb::concurrent_queue<BufferPage*> page_ptrs;
     u64 pages_recv{0};
-    mem::BlockAllocator<BufferPage, mem::MMapMemoryAllocator<true>, true> block_alloc;
+    mem::BlockAllocator<BufferPage, mem::MMapAllocator<true>, true> block_alloc;
     u16 peers_left;
     std::atomic<bool> pending_peers;
     DEBUGGING(u64 total_submitted{0});

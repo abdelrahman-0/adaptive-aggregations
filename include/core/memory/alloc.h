@@ -9,6 +9,8 @@
 #pragma once
 
 #include <cstdint>
+#include <cstdlib>
+#include <jemalloc/jemalloc.h>
 #include <sys/mman.h>
 
 #include "defaults.h"
@@ -18,7 +20,7 @@
 namespace mem {
 
 template <bool huge = true>
-struct MMapMemoryAllocator {
+struct MMapAllocator {
 
     template <typename T = void>
     static auto alloc(u64 size)
@@ -37,6 +39,11 @@ struct MMapMemoryAllocator {
     {
         ::munmap(ptr, size);
     }
+
+    static std::string get_type()
+    {
+        return "MMAP";
+    }
 };
 
 template <bool huge = true>
@@ -45,16 +52,21 @@ struct JEMALLOCator {
     template <typename T = void>
     static auto alloc(u64 size)
     {
-        void* ptr = ::malloc(size);
+        void* ptr = mallocx(size, MALLOCX_ZERO);
         if (not ptr) {
             throw JEMALLOCError{size};
         }
-        //        return reinterpret_cast<T*>(ptr);
+        return reinterpret_cast<T*>(ptr);
     }
 
     static void dealloc(void* ptr, u64 = 0) noexcept
     {
         free(ptr);
+    }
+
+    static std::string get_type()
+    {
+        return "JEMALLOC";
     }
 };
 

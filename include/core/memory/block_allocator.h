@@ -11,7 +11,7 @@
 
 namespace mem {
 
-template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapMemoryAllocator<true>,
+template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>,
           bool has_concurrent_free_pages = false>
 class BlockAllocator {
     struct BlockAllocation {
@@ -48,10 +48,11 @@ class BlockAllocator {
 
     ~BlockAllocator()
     {
+        // TODO cannot deallocate here
         // loop through partitions and deallocate them
-        for (auto& allocation : allocations) {
-            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
-        }
+//        for (auto& allocation : allocations) {
+//            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
+//        }
     }
 
     [[maybe_unused]]

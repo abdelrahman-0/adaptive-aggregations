@@ -1,6 +1,3 @@
-#include <span>
-#include <thread>
-
 #include "config.h"
 
 int main(int argc, char* argv[])
@@ -15,11 +12,10 @@ int main(int argc, char* argv[])
     /* ----------- DATA LOAD ----------- */
 
     // TODO cleanup -> refactor
-    auto npeers = sys::Node::get_npeers();
     auto node_id = local_node.get_id();
     Table table{FLAGS_random};
     if (FLAGS_random) {
-        table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
+        table.prepare_random_swips(FLAGS_npages);
     }
     else {
         // prepare local IO at node offset (adjusted for page boundaries)
@@ -150,8 +146,8 @@ int main(int argc, char* argv[])
 
             swatch_preagg.stop();
             // barrier
-            ::pthread_barrier_wait(&barrier_preagg); // TODO relax this barrier? (90% threads done? -> scheduler)
-                                                     //            // TODO measure both pre-aggregation time and global time
+            ::pthread_barrier_wait(&barrier_preagg);
+
             if (thread_id == 0) {
                 ht_global.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * storage_global.num_tuples)));
                 // reset morsel
@@ -197,19 +193,20 @@ int main(int argc, char* argv[])
         .log("traffic", "both"s)
         .log("operator", "aggregation"s)
         .log("implementation", "local"s)
+        .log("allocator", MemAlloc::get_type())
+        .log("max tuples per page (local)", PageTable::max_tuples_per_page)
+        .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
         .log("morsel size", FLAGS_morselsz)
         .log("total pages", FLAGS_npages)
-        .log("local page size", defaults::local_page_size)
-        .log("tuples (local page)", PageTable::max_tuples_per_page)
-        .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples (hashtable page)", PageHashtable::max_tuples_per_page)
-        .log("hashtable type (local)", HashtableLocal::get_type())
-        .log("hashtable type (global)", HashtableGlobal::get_type())
+        .log("page size (local)", defaults::local_page_size)
+        .log("page size (hashtable)", defaults::hashtable_page_size)
+        .log("hashtable (local)", HashtableLocal::get_type())
+        .log("hashtable (global)", HashtableGlobal::get_type())
+        .log("ht factor", FLAGS_htfactor)
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)
-        .log("ht factor", FLAGS_htfactor)
         .log("threads", FLAGS_threads)
         .log("groups", FLAGS_groups)
         .log("tuples pre-agg", storage_global.num_tuples)

@@ -46,7 +46,7 @@ using PageHashtable = HashTablePreAgg::page_t;
 
 /* ----------- NETWORK ----------- */
 
-using BlockAlloc = mem::BlockAllocator<PageHashtable, mem::MMapMemoryAllocator<true>, false>;
+using BlockAlloc = mem::BlockAllocator<PageHashtable, mem::MMapAllocator<true>, false>;
 using IngressManager = IngressNetworkManager<PageHashtable, BlockAlloc>;
 using EgressManager = EgressNetworkManager<PageHashtable>;
 
