@@ -59,17 +59,18 @@ using SketchLocal = ht::HLLSketch;
 // using SketchLocal = ht::CPCSketch;
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
-static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_32;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
+static constexpr bool is_salted = false;
+
 static_assert(idx_mode_slots != ht::NO_IDX);
+static_assert(not(is_salted and idx_mode_slots == ht::INDIRECT_16));
 
-static constexpr bool is_salted = true;
+// using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
 
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
-// using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
-
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
-// using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+// using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 
 using PageHashtable = HashtableLocal::page_t;
 

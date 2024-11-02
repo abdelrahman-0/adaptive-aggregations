@@ -93,8 +93,8 @@ struct PartitionedChainedAggregationHashtable
         auto offset = next_offset;
         while (next_offset) {
             // walk chain of slots
-            if (part_page->get_group(next_offset) == key) {
-                fn_agg(part_page->get_aggregates(next_offset), value);
+            if (next_offset->get_group() == key) {
+                fn_agg(next_offset->get_aggregates(), value);
                 return;
             }
             next_offset = reinterpret_cast<slot_idx_t>(part_page->get_next(next_offset));
