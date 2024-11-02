@@ -144,7 +144,7 @@ struct PartitionedOpenAggregationHashtable
     using typename base_t::slot_idx_t;
 
     static constexpr u16 BITS_SALT = 16;
-    static constexpr u16 BITS_SLOT = (sizeof(idx_t) * 8) - BITS_SALT;
+    static constexpr u16 BITS_SLOT = (sizeof(slot_idx_t) * 8) - BITS_SALT;
 
   private:
     u64 slots_mask;

@@ -191,8 +191,8 @@ int main(int argc, char* argv[])
     auto groups_estimate = sketch_glob.get_estimate();
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
 
-    Logger logger{FLAGS_print_header, FLAGS_csv};
-    logger.log("node id", node_id)
+    Logger{FLAGS_print_header, FLAGS_csv}
+        .log("node id", node_id)
         .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
         .log("operator", "aggregation"s)
@@ -219,20 +219,8 @@ int main(int argc, char* argv[])
         .log("groups (estimate)", groups_estimate)
         .log("groups estimate error (%)", error_percentage)
         .log("tuples pre-agg", storage_glob.num_tuples)
-        .log("pages pre-agg", storage_glob.pages.size())             //
+        .log("pages pre-agg", storage_glob.pages.size())
+        .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
+        .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
-
-    for (u32 tid : range(FLAGS_threads)) {
-        logger.log("thread "s + std::to_string(tid) + " pre-agg (ms)", times_preagg[tid]);
-    }
-    logger.log("time (ms)", swatch.time_ms);
-    auto sum = 0;
-    for (u64 i : range(ht_glob.ht_mask + 1)) {
-        auto slot = ht_glob.slots[i].load();
-        while (slot) {
-            sum += std::get<0>(slot->get_aggregates());
-            slot = slot->get_next();
-        }
-    }
-    print("TOTAL COUNT:", sum);
 }

@@ -5,6 +5,8 @@
 
 namespace ht {
 
+using namespace std::string_literals;
+
 template <typename Key, typename Value, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool use_ptr, bool is_concurrent = false,
           bool next_first = true>
 struct BaseAggregationHashtable {

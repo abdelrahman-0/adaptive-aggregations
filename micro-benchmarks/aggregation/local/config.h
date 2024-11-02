@@ -26,7 +26,7 @@
 
 /* ----------- CMD LINE PARAMS ----------- */
 
-DEFINE_uint32(threads, 1, "number of threads to use");
+DEFINE_uint32(threads, 6, "number of threads to use");
 DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
@@ -56,8 +56,10 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 }
 
 static constexpr bool is_salted = true;
-static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
+
+// TODO DIRECT / NO_IDX
+static constexpr ht::IDX_MODE idx_mode_slots = ht::NO_IDX;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
 
 using SketchLocal = ht::HLLSketch;
 // using SketchLocal = ht::CPCSketch;
@@ -67,7 +69,9 @@ using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregate
 
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
-using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+//using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
+
 using PageHashtable = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
@@ -79,3 +83,5 @@ using StorageGlobal = PageBuffer<PageHashtable, true>;
 
 #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 using PageTable = PageLocal<SCHEMA>;
+
+static_assert(sizeof(std::tuple<SCHEMA>) == 24);
