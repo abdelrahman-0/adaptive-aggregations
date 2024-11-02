@@ -259,6 +259,7 @@ struct PartitionedOpenAggregationHashtable
     void aggregate(const key_t& key, const value_t& value, u64 key_hash)
     requires(slots_mode != DIRECT)
     {
+        static constexpr auto slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
         // extract lower bits from hash
         u64 mod = key_hash & ht_mask;
         u64 part_no = mod >> partition_shift;
@@ -277,7 +278,7 @@ struct PartitionedOpenAggregationHashtable
                 condition = hash_prefix == static_cast<u16>(slot);
             }
             if (condition) {
-                slot = slot >> (is_salted * BITS_SALT);
+                slot = (slot & slot_idx_mask) >> (is_salted * BITS_SALT);
                 if (part_page->get_group(slot) == key) {
                     fn_agg(part_page->get_aggregates(slot), value);
                     return;
@@ -295,10 +296,10 @@ struct PartitionedOpenAggregationHashtable
         }
         slot_idx_t ht_entry = part_page->emplace_back_grp(key, value);
         if constexpr (is_salted) {
-            slots[mod | partition_mask] = (ht_entry << BITS_SALT) | hash_prefix;
+            slots[mod | partition_mask] = (ht_entry << BITS_SALT) | hash_prefix | (~slot_idx_mask);
         }
         else {
-            slots[mod | partition_mask] = ht_entry;
+            slots[mod | partition_mask] = ht_entry | (~slot_idx_mask);
         }
     }
 
