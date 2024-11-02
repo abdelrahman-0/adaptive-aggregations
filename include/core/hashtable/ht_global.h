@@ -81,7 +81,7 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
 
         while (true) {
             // walk slots
-            while (slot != reinterpret_cast<slot_idx_raw_t>(page_t::EMPTY_SLOT)) {
+            while (slot) {
                 bool condition{true};
                 if constexpr (is_salted) {
                     // check salt
@@ -103,7 +103,7 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
                 }
             }
             else {
-                if (slots[mod].compare_exchange_strong(slot, addr)) {
+                if (slots[mod].compare_exchange_strong(slot, reinterpret_cast<slot_idx_raw_t>(addr))) {
                     return;
                 }
             }

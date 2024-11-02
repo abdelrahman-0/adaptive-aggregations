@@ -26,7 +26,7 @@
 
 /* ----------- CMD LINE PARAMS ----------- */
 
-DEFINE_uint32(threads, 6, "number of threads to use");
+DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
@@ -55,22 +55,21 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-static constexpr bool is_salted = true;
-
-// TODO DIRECT / NO_IDX
-static constexpr ht::IDX_MODE idx_mode_slots = ht::NO_IDX;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
-
 using SketchLocal = ht::HLLSketch;
 // using SketchLocal = ht::CPCSketch;
-
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
-// using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
-
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_32;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::INDIRECT_32;
+static_assert(idx_mode_slots != ht::NO_IDX);
+
+static constexpr bool is_salted = true;
+
+// using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+
+ using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
 //using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
 
 using PageHashtable = HashtableLocal::page_t;
 

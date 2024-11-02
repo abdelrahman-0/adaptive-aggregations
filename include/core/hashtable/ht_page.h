@@ -38,10 +38,9 @@ using agg_entry_idx_t = std::conditional_t<mode == DIRECT, EntryAggregation<Grou
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first>
 using BaseEntryAggregation = std::conditional_t<
     is_chained,
-    std::conditional_t<
-        next_first,
-        ChainedEntry<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>,
-        EntryChained<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>>,
+    std::conditional_t<next_first,
+                       ChainedEntry<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>,
+                       EntryChained<agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, GroupAttributes, AggregateAttributes>>,
     Entry<GroupAttributes, AggregateAttributes>>;
 
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool next_first = true>
@@ -67,8 +66,8 @@ struct EntryAggregation : public BaseEntryAggregation<GroupAttributes, Aggregate
 
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool is_chained, bool use_ptr = true, bool next_first = true>
 requires(type_traits::is_tuple_v<GroupAttributes> and type_traits::is_tuple_v<AggregateAttributes>)
-struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
-                                                  EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, use_ptr> {
+struct PageAggregation
+    : public PageCommunication<defaults::hashtable_page_size, EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>, use_ptr> {
     using entry_t = EntryAggregation<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
     using base_t = PageCommunication<defaults::hashtable_page_size, entry_t, use_ptr>;
     using base_t::columns;
@@ -76,9 +75,6 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
     using base_t::get_attribute_ref;
     using base_t::num_tuples;
     using idx_t = agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
-
-    // TODO -1 for not DIRECT
-    static constexpr idx_t EMPTY_SLOT = 0;
 
     ALWAYS_INLINE GroupAttributes& get_group(std::unsigned_integral auto idx)
     {
@@ -112,7 +108,7 @@ struct PageAggregation : public PageCommunication<defaults::hashtable_page_size,
         return tuple_ptr->get_next();
     }
 
-    ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value, idx_t offset = EMPTY_SLOT)
+    ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value, idx_t offset = 0)
     requires(is_chained)
     {
         return emplace_back(entry_t{offset, std::make_tuple(key, value)});

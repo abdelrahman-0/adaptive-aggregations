@@ -3,6 +3,7 @@
 #include <string>
 
 namespace ht {
+
 enum IDX_MODE : u8 {
     NO_IDX = 0,
     DIRECT,
