@@ -200,8 +200,6 @@ int main(int argc, char* argv[])
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
 
     Logger{FLAGS_print_header, FLAGS_csv}
-        .log("node id", node_id)
-        .log("nodes", FLAGS_nodes)
         .log("traffic", "both"s)
         .log("operator", "aggregation"s)
         .log("implementation", "local"s)
