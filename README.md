@@ -1,8 +1,8 @@
+# Grasshopper DB
+
 <p style="text-align:center">
 <img src="logos/wip4.jpg" alt="grasshopper-db" width="12%"/>
 </p>
-
-# Grasshopper DB
 
 install dependencies:
 ```shell
