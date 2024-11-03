@@ -3,7 +3,7 @@ TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_loc
 FLAGS="--nolocal --random --npages=1000000 --morselsz=10 --pin --partitions=16 --slots=8192"
 PRINT_HEADER='--print_header'
 
-for NGROUPS in 1 100 10000 1000000; do
+for NGROUPS in 1 100 1000 10000 100000 1000000 10000000 100000000; do
   for THREADS in 1 4 6 12 24 32; do
     for TRY in $(seq 1 1); do
       $TARGET_PATH $PRINT_HEADER $FLAGS --groups=$NGROUPS --threads=$THREADS >/dev/null

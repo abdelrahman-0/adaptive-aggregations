@@ -3,7 +3,7 @@
 cd ~
 
 sudo apt-get -y update
-sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb bpfcc-tools linux-headers-$(uname -r)
+sudo apt-get -y install g++ make cmake libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb bpfcc-tools linux-headers-$(uname -r) libjemalloc-dev
 
 # oneTBB
 cd /tmp &&
@@ -21,6 +21,13 @@ cd liburing
 ./configure --cc=gcc --cxx=g++
 make -j$(nproc)
 sudo make install
+cd ~
+
+# install Apache's CPC sketch from source
+git clone https://github.com/apache/datasketches-cpp.git
+cd datasketches-cpp
+cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release
+sudo cmake --build build/Release -t install
 cd ~
 
 # install hwdata tool
