@@ -6,7 +6,8 @@ BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
 HT_PAGE_SIZE_POWER=16
 NETWORK_PAGE_SIZE_POWER=17
 
-TARGETS=aggregation_local aggregation_homogeneous aggregation_heterogeneous shuffle_homogeneous shuffle_heterogeneous
+TARGETS=aggregation_local aggregation_local_LIKWID
+# aggregation_homogeneous aggregation_heterogeneous shuffle_homogeneous shuffle_heterogeneous
 
 default: build-release
 
