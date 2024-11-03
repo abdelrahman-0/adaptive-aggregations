@@ -1,5 +1,5 @@
 <p style="text-align:center">
-<img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
+<img src="logos/wip4.jpg" alt="grasshopper-db" width="8%"/>
 </p>
 
 install dependencies:
