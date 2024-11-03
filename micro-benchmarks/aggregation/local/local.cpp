@@ -2,6 +2,7 @@
 
 int main(int argc, char* argv[])
 {
+    LIKWID_MARKER_INIT;
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     FLAGS_partitions = next_power_2(FLAGS_partitions);
@@ -66,6 +67,9 @@ int main(int argc, char* argv[])
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
+            LIKWID_MARKER_THREADINIT;
+            LIKWID_MARKER_REGISTER("pre-aggregation");
+            LIKWID_MARKER_REGISTER("concurrent aggregation");
 
             /* ----------- BUFFERS ----------- */
 
@@ -113,6 +117,7 @@ int main(int argc, char* argv[])
 
             // barrier
             ::pthread_barrier_wait(&barrier_start);
+            LIKWID_MARKER_START("pre-aggregation");
             Stopwatch swatch_preagg{};
             swatch_preagg.start();
 
@@ -146,6 +151,7 @@ int main(int argc, char* argv[])
             sketch_glob.merge_concurrent(ht_loc.sketch);
 
             swatch_preagg.stop();
+            LIKWID_MARKER_STOP("pre-aggregation");
             // barrier
             ::pthread_barrier_wait(&barrier_preagg);
 
@@ -160,6 +166,7 @@ int main(int argc, char* argv[])
                 global_ht_construction_complete.wait(false);
             }
 
+            LIKWID_MARKER_START("concurrent aggregation");
             const u64 npages = storage_glob.pages.size();
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
                 morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
@@ -169,6 +176,7 @@ int main(int argc, char* argv[])
             }
 
             times_preagg[thread_id] = swatch_preagg.time_ms;
+            LIKWID_MARKER_STOP("concurrent aggregation");
             // barrier
             ::pthread_barrier_wait(&barrier_end);
 
@@ -223,4 +231,6 @@ int main(int argc, char* argv[])
         .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
         .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
+
+    LIKWID_MARKER_CLOSE;
 }
