@@ -1,7 +1,7 @@
 # Grasshopper DB
 
 <p style="text-align:center">
-<img src="logos/wip4.jpg" alt="grasshopper-db" width="12%"/>
+<img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
 </p>
 
 install dependencies:
