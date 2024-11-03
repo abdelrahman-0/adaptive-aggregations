@@ -64,12 +64,12 @@ int main(int argc, char* argv[])
     for (u32 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
                               &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
-            if (FLAGS_pin) {
-                local_node.pin_thread(thread_id);
-            }
             LIKWID_MARKER_THREADINIT;
             LIKWID_MARKER_REGISTER("pre-aggregation");
             LIKWID_MARKER_REGISTER("concurrent aggregation");
+            if (FLAGS_pin) {
+                local_node.pin_thread(thread_id);
+            }
 
             /* ----------- BUFFERS ----------- */
 
