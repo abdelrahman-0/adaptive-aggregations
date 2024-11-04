@@ -50,26 +50,26 @@ static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 }
 
-//static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
-//{
-//    __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
-//}
+static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
+{
+    __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
+}
 
 using SketchLocal = ht::HLLSketch;
 // using SketchLocal = ht::CPCSketch;
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
-static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
+static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
-static constexpr bool is_salted = false;
+static constexpr bool is_salted = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 static_assert(not(is_salted and idx_mode_slots == ht::INDIRECT_16));
 
- using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
 //using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
-//
- using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg, MemAlloc, is_salted>;
+
+ using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
 //using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 
 using PageHashtable = HashtableLocal::page_t;
@@ -82,5 +82,3 @@ using StorageGlobal = PartitionBuffer<PageHashtable, true>;
 
 #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 using PageTable = PageLocal<SCHEMA>;
-
-static_assert(sizeof(std::tuple<SCHEMA>) == 24);
