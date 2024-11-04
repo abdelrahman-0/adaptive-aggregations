@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
-    StorageGlobal storage_glob;
+    StorageGlobal storage_glob{FLAGS_partitions};
     SketchGlobal sketch_glob;
     HashtableGlobal ht_glob;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
@@ -88,12 +88,15 @@ int main(int argc, char* argv[])
             /* ------------ GROUP BY ------------ */
 
             std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
-            std::fill(consumer_fns.begin(), consumer_fns.end(), [&storage_glob](PageHashtable* pg, bool) {
-                if (not pg->empty()) {
-                    pg->retire();
-                    storage_glob.add_page(pg);
-                }
-            });
+            for (u32 part_no : range(FLAGS_partitions)) {
+                consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
+                    if (not page->empty()) {
+                        page->retire();
+                        storage_glob.add_page(page, part_no);
+                    }
+                };
+            }
+
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer};
@@ -167,11 +170,9 @@ int main(int argc, char* argv[])
             }
 
             LIKWID_MARKER_START("concurrent aggregation");
-            const u64 npages = storage_glob.pages.size();
-            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
-                while (morsel_begin < morsel_end) {
-                    process_page_glob(*storage_glob.pages[morsel_begin++]);
+            while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
+                for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                    process_page_glob(*page);
                 }
             }
 
@@ -198,6 +199,8 @@ int main(int argc, char* argv[])
 
     auto groups_estimate = sketch_glob.get_estimate();
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
+    u64 pages_pre_agg{0};
+    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("traffic", "both"s)
@@ -224,8 +227,7 @@ int main(int argc, char* argv[])
         .log("groups (actual)", FLAGS_groups)
         .log("groups (estimate)", groups_estimate)
         .log("groups estimate error (%)", error_percentage)
-        .log("tuples pre-agg", storage_glob.num_tuples)
-        .log("pages pre-agg", storage_glob.pages.size())
+        .log("pages pre-agg", pages_pre_agg)
         .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
         .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //

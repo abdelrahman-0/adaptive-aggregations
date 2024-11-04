@@ -1,51 +1,21 @@
 #pragma once
 
+#include <atomic>
+#include <tbb/concurrent_vector.h>
 #include <vector>
 
-#include "core/memory/block_allocator.h"
 #include "defaults.h"
-#include "misc/concepts_traits/concepts_alloc.h"
 
-template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc,
-          typename Fn = std::function<void(BufferPage*, bool /* final eviction? */)>>
-class PartitionBuffer {
+template <typename BufferPage, bool is_concurrent>
+struct PartitionBuffer {
+    std::conditional_t<is_concurrent, std::vector<tbb::concurrent_vector<BufferPage*>>, std::vector<std::vector<BufferPage*>>> partition_pages;
 
-  private:
-    std::vector<BufferPage*> partitions;
-    std::vector<Fn> consumer_fns;
-    BlockAlloc& block_alloc;
-
-  public:
-    using ConsumerFn = Fn;
-
-    PartitionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& consumer_fns)
-        : partitions(npartitions), block_alloc(block_alloc), consumer_fns(std::move(consumer_fns))
+    explicit PartitionBuffer(u32 npartitions) : partition_pages(npartitions)
     {
-        // alloc partitions
-        for (auto& part : partitions) {
-            part = block_alloc.get_page();
-            part->clear_tuples();
-        }
     }
 
-    ALWAYS_INLINE BufferPage* get_partition_page(u32 part) const
+    void add_page(BufferPage* page, u32 part_no)
     {
-        return partitions[part];
-    }
-
-    [[maybe_unused]]
-    BufferPage* evict(u64 part_no, bool final_eviction = false)
-    {
-        auto*& part_page = partitions[part_no];
-        consumer_fns[part_no](part_page, final_eviction);
-        part_page = block_alloc.get_page();
-        return part_page;
-    }
-
-    void finalize(bool final_eviction = true)
-    {
-        for (u32 part_no{0}; part_no < partitions.size(); ++part_no) {
-            evict(part_no, final_eviction);
-        }
+        partition_pages[part_no].push_back(page);
     }
 };
