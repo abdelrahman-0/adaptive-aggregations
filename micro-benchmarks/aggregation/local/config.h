@@ -30,6 +30,7 @@ DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
+DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 
 /* --------------------------------------- */
 
@@ -38,7 +39,7 @@ DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashta
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
 
-using MemAlloc = mem::MMapAllocator<true>;
+using MemAlloc = mem::JEMALLOCator<true>;
 
 /* ----------- HASHTABLE ----------- */
 
@@ -60,7 +61,7 @@ using SketchLocal = ht::HLLSketch;
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
 static constexpr bool is_salted = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
@@ -81,4 +82,8 @@ using Buffer = EvictionBuffer<PageHashtable, BlockAlloc>;
 using StorageGlobal = PartitionBuffer<PageHashtable, true>;
 
 #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
+// TPCH lineitem (not exact)
+//#define SCHEMA GRP_KEYS, u64, u64, u32, float, float, float, float, char, char, u64, u64, u64, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
+//#define SCHEMA GRP_KEYS
+
 using PageTable = PageLocal<SCHEMA>;

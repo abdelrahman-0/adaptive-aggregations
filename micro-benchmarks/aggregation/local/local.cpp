@@ -51,7 +51,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
-    StorageGlobal storage_glob{FLAGS_partitions};
+    StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
     SketchGlobal sketch_glob;
     HashtableGlobal ht_glob;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
@@ -89,12 +89,22 @@ int main(int argc, char* argv[])
 
             std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
-                consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
-                    if (not page->empty()) {
-                        page->retire();
-                        storage_glob.add_page(page, part_no);
-                    }
-                };
+                if (FLAGS_consumepart) {
+                    consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
+                        if (not page->empty()) {
+                            page->retire();
+                            storage_glob.add_page(page, part_no);
+                        }
+                    };
+                }
+                else {
+                    consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
+                        if (not page->empty()) {
+                            page->retire();
+                            storage_glob.add_page(page, 0);
+                        }
+                    };
+                }
             }
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
@@ -170,9 +180,20 @@ int main(int argc, char* argv[])
             }
 
             LIKWID_MARKER_START("concurrent aggregation");
-            while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
-                for (auto* page : storage_glob.partition_pages[morsel_begin]) {
-                    process_page_glob(*page);
+            if (FLAGS_consumepart) {
+                while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
+                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                        process_page_glob(*page);
+                    }
+                }
+            }
+            else {
+                const u64 npages = storage_glob.partition_pages[0].size();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                    while (morsel_begin < morsel_end) {
+                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
+                    }
                 }
             }
 
@@ -200,7 +221,12 @@ int main(int argc, char* argv[])
     auto groups_estimate = sketch_glob.get_estimate();
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
     u64 pages_pre_agg{0};
-    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+    if (FLAGS_consumepart) {
+        std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+    }
+    else {
+        pages_pre_agg = storage_glob.partition_pages[0].size();
+    }
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("traffic", "both"s)
@@ -213,6 +239,7 @@ int main(int argc, char* argv[])
         .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
+        .log("consume partitions", FLAGS_consumepart)
         .log("sketch (local)", SketchLocal::get_type())
         .log("sketch (global)", SketchGlobal::get_type())
         .log("allocator", MemAlloc::get_type())
