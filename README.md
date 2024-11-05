@@ -5,6 +5,13 @@
 <code>
 <b>
 <h3>Current Scope: Adaptive Aggregation</h3>
+see micro-benchmarks/aggregation folder
+<ol>
+<li>local aggregation (done)</li>
+<li>homogeneous aggregation (WIP)</li>
+<li>heterogeneous aggregation (WIP)</li>
+<li>adaptive (not started)</li>
+</ol>
 <h4>Future TODOs (out of scope for now):</h4>
 <ol>
 <li>SSD Spilling</li>
