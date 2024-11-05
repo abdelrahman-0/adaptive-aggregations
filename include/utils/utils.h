@@ -142,5 +142,5 @@ template <typename Attribute, typename... Attributes>
 std::string get_schema_str()
 {
     using namespace std::string_literals;
-    return (boost::core::demangle(typeid(Attribute).name()) + ... + ("|" + boost::core::demangle(typeid(Attributes).name())));
+    return "\""s + (boost::core::demangle(typeid(Attribute).name()) + ... + ("|" + boost::core::demangle(typeid(Attributes).name()))) + "\""s;
 }

@@ -27,11 +27,20 @@ struct Page {
     };
     std::tuple<std::array<Attribute, max_tuples_per_page>, std::array<Attributes, max_tuples_per_page>...> columns;
 
-    Page() { clear_tuples(); }
+    Page()
+    {
+        clear_tuples();
+    }
 
-    void clear() { memset(this, 0, page_size); }
+    void clear()
+    {
+        memset(this, 0, page_size);
+    }
 
-    void clear_tuples() { num_tuples = 0; }
+    void clear_tuples()
+    {
+        num_tuples = 0;
+    }
 
     template <u16 col_idx = 0>
     auto& get_attribute_ref(std::unsigned_integral auto row_idx)
@@ -57,7 +66,9 @@ struct Page {
         return num_tuples == 0;
     }
 
-    void retire() const {}
+    void retire() const
+    {
+    }
 
     [[nodiscard]]
     std::byte* as_bytes() const
@@ -75,8 +86,7 @@ struct Page {
     void print_info() const
     {
         print("size of page:", page_size, "( max tuples:", max_tuples_per_page, ")");
-        print("schema: ", boost::core::demangle(typeid(Attribute).name()),
-              boost::core::demangle(typeid(Attributes).name())...);
+        print("schema: ", boost::core::demangle(typeid(Attribute).name()), boost::core::demangle(typeid(Attributes).name())...);
         print("-----");
     }
 
@@ -107,7 +117,10 @@ struct PageRowStore : public Page<page_size, Attribute> {
     using PageBase::ptr;
     using PageBase::retire;
 
-    PageRowStore() { clear_tuples(); }
+    PageRowStore()
+    {
+        clear_tuples();
+    }
 
     [[maybe_unused]]
     auto emplace_back(const Attribute& val)
@@ -186,26 +199,35 @@ struct PageRowStore : public Page<page_size, Attribute> {
         num_tuples = ptr - std::get<0>(columns).data();
     }
 
-    auto begin() { return std::get<0>(columns).begin(); }
+    auto begin()
+    {
+        return std::get<0>(columns).begin();
+    }
 
-    auto cbegin() const { return std::get<0>(columns).cbegin(); }
+    auto cbegin() const
+    {
+        return std::get<0>(columns).cbegin();
+    }
 
-    auto end() { return std::get<0>(columns).end(); }
+    auto end()
+    {
+        return std::get<0>(columns).end();
+    }
 
-    auto cend() const { return std::get<0>(columns).cend(); }
+    auto cend() const
+    {
+        return std::get<0>(columns).cend();
+    }
 };
 
 template <u64 page_size, typename... Attributes>
 static void check_page(const Page<page_size, Attributes...> page, bool send)
 {
     for (auto i{0u}; i < page.max_tuples_per_page; ++i) {
-        if (std::get<0>(std::get<0>(page.columns)[i]) != 0 and std::get<0>(std::get<0>(page.columns)[i]) != '0' and
-            std::get<0>(std::get<0>(page.columns)[i]) != '1') {
+        if (std::get<0>(std::get<0>(page.columns)[i]) != 0 and std::get<0>(std::get<0>(page.columns)[i]) != '0' and std::get<0>(std::get<0>(page.columns)[i]) != '1') {
             page.print_page();
-            print("weird character:", std::get<0>(std::get<0>(page.columns)[i]),
-                  int32_t(std::get<0>(std::get<0>(page.columns)[i])),
-                  u64(*reinterpret_cast<const u64*>(&std::get<0>(page.columns)[i])), "idx:", i, "/",
-                  page.max_tuples_per_page / 10, page.max_tuples_per_page);
+            print("weird character:", std::get<0>(std::get<0>(page.columns)[i]), int32_t(std::get<0>(std::get<0>(page.columns)[i])),
+                  u64(*reinterpret_cast<const u64*>(&std::get<0>(page.columns)[i])), "idx:", i, "/", page.max_tuples_per_page / 10, page.max_tuples_per_page);
             //            return;
             throw std::runtime_error(send ? "send unexpected page contents!!!"
                                           : "recv unexpected page "
