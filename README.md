@@ -1,4 +1,4 @@
-<code><b><h1>Grasshopper DB</h1></b></code>
+<h1><code><b>Grasshopper DB</b></code></h1>
 
 <p align="center">
 <img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
