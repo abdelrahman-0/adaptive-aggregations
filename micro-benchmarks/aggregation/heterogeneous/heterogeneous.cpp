@@ -6,7 +6,7 @@
 #include "bench/heterogeneous_thread_group.h"
 #include "bench/stopwatch.h"
 #include "common/alignment.h"
-#include "core/buffer/page_buffer.h"
+#include "core/buffer/partition_buffer.h"
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
 
                 /* ----------- BUFFERS ----------- */
 
-                PageBuffer<PageHashtable> tuple_buffer;
+                PartitionBuffer<PageHashtable> tuple_buffer;
                 std::vector<PageTable> local_buffers(defaults::local_io_depth);
                 u64 local_tuples_processed{0};
                 u64 local_tuples_sent{0};
