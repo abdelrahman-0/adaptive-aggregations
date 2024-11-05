@@ -84,7 +84,6 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
         while (true) {
             // walk slots
             while (slot) {
-                _mm_prefetch(slots[(mod + 1) & ht_mask], _MM_HINT_T0);
                 bool condition{true};
                 if constexpr (is_salted) {
                     // check salt
