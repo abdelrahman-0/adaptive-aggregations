@@ -60,18 +60,18 @@ using SketchLocal = ht::HLLSketch;
 // using SketchLocal = ht::CPCSketch;
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
-static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
 static constexpr bool is_salted = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
-static_assert(not(is_salted and idx_mode_slots == ht::INDIRECT_16));
 
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, is_salted>;
-//using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
+                                                               is_salted and idx_mode_slots != ht::INDIRECT_16>;
+// using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
 
- using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
-//using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
+// using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 
 using PageHashtable = HashtableLocal::page_t;
 
@@ -83,7 +83,7 @@ using StorageGlobal = PartitionBuffer<PageHashtable, true>;
 
 #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 // TPCH lineitem (not exact)
-//#define SCHEMA GRP_KEYS, u64, u64, u32, float, float, float, float, char, char, u64, u64, u64, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
-//#define SCHEMA GRP_KEYS
+// #define SCHEMA GRP_KEYS, u64, u64, u32, float, float, float, float, char, char, u64, u64, u64, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
+// #define SCHEMA GRP_KEYS
 
 using PageTable = PageLocal<SCHEMA>;
