@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ht_base.h"
+
 namespace ht {
 
 template <typename key_t, typename value_t, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc>
@@ -82,6 +84,7 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
         while (true) {
             // walk slots
             while (slot) {
+                _mm_prefetch(slots[(mod + 1) & ht_mask], _MM_HINT_T0);
                 bool condition{true};
                 if constexpr (is_salted) {
                     // check salt
