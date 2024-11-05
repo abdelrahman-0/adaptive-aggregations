@@ -22,12 +22,9 @@ see micro-benchmarks/aggregation folder
 </b>
 </code>
 </p>
-
 <details open>
 <summary><code><b>Getting Started</b></code></summary>
-
 <ul>
-
 <li>
 clone repository:
 
