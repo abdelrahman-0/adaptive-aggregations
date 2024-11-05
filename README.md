@@ -2,12 +2,9 @@
 
 <p align="center">
 <img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
-</p>
-
 <code>
 <b>
 <h3>Current Scope: Adaptive Aggregation</h3>
-
 <h4>Future TODOs (out of scope for now):</h4>
 <ol>
 <li>SSD Spilling</li>
@@ -17,6 +14,7 @@
 </ol>
 </b>
 </code>
+</p>
 
 <details open>
 <summary><code><b>Getting Started</b></code></summary>
