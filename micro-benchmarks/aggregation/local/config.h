@@ -81,9 +81,9 @@ using BlockAlloc = mem::BlockAllocator<PageHashtable, MemAlloc, false>;
 using Buffer = EvictionBuffer<PageHashtable, BlockAlloc>;
 using StorageGlobal = PartitionBuffer<PageHashtable, true>;
 
-#define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
-// TPCH lineitem (not exact)
-// #define SCHEMA GRP_KEYS, u64, u64, u32, float, float, float, float, char, char, u64, u64, u64, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
+// #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
+//  TPCH lineitem (not exact)
+#define SCHEMA GRP_KEYS, u64, u64, u64, double, double, double, double, char, char, u64, u64, u64, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 // #define SCHEMA GRP_KEYS
 
 using PageTable = PageLocal<SCHEMA>;
