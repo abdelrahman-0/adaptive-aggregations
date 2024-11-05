@@ -3,7 +3,6 @@
 <p align="center">
 <img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
 </p>
-
 <code>
 <b>
 <h3>Current Scope: Adaptive Aggregation</h3>
