@@ -1,7 +1,7 @@
 <h1><code><b>Grasshopper DB</b></code></h1>
 
 <p align="center">
-<img src="logos/wip4.jpg" alt="grasshopper-db" width="15%"/>
+<img src="logos/wip4.jpg" alt="grasshopper-db" width="20%"/>
 <code>
 <b>
 <h3>Current Scope: Adaptive Aggregation</h3>
