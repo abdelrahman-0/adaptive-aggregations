@@ -2,9 +2,9 @@
 
 <p align="center">
 <img src="logos/wip4.jpg" alt="grasshopper-db" width="20%"/>
-<code>
-<b>
-<h3>Current Scope: Adaptive Aggregation</h3>
+
+
+<h3><code>Current Scope: Adaptive Aggregation</code></h3>
 <h6>see micro-benchmarks/aggregation folder</h6>
 <ol>
 <li>local aggregation (done)</li>
@@ -19,8 +19,6 @@
 <li>Adaptive Joins</li>
 <li>Distributed Query Optimization</li>
 </ol>
-</b>
-</code>
 </p>
 <details open>
 <summary><code><b>Getting Started</b></code></summary>
