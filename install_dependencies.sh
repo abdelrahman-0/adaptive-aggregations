@@ -3,8 +3,7 @@
 cd ~
 
 sudo apt-get -y update
-sudo apt-get -y install g++ make cmake mbw libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb bpfcc-tools linux-headers-$
-(uname -r) libjemalloc-dev
+sudo apt-get -y install g++ make cmake mbw libgflags-dev libboost-all-dev iperf likwid linux-tools-6.5.0-1022-aws ncdu gdb bpfcc-tools linux-headers-$(uname -r) libjemalloc-dev
 
 # oneTBB
 cd /tmp &&
