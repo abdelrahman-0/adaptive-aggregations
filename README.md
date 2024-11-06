@@ -5,7 +5,7 @@
 <code>
 <b>
 <h3>Current Scope: Adaptive Aggregation</h3>
-see micro-benchmarks/aggregation folder
+<h6>see micro-benchmarks/aggregation folder</h6>
 <ol>
 <li>local aggregation (done)</li>
 <li>homogeneous aggregation (WIP)</li>
