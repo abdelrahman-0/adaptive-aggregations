@@ -106,6 +106,7 @@ struct PartitionedChainedAggregationHashtable
             offset = 0;
         }
         slot = part_page->emplace_back_grp(key, value, reinterpret_cast<idx_t>(offset));
+        sketch.update(key_hash);
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -133,6 +134,7 @@ struct PartitionedChainedAggregationHashtable
             offset = 0;
         }
         slot = part_page->emplace_back_grp(key, value, offset);
+        sketch.update(key_hash);
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -160,13 +162,12 @@ struct PartitionedChainedAggregationHashtable
             offset = 0;
         }
         slot = part_page->emplace_back_grp(key, value, reinterpret_cast<idx_t>(static_cast<u64>(offset)));
+        sketch.update(key_hash);
     }
 
     void aggregate(key_t& key, value_t& value)
     {
-        u64 hash = hash_tuple(key);
-        sketch.update(hash);
-        aggregate(key, value, hash);
+        aggregate(key, value, hash_tuple(key));
     }
 
     [[nodiscard]]
@@ -252,6 +253,7 @@ struct PartitionedOpenAggregationHashtable
         else {
             slots[mod | partition_mask] = reinterpret_cast<slot_idx_t>(ht_entry);
         }
+        sketch.update(key_hash);
     }
 
     // TODO  and ((1 << ((sizeof(slot_idx_t) * 8) - (16 * is_salted))) > page_t::max_tuples_per_page))
@@ -301,13 +303,12 @@ struct PartitionedOpenAggregationHashtable
         else {
             slots[mod | partition_mask] = ht_entry | (~slot_idx_mask);
         }
+        sketch.update(key_hash);
     }
 
     void aggregate(key_t& key, value_t& value)
     {
-        u64 hash = hash_tuple(key);
-        sketch.update(hash);
-        aggregate(key, value, hash);
+        aggregate(key, value, hash_tuple(key));
     }
 
     [[nodiscard]]
