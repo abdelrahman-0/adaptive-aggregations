@@ -21,9 +21,9 @@ cd liburing
 ./configure --cc=gcc --cxx=g++
 make -j$(nproc)
 sudo make install
-cd ~
 
 # install Apache's CPC sketch from source
+cd ~
 git clone https://github.com/apache/datasketches-cpp.git
 cd datasketches-cpp
 cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release
@@ -35,6 +35,9 @@ cd ~
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
 sudo sysctl -p
+
+# LIKWID needs to read MSR counters
+sudo modprobe msr
 
 # install hwdata tool
 # sudo dpkg --remove linux-intel-iotg-tools-common
