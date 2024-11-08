@@ -18,7 +18,7 @@ set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -march=native")
 include_directories(include)
 
 if (NOT DEFINED HT_PAGE_SIZE_POWER)
-    set(HT_PAGE_SIZE_POWER 16)
+    set(HT_PAGE_SIZE_POWER 15)
 endif ()
 
 if (NOT DEFINED NETWORK_PAGE_SIZE_POWER)

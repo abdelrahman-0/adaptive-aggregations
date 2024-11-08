@@ -98,9 +98,19 @@ struct Page {
         print();
     }
 
+    template <u16 idx>
+    void _fill_random()
+    {
+        if constexpr (idx <= sizeof...(Attributes)) {
+            // idx 0 is primary key
+            librand::random_iterable<idx == 0>(std::get<idx>(columns));
+            _fill_random<idx + 1>();
+        }
+    }
+
     void fill_random()
     {
-        std::apply([](auto&&... args) { ((librand::random_iterable(args)), ...); }, columns);
+        _fill_random<0>();
     }
 };
 
