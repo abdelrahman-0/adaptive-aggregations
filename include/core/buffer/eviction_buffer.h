@@ -8,11 +8,11 @@
 
 namespace buf {
 
-template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc, typename Fn = std::function<void(BufferPage*, bool /* final eviction? */)>>
+template <typename page_t, concepts::is_block_allocator<page_t> BlockAlloc, typename Fn = std::function<void(page_t*, bool /* final eviction? */)>>
 class EvictionBuffer {
 
   private:
-    std::vector<BufferPage*> partitions;
+    std::vector<page_t*> partitions;
     std::vector<Fn> consumer_fns;
     BlockAlloc& block_alloc;
 
@@ -29,17 +29,23 @@ class EvictionBuffer {
         }
     }
 
-    ALWAYS_INLINE BufferPage* get_partition_page(u32 part) const
+    ALWAYS_INLINE page_t* get_partition_page(u32 part) const
     {
         return partitions[part];
     }
 
     [[maybe_unused]]
-    BufferPage* evict(u64 part_no, bool final_eviction = false)
+    page_t* evict(u64 part_no, bool final_eviction = false)
     {
-        auto*& part_page = partitions[part_no];
+        return evict(part_no, partitions[part_no], final_eviction);
+    }
+
+    [[maybe_unused]]
+    page_t* evict(u64 part_no, page_t* part_page, bool final_eviction = false)
+    {
         consumer_fns[part_no](part_page, final_eviction);
         part_page = block_alloc.get_page();
+        partitions[part_no] = part_page;
         return part_page;
     }
 

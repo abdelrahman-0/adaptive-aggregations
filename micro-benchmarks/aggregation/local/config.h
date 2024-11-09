@@ -8,8 +8,8 @@
 #include "bench/common_flags.h"
 #include "bench/stopwatch.h"
 #include "core/buffer/eviction_buffer.h"
-#include "core/buffer/inserter_partitioned.h"
 #include "core/buffer/partition_buffer.h"
+#include "core/buffer/partition_inserter.h"
 #include "core/hashtable/ht_base.h"
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
@@ -32,6 +32,7 @@ DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
+DEFINE_bool(preagg, true, "turn pre-aggregation on/off initially");
 
 /* --------------------------------------- */
 
@@ -63,18 +64,19 @@ using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketc
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
+static constexpr double threshold_preagg = 0.7;
+static constexpr bool adaptive_preagg = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
-using InserterLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
-                                                              is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
-#elif defined(LOCAL_CHAINED_HT)
-using InserterLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg,
+                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
-using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg>;
 #endif
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, idx_mode_slots == ht::DIRECT>;
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;
@@ -83,12 +85,12 @@ using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregate
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
 #endif
 
-using PageBuffer = InserterLocal::page_t;
+using PageBuffer = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
 using BlockAlloc = mem::BlockAllocator<PageBuffer, MemAlloc, false>;
-using Buffer = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
+using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
 using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 // #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>

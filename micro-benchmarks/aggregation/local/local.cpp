@@ -87,7 +87,7 @@ int main(int argc, char* argv[])
 
             /* ------------ GROUP BY ------------ */
 
-            std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
+            std::vector<BufferLocal::ConsumerFn> consumer_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
                 if (FLAGS_consumepart) {
                     consumer_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
@@ -108,12 +108,13 @@ int main(int argc, char* argv[])
             }
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
-            Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
-            InserterLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer};
+            BufferLocal partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
+            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, 1u, partition_buffer};
+            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 
-            auto process_page_local = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
@@ -121,6 +122,16 @@ int main(int argc, char* argv[])
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
+            auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+                for (auto j{0u}; j < page.num_tuples; ++j) {
+                    auto group = page.get_tuple<GPR_KEYS_IDX>(j);
+                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    inserter_loc.insert(group, agg);
+                }
+                DEBUGGING(local_tuples_processed += page.num_tuples);
+            };
+
+            std::function<void(const PageTable&)> process_local_page = insert_into_ht;
 
             auto process_page_glob = [&ht_glob](PageBuffer& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -152,16 +163,23 @@ int main(int argc, char* argv[])
 
                 // process swizzled pages
                 while (swizzled_idx < morsel_end) {
-                    process_page_local(*swips[swizzled_idx++].get_pointer<PageTable>());
+                    process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
                 }
 
                 // process unswizzled pages
                 while (thread_io.has_inflight_requests()) {
-                    process_page_local(*thread_io.get_next_page<PageTable>());
+                    process_local_page(*thread_io.get_next_page<PageTable>());
+                }
+
+                if (adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
+                    // turn off pre-aggregation
+                    print("turned off pre-aggregation");
+                    FLAGS_preagg = false;
+                    process_local_page = insert_into_buffer;
                 }
             }
             partition_buffer.finalize();
-            sketch_glob.merge_concurrent(ht_loc.sketch);
+            sketch_glob.merge_concurrent(inserter_loc.get_sketch(0));
 
             swatch_preagg.stop();
             LIKWID_MARKER_STOP("pre-aggregation");
@@ -242,11 +260,13 @@ int main(int argc, char* argv[])
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
         .log("max tuples per page (hashtable)", PageBuffer::max_tuples_per_page)
-        .log("hashtable (local)", InserterLocal::get_type())
+        .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
-        .log("consume partitions", FLAGS_consumepart)
         .log("sketch (local)", SketchLocal::get_type())
         .log("sketch (global)", SketchGlobal::get_type())
+        .log("consume partitions", FLAGS_consumepart)
+        .log("adaptive pre-aggregation", adaptive_preagg)
+        .log("threshold pre-aggregation", threshold_preagg)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
         .log("morsel size", FLAGS_morselsz)
