@@ -117,14 +117,14 @@ int main(int argc, char* argv[])
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
-                    ht_loc.aggregate(group, agg);
+                    ht_loc.insert(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
             auto process_page_glob = [&ht_glob](PageBuffer& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    ht_glob.aggregate(page.get_attribute_ref(j));
+                    ht_glob.insert(page.get_attribute_ref(j));
                 }
             };
 

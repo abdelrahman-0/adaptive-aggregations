@@ -42,7 +42,7 @@ struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<k
         }
     }
 
-    void aggregate(entry_t& entry)
+    void insert(entry_t& entry)
     {
         auto& key = entry.get_group();
         auto& agg = entry.get_aggregates();
@@ -113,7 +113,7 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
         }
     }
 
-    void aggregate(entry_t& entry)
+    void insert(entry_t& entry)
     {
         auto& key = entry.get_group();
         auto& agg = entry.get_aggregates();

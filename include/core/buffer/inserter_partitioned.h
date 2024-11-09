@@ -39,7 +39,7 @@ struct PartitionedAggregationInserter {
         return part_buffer.evict(part_no);
     }
 
-    void aggregate(const key_t& key, const value_t& value, u64 key_hash)
+    void insert(const key_t& key, const value_t& value, u64 key_hash)
     {
         // extract lower bits from hash
         u64 part_no = (key_hash >> partition_shift) & partition_mask;
@@ -63,9 +63,9 @@ struct PartitionedAggregationInserter {
         ASSERT(_nslots == next_power_2(_nslots));
     }
 
-    void aggregate(key_t& key, value_t& value)
+    void insert(key_t& key, value_t& value)
     {
-        aggregate(key, value, hash_tuple(key));
+        insert(key, value, hash_tuple(key));
     }
 
     [[nodiscard]]

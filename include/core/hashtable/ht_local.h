@@ -165,7 +165,7 @@ struct PartitionedChainedAggregationHashtable
         sketch.update(key_hash);
     }
 
-    void aggregate(key_t& key, value_t& value)
+    void insert(key_t& key, value_t& value)
     {
         aggregate(key, value, hash_tuple(key));
     }
@@ -306,7 +306,7 @@ struct PartitionedOpenAggregationHashtable
         sketch.update(key_hash);
     }
 
-    void aggregate(key_t& key, value_t& value)
+    void insert(key_t& key, value_t& value)
     {
         aggregate(key, value, hash_tuple(key));
     }
