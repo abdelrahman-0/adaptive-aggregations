@@ -8,14 +8,15 @@
 #include "bench/common_flags.h"
 #include "bench/stopwatch.h"
 #include "core/buffer/eviction_buffer.h"
+#include "core/buffer/inserter_partitioned.h"
 #include "core/buffer/partition_buffer.h"
 #include "core/hashtable/ht_base.h"
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
-#include "core/hashtable/sketch/cpc_wrapper.h"
-#include "core/hashtable/sketch/hll_custom.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
+#include "core/sketch/cpc_wrapper.h"
+#include "core/sketch/hll_custom.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
 #include "defaults.h"
@@ -62,24 +63,33 @@ using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketc
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
-static constexpr bool is_salted = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
-                                                               is_salted and idx_mode_slots != ht::INDIRECT_16>;
-// using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+#if defined(LOCAL_OPEN_HT)
+static constexpr bool is_loc_salted = true;
+using InserterLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
+                                                              is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
+#elif defined(LOCAL_CHAINED_HT)
+using InserterLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal>;
+#else
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal>;
+#endif
 
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_salted>;
-// using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+#if defined(GLOBAL_OPEN_HT)
+static constexpr bool is_glob_salted = true;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_glob_salted>;
+#else
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+#endif
 
-using PageHashtable = HashtableLocal::page_t;
+using PageBuffer = InserterLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
-using BlockAlloc = mem::BlockAllocator<PageHashtable, MemAlloc, false>;
-using Buffer = EvictionBuffer<PageHashtable, BlockAlloc>;
-using StorageGlobal = PartitionBuffer<PageHashtable, true>;
+using BlockAlloc = mem::BlockAllocator<PageBuffer, MemAlloc, false>;
+using Buffer = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
+using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 // #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 //  TPCH lineitem

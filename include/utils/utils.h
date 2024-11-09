@@ -138,9 +138,14 @@ void hexdump(concepts::is_pointer auto ptr, int buflen)
     }
 }
 
-template <typename Attribute, typename... Attributes>
+template <typename... Attributes>
 std::string get_schema_str()
 {
     using namespace std::string_literals;
-    return "\""s + (boost::core::demangle(typeid(Attribute).name()) + ... + ("|" + boost::core::demangle(typeid(Attributes).name()))) + "\""s;
+    auto schema_str = ""s;
+    if constexpr (sizeof...(Attributes)) {
+        schema_str = (... + (boost::core::demangle(typeid(Attributes).name()) + "|"));
+        schema_str.pop_back();
+    }
+    return "\""s + schema_str + "\""s;
 }

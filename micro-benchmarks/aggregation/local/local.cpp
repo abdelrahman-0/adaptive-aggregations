@@ -90,7 +90,7 @@ int main(int argc, char* argv[])
             std::vector<Buffer::ConsumerFn> consumer_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
                 if (FLAGS_consumepart) {
-                    consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
+                    consumer_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, part_no);
@@ -98,7 +98,7 @@ int main(int argc, char* argv[])
                     };
                 }
                 else {
-                    consumer_fns[part_no] = [part_no, &storage_glob](PageHashtable* page, bool) {
+                    consumer_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, 0);
@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             Buffer partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
-            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer};
+            InserterLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 
@@ -122,7 +122,7 @@ int main(int argc, char* argv[])
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
-            auto process_page_glob = [&ht_glob](PageHashtable& page) {
+            auto process_page_glob = [&ht_glob](PageBuffer& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.aggregate(page.get_attribute_ref(j));
                 }
@@ -241,8 +241,8 @@ int main(int argc, char* argv[])
         .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
-        .log("hashtable (local)", HashtableLocal::get_type())
+        .log("max tuples per page (hashtable)", PageBuffer::max_tuples_per_page)
+        .log("hashtable (local)", InserterLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("consume partitions", FLAGS_consumepart)
         .log("sketch (local)", SketchLocal::get_type())

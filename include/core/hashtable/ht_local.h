@@ -30,7 +30,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     using typename base_t::page_t;
     using typename base_t::slot_idx_t;
     using block_alloc_t = mem::BlockAllocator<page_t, Alloc, is_heterogeneous>;
-    using part_buf_t = EvictionBuffer<page_t, block_alloc_t>;
+    using part_buf_t = buf::EvictionBuffer<page_t, block_alloc_t>;
 
   protected:
     // global hashtables are non-inserters

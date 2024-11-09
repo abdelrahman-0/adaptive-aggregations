@@ -3,7 +3,7 @@
 BUILD_DIR_DEB=build-debug
 BUILD_DIR_REL=build-release
 BUILD_DIR_RELWITHDEBINFO=build-relwithdebinfo
-HT_PAGE_SIZE_POWER=15
+HT_PAGE_SIZE_POWER=16
 NETWORK_PAGE_SIZE_POWER=17
 
 TARGETS=aggregation_local aggregation_local_LIKWID

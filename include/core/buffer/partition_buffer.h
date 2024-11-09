@@ -6,6 +6,8 @@
 
 #include "defaults.h"
 
+namespace buf {
+
 template <typename BufferPage, bool is_concurrent>
 struct PartitionBuffer {
     std::conditional_t<is_concurrent, std::vector<tbb::concurrent_vector<BufferPage*>>, std::vector<std::vector<BufferPage*>>> partition_pages;
@@ -19,3 +21,5 @@ struct PartitionBuffer {
         partition_pages[part_no].push_back(page);
     }
 };
+
+} // namespace buf

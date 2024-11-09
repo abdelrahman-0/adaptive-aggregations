@@ -6,8 +6,9 @@
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_alloc.h"
 
-template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc,
-          typename Fn = std::function<void(BufferPage*, bool /* final eviction? */)>>
+namespace buf {
+
+template <typename BufferPage, concepts::is_block_allocator<BufferPage> BlockAlloc, typename Fn = std::function<void(BufferPage*, bool /* final eviction? */)>>
 class EvictionBuffer {
 
   private:
@@ -49,3 +50,5 @@ class EvictionBuffer {
         }
     }
 };
+
+} // namespace buf

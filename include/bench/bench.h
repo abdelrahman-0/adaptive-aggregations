@@ -4,7 +4,7 @@
 
 #include "likwid-marker.h"
 
-#ifdef NDEBUG
+#if defined(NDEBUG)
 #define DEBUGGING(x...)
 #define ASSERT(x...)
 #define PERF(x...) x

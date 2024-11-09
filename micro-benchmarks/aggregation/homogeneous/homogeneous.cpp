@@ -42,13 +42,13 @@ auto aggregate_fn = [](AggregateAttributes& aggs_grp, const AggregateAttributes&
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg = ht::PartitionedOpenAggregationHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, false, is_salted>;
-using PageHashtable = HashTablePreAgg::page_t;
+using PageBuffer = HashTablePreAgg::page_t;
 
 /* ----------- NETWORK ----------- */
 
-using BlockAlloc = mem::BlockAllocator<PageHashtable, mem::MMapAllocator<true>, false>;
-using IngressManager = IngressNetworkManager<PageHashtable, BlockAlloc>;
-using EgressManager = EgressNetworkManager<PageHashtable>;
+using BlockAlloc = mem::BlockAllocator<PageBuffer, mem::MMapAllocator<true>, false>;
+using IngressManager = IngressNetworkManager<PageBuffer, BlockAlloc>;
+using EgressManager = EgressNetworkManager<PageBuffer>;
 
 /* ----------- MAIN ----------- */
 
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
 
             /* ----------- BUFFERS ----------- */
 
-            PartitionBuffer<PageHashtable> tuple_buffer;
+            PartitionBuffer<PageBuffer> tuple_buffer;
             std::vector<PageTable> local_buffers(defaults::local_io_depth);
             u64 local_tuples_processed{0};
             u64 local_tuples_sent{0};
@@ -155,7 +155,7 @@ int main(int argc, char* argv[])
             /* ----------- NETWORK I/O ----------- */
 
             auto npeers = FLAGS_nodes - 1;
-            auto ingress_consumer_fn = [&tuple_buffer](PageHashtable* pg) { tuple_buffer.add_page(pg); };
+            auto ingress_consumer_fn = [&tuple_buffer](PageBuffer* pg) { tuple_buffer.add_page(pg); };
 
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
             IngressManager manager_recv{npeers,     FLAGS_depthnw,       FLAGS_sqpoll,
@@ -181,7 +181,7 @@ int main(int argc, char* argv[])
                 bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
                 part_offset += final_dst_partition ? parts_per_dst : 0;
                 if (dst == node_id) {
-                    consumer_fns.emplace_back([&tuple_buffer](PageHashtable* pg, bool) {
+                    consumer_fns.emplace_back([&tuple_buffer](PageBuffer* pg, bool) {
                         if (not pg->empty()) {
                             pg->retire();
                             tuple_buffer.add_page(pg);
@@ -191,7 +191,7 @@ int main(int argc, char* argv[])
                 else {
                     auto actual_dst = dst - (dst > node_id);
                     consumer_fns.emplace_back(
-                        [&manager_send, actual_dst, final_dst_partition](PageHashtable* pg, bool is_last = false) {
+                        [&manager_send, actual_dst, final_dst_partition](PageBuffer* pg, bool is_last = false) {
                             if (not pg->empty() or final_dst_partition) {
                                 pg->retire();
                                 if (is_last and final_dst_partition) {
@@ -207,7 +207,7 @@ int main(int argc, char* argv[])
 
             /* ------------ LAMBDAS ------------ */
 
-            manager_send.register_page_consumer_fn([&ht_alloc](PageHashtable* pg) { ht_alloc.return_page(pg); });
+            manager_send.register_page_consumer_fn([&ht_alloc](PageBuffer* pg) { ht_alloc.return_page(pg); });
 
             auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -307,7 +307,7 @@ int main(int argc, char* argv[])
         .log("local page size", defaults::local_page_size)
         .log("tuples per local page", PageTable::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
+        .log("tuples per hashtable page", PageBuffer::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)

@@ -108,12 +108,14 @@ struct PageAggregation
         return tuple_ptr->get_next();
     }
 
+    [[maybe_unused]]
     ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value, idx_t offset = 0)
     requires(is_chained)
     {
         return emplace_back(entry_t{offset, std::make_tuple(key, value)});
     }
 
+    [[maybe_unused]]
     ALWAYS_INLINE auto emplace_back_grp(GroupAttributes key, AggregateAttributes value)
     requires(not is_chained)
     {

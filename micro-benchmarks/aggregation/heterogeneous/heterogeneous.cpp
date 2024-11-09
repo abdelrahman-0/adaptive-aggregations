@@ -46,13 +46,13 @@ auto aggregate_fn = [](AggregateAttributes& aggs_grp, const AggregateAttributes&
 };
 static constexpr bool is_salted = true;
 using HashTablePreAgg = ht::PartitionedOpenAggregationHashtable<GroupAttributes, AggregateAttributes, aggregate_fn, void*, true, is_salted>;
-using PageHashtable = HashTablePreAgg::page_t;
+using PageBuffer = HashTablePreAgg::page_t;
 
 /* ----------- NETWORK ----------- */
 
-using IngressManager = HeterogeneousIngressNetworkManager<PageHashtable>;
-using EgressManager = HeterogeneousEgressNetworkManager<PageHashtable>;
-using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, PageHashtable>;
+using IngressManager = HeterogeneousIngressNetworkManager<PageBuffer>;
+using EgressManager = HeterogeneousEgressNetworkManager<PageBuffer>;
+using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, PageBuffer>;
 
 /* ----------- FUNCTIONS ----------- */
 
@@ -234,7 +234,7 @@ int main(int argc, char* argv[])
 
                 /* ----------- BUFFERS ----------- */
 
-                PartitionBuffer<PageHashtable> tuple_buffer;
+                PartitionBuffer<PageBuffer> tuple_buffer;
                 std::vector<PageTable> local_buffers(defaults::local_io_depth);
                 u64 local_tuples_processed{0};
                 u64 local_tuples_sent{0};
@@ -258,7 +258,7 @@ int main(int argc, char* argv[])
                     bool final_dst_partition = ((part - part_offset + 1) % parts_per_dst) == 0;
                     part_offset += final_dst_partition ? parts_per_dst : 0;
                     if (dst == node_id) {
-                        consumer_fns.emplace_back([&tuple_buffer](PageHashtable* pg, bool) {
+                        consumer_fns.emplace_back([&tuple_buffer](PageBuffer* pg, bool) {
                             if (not pg->empty()) {
                                 pg->retire();
                                 tuple_buffer.add_page(pg);
@@ -268,26 +268,26 @@ int main(int argc, char* argv[])
                     else {
                         auto actual_dst = dst - (dst > node_id);
                         consumer_fns.emplace_back([&manager_send, actual_dst, final_dst_partition,
-                                                   thread_id](PageHashtable* pg, bool is_last = false) {
+                                                   thread_id](PageBuffer* pg, bool is_last = false) {
                             if (not pg->empty() or final_dst_partition) {
                                 pg->retire();
                                 if (is_last and final_dst_partition) {
                                     pg->set_last_page();
                                 }
                                 manager_send.enqueue_page(actual_dst,
-                                                          reinterpret_cast<PageHashtable*>(
+                                                          reinterpret_cast<PageBuffer*>(
                                                               (reinterpret_cast<uintptr_t>(pg) | (thread_id << 56))));
                             }
                         });
                     }
                 }
-                mem::BlockAllocator<PageHashtable, mem::MMapAllocator<true>, true> ht_alloc(
+                mem::BlockAllocator<PageBuffer, mem::MMapAllocator<true>, true> ht_alloc(
                     FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
                 HashTablePreAgg ht{static_cast<u32>(FLAGS_partitions), FLAGS_slots, consumer_fns, ht_alloc};
 
                 /* ------------ LAMBDAS ------------ */
                 manager_send.register_page_consumer_fn(
-                    thread_id, [&ht_alloc, thread_id](PageHashtable* pg) { ht_alloc.return_page(pg); });
+                    thread_id, [&ht_alloc, thread_id](PageBuffer* pg) { ht_alloc.return_page(pg); });
 
                 auto process_local_page = [&ht DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                     for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -299,7 +299,7 @@ int main(int argc, char* argv[])
                 };
 
                 auto consume_ingress = [&manager_recv, &tuple_buffer]() {
-                    PageHashtable* page = manager_recv.try_dequeue_page();
+                    PageBuffer* page = manager_recv.try_dequeue_page();
                     if (page) {
                         tuple_buffer.add_page(page);
                     }
@@ -384,7 +384,7 @@ int main(int argc, char* argv[])
     DEBUGGING(print("tuples received:", tuples_received.load()));
     DEBUGGING(print("tuples sent:", tuples_sent.load()));
     DEBUGGING(print("tuples processed:", tuples_local.load()));
-    DEBUGGING(u64 pages_local = (tuples_local + PageHashtable::max_tuples_per_page - 1) / PageHashtable::max_tuples_per_page);
+    DEBUGGING(u64 pages_local = (tuples_local + PageBuffer::max_tuples_per_page - 1) / PageBuffer::max_tuples_per_page);
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);
     DEBUGGING(u64 tuples_processed = tuples_received + tuples_local);
@@ -404,7 +404,7 @@ int main(int argc, char* argv[])
         .log("local page size", defaults::local_page_size)
         .log("tuples per local page", PageTable::max_tuples_per_page)
         .log("hashtable page size", defaults::hashtable_page_size)
-        .log("tuples per hashtable page", PageHashtable::max_tuples_per_page)
+        .log("tuples per hashtable page", PageBuffer::max_tuples_per_page)
         .log("morsel size", FLAGS_morselsz)
         .log("pin", FLAGS_pin)
         .log("cache (%)", FLAGS_cache)
