@@ -65,6 +65,20 @@ struct PartitionedAggregationInserter {
         return std::pair(part_page->emplace_back_grp(key, value), evicted);
     }
 
+    [[maybe_unused]]
+    auto insert(const key_t& key, const value_t& value, page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
+    {
+        bool evicted{false};
+        if ((evicted = part_page->full())) {
+            // evict if full
+            part_page = part_buffer.evict(part_no, part_page);
+            part_page->clear_tuples();
+            offset = 0;
+        }
+        part_groups[part_no >> group_shift].sketch.update(key_hash);
+        return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
+    }
+
     void insert(key_t& key, value_t& value)
     {
         // extract lower bits from hash

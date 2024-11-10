@@ -31,7 +31,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     using typename base_t::slot_idx_t;
     using block_alloc_t = mem::BlockAllocator<page_t, Alloc, is_heterogeneous>;
     using part_buf_t = buf::EvictionBuffer<page_t, block_alloc_t>;
-    using inserter_t = buf::PartitionedAggregationInserter<key_t, value_t, entry_mode, Alloc, sketch_t, is_heterogeneous>;
+    using inserter_t = buf::PartitionedAggregationInserter<key_t, value_t, entry_mode, Alloc, sketch_t, use_ptr, is_heterogeneous>;
     static_assert(std::is_same_v<page_t, typename inserter_t::page_t>);
 
   protected:
@@ -73,22 +73,23 @@ requires(entry_mode != NO_IDX and slots_mode != NO_IDX)
 struct PartitionedChainedAggregationHashtable
     : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg, slots_mode == DIRECT, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg, slots_mode == DIRECT, is_heterogeneous>;
-    using base_t::evict;
+    using base_t::clear_slots;
+    using base_t::group_found;
+    using base_t::group_not_found;
     using base_t::ht_mask;
+    using base_t::inserter;
     using base_t::part_buffer;
     using base_t::partition_shift;
-    using base_t::sketch;
     using base_t::slots;
     using typename base_t::idx_t;
+    using typename base_t::inserter_t;
     using typename base_t::page_t;
     using typename base_t::part_buf_t;
     using typename base_t::slot_idx_t;
 
-    // TODO extend constructor to take inserter by ref
-    // TODO add found/not foind on hot path
-
   public:
-    PartitionedChainedAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer) : base_t(_npartitions, _nslots, _part_buffer)
+    PartitionedChainedAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer, inserter_t& _inserter)
+        : base_t(_npartitions, _nslots, _part_buffer, _inserter)
     {
     }
 
@@ -106,18 +107,17 @@ struct PartitionedChainedAggregationHashtable
             // walk chain of slots
             if (next_offset->get_group() == key) {
                 fn_agg(next_offset->get_aggregates(), value);
+                group_found++;
                 return;
             }
             next_offset = reinterpret_cast<slot_idx_t>(part_page->get_next(next_offset));
         }
-        if (part_page->full()) {
-            // evict if full
-            part_page = evict(part_no);
-            part_page->clear_tuples();
-            offset = 0;
+        bool evicted;
+        std::tie(slot, evicted) = inserter.insert(key, value, reinterpret_cast<idx_t>(offset), key_hash, part_no, part_page);
+        if (evicted) {
+            clear_slots(part_no);
         }
-        slot = part_page->emplace_back_grp(key, value, reinterpret_cast<idx_t>(offset));
-        sketch.update(key_hash);
+        group_not_found++;
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -134,18 +134,17 @@ struct PartitionedChainedAggregationHashtable
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
+                group_found++;
                 return;
             }
             next_offset = part_page->get_next(next_offset);
         }
-        if (part_page->full()) {
-            // evict if full
-            part_page = evict(part_no);
-            part_page->clear_tuples();
-            offset = 0;
+        bool evicted;
+        std::tie(slot, evicted) = inserter.insert(key, value, offset, key_hash, part_no, part_page);
+        if (evicted) {
+            clear_slots(part_no);
         }
-        slot = part_page->emplace_back_grp(key, value, offset);
-        sketch.update(key_hash);
+        group_not_found++;
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -162,18 +161,17 @@ struct PartitionedChainedAggregationHashtable
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
+                group_found++;
                 return;
             }
             next_offset = reinterpret_cast<u64>(part_page->get_next(next_offset));
         }
-        if (part_page->full()) {
-            // evict if full
-            part_page = evict(part_no);
-            part_page->clear_tuples();
-            offset = 0;
+        bool evicted;
+        std::tie(slot, evicted) = inserter.insert(key, value, reinterpret_cast<idx_t>(static_cast<u64>(offset)), key_hash, part_no, part_page);
+        if (evicted) {
+            clear_slots(part_no);
         }
-        slot = part_page->emplace_back_grp(key, value, reinterpret_cast<idx_t>(static_cast<u64>(offset)));
-        sketch.update(key_hash);
+        group_not_found++;
     }
 
     void insert(key_t& key, value_t& value)

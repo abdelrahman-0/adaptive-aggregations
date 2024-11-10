@@ -51,6 +51,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
+    std::atomic<u64> pages_pre_agg{0};
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
     SketchGlobal sketch_glob;
     HashtableGlobal ht_glob;
@@ -63,7 +64,7 @@ int main(int argc, char* argv[])
     std::vector<std::jthread> threads{};
     for (u32 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
-                              &global_ht_construction_complete, &times_preagg DEBUGGING(, &tuples_processed)]() {
+                              &global_ht_construction_complete, &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -221,6 +222,15 @@ int main(int argc, char* argv[])
             ::pthread_barrier_wait(&barrier_end);
 
             /* ----------- END ----------- */
+            if (thread_id == 0) {
+                if (FLAGS_consumepart) {
+                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(),
+                                  [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+                }
+                else {
+                    pages_pre_agg = storage_glob.partition_pages[0].size();
+                }
+            }
 
             DEBUGGING(tuples_processed += local_tuples_processed);
         });
@@ -240,13 +250,6 @@ int main(int argc, char* argv[])
 
     auto groups_estimate = sketch_glob.get_estimate();
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
-    u64 pages_pre_agg{0};
-    if (FLAGS_consumepart) {
-        std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
-    }
-    else {
-        pages_pre_agg = storage_glob.partition_pages[0].size();
-    }
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("traffic", "both"s)

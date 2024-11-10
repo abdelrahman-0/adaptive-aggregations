@@ -11,8 +11,7 @@
 
 namespace mem {
 
-template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>,
-          bool has_concurrent_free_pages = false>
+template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>, bool has_concurrent_free_pages = false>
 class BlockAllocator {
     struct BlockAllocation {
         u64 npages;
@@ -48,11 +47,10 @@ class BlockAllocator {
 
     ~BlockAllocator()
     {
-        // TODO cannot deallocate here
         // loop through partitions and deallocate them
-//        for (auto& allocation : allocations) {
-//            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
-//        }
+        for (auto& allocation : allocations) {
+            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
+        }
     }
 
     [[maybe_unused]]
@@ -99,7 +97,10 @@ class BlockAllocator {
         throw BlockAllocError{"Exhausted allocation budget"};
     }
 
-    void return_page(PageType* page) { free_pages.push(page); }
+    void return_page(PageType* page)
+    {
+        free_pages.push(page);
+    }
 };
 
 } // namespace mem

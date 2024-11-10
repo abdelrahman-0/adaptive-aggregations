@@ -44,6 +44,9 @@ class EvictionBuffer {
     page_t* evict(u64 part_no, page_t* part_page, bool final_eviction = false)
     {
         consumer_fns[part_no](part_page, final_eviction);
+        if (final_eviction) {
+            return nullptr;
+        }
         part_page = block_alloc.get_page();
         partitions[part_no] = part_page;
         return part_page;
