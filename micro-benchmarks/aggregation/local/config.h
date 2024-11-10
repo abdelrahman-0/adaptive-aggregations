@@ -10,7 +10,6 @@
 #include "core/buffer/eviction_buffer.h"
 #include "core/buffer/partition_buffer.h"
 #include "core/buffer/partition_inserter.h"
-#include "core/hashtable/ht_base.h"
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
@@ -65,7 +64,7 @@ using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketc
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
 static constexpr double threshold_preagg = 0.7;
-static constexpr bool adaptive_preagg = true;
+static constexpr bool do_adaptive_preagg = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 

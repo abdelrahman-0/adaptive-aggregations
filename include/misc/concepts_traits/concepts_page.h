@@ -11,7 +11,7 @@ concept is_page = requires(T t) {
 
 template <typename T>
 concept is_communication_page = is_page<T> and requires(T t) {
-    { t.set_last_page() } -> std::convertible_to<void>;
+    { t.set_last_page() } -> concepts::is_void;
     { t.is_last_page() } -> std::convertible_to<bool>;
 };
 

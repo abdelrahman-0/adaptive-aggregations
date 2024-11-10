@@ -73,8 +73,12 @@ struct PageAggregation
     using base_t::columns;
     using base_t::emplace_back;
     using base_t::get_attribute_ref;
+    using base_t::get_num_tuples;
     using base_t::num_tuples;
     using idx_t = agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
+    static constexpr u8 part_no_shift = 32;
+    // highest bit is used by communication page (see base class)
+    static constexpr u64 num_tuples_mask = 0x80000000FFFFFFFF;
 
     ALWAYS_INLINE GroupAttributes& get_group(std::unsigned_integral auto idx)
     {
@@ -120,6 +124,28 @@ struct PageAggregation
     requires(not is_chained)
     {
         return emplace_back(entry_t{std::make_tuple(key, value)});
+    }
+
+    void set_part_no(u64 part_no)
+    {
+        num_tuples |= (part_no << part_no_shift);
+    }
+
+    [[nodiscard]]
+    u32 get_part_no() const
+    {
+        return ((num_tuples & ~num_tuples_mask) >> part_no_shift);
+    }
+
+    void clear_part_no()
+    {
+        num_tuples &= num_tuples_mask;
+    }
+
+    [[nodiscard]]
+    u64 get_num_tuples() const
+    {
+        return base_t::get_num_tuples() & num_tuples_mask;
     }
 };
 

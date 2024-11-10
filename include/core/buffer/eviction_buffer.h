@@ -13,14 +13,14 @@ class EvictionBuffer {
 
   private:
     std::vector<page_t*> partitions;
-    std::vector<Fn> consumer_fns;
+    std::vector<Fn> eviction_fns;
     BlockAlloc& block_alloc;
 
   public:
-    using ConsumerFn = Fn;
+    using EvictionFn = Fn;
 
-    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& consumer_fns)
-        : partitions(npartitions), block_alloc(block_alloc), consumer_fns(std::move(consumer_fns))
+    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& eviction_fns)
+        : partitions(npartitions), block_alloc(block_alloc), eviction_fns(std::move(eviction_fns))
     {
         // alloc partitions
         for (auto& part : partitions) {
@@ -43,7 +43,7 @@ class EvictionBuffer {
     [[maybe_unused]]
     page_t* evict(u64 part_no, page_t* part_page, bool final_eviction = false)
     {
-        consumer_fns[part_no](part_page, final_eviction);
+        eviction_fns[part_no](part_page, final_eviction);
         if (final_eviction) {
             return nullptr;
         }

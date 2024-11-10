@@ -88,10 +88,10 @@ int main(int argc, char* argv[])
 
             /* ------------ GROUP BY ------------ */
 
-            std::vector<BufferLocal::ConsumerFn> consumer_fns(FLAGS_partitions);
+            std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
                 if (FLAGS_consumepart) {
-                    consumer_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
+                    eviction_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, part_no);
@@ -99,7 +99,7 @@ int main(int argc, char* argv[])
                     };
                 }
                 else {
-                    consumer_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
+                    eviction_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, 0);
@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
             }
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
-            BufferLocal partition_buffer{FLAGS_partitions, block_alloc, consumer_fns};
+            BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, 1u, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
@@ -172,9 +172,8 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
 
-                if (adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
+                if (do_adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    print("turned off pre-aggregation");
                     FLAGS_preagg = false;
                     process_local_page = insert_into_buffer;
                 }
@@ -268,7 +267,7 @@ int main(int argc, char* argv[])
         .log("sketch (local)", SketchLocal::get_type())
         .log("sketch (global)", SketchGlobal::get_type())
         .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", adaptive_preagg)
+        .log("adaptive pre-aggregation", do_adaptive_preagg)
         .log("threshold pre-aggregation", threshold_preagg)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)

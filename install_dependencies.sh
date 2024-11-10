@@ -30,7 +30,6 @@ cmake -S . -B build/Release -DCMAKE_BUILD_TYPE=Release
 sudo cmake --build build/Release -t install
 cd ~
 
-
 # increase read and write socket buffers
 sudo sysctl -w net.core.rmem_max=500000000
 sudo sysctl -w net.core.wmem_max=500000000
