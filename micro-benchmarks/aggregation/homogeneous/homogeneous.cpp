@@ -154,7 +154,7 @@ int main(int argc, char* argv[])
             }
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
-            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, 1u, partition_buffer};
+            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, FLAGS_nodes, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ LAMBDAS ------------ */
