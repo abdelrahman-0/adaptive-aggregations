@@ -105,12 +105,15 @@ int main(int argc, char* argv[])
             /* ----------- NETWORK I/O ----------- */
 
             auto npeers = FLAGS_nodes - 1;
-            auto ingress_consumer_fn = [&storage_glob](PageBuffer* page) { storage_glob.add_page(page, page->get_part_no()); };
 
+            // TODO add FLAGS_consumepart
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
-            IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds, ingress_consumer_fn, recv_alloc};
+            IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds, recv_alloc};
             EgressManager manager_send{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
+
+            auto ingress_consumer_fn = [&storage_glob](PageBuffer* page) { storage_glob.add_page(page, page->get_part_no()); };
+            manager_recv.register_consumer_fn(ingress_consumer_fn);
 
             /* ----------- LOCAL I/O ----------- */
 
@@ -215,16 +218,16 @@ int main(int argc, char* argv[])
             }
             partition_buffer.finalize();
             // send sketches
-//            for (u32 part_grp : range(partition_groups)) {
-//                // TODO need to map part_group to node
-//                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
-//            }
+            //            for (u32 part_grp : range(partition_groups)) {
+            //                // TODO need to map part_group to node
+            //                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
+            //            }
             while (peers_done < npeers) {
                 peers_done += consume_ingress();
                 manager_send.try_drain_pending();
             }
             manager_send.wait_all();
-            // TODO send sketch and combine it
+            // TODO send sketch and combine incoming
 
             swatch_preagg.stop();
             ::pthread_barrier_wait(&barrier_preagg);

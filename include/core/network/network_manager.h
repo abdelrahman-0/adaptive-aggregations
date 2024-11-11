@@ -165,17 +165,11 @@ class EgressNetworkManager : public BaseNetworkManager {
         initialize_empty_consumer_fns();
     }
 
-    template <u16 idx = 0, typename T>
+    template <typename T>
     void register_object_fn(std::function<void(T*)> fn)
     {
-        if constexpr (std::is_same_v<T, arg_t<idx>>) {
-            // wrapper to allow void* args
-            consumer_fns[idx] = [fn](void* obj) { fn(reinterpret_cast<T*>(obj)); };
-            return;
-        }
-        else {
-            register_object_fn<idx + 1>(fn);
-        }
+        // wrapper to allow void* args
+        consumer_fns[get_type_idx<T>()] = [fn](void* obj) { fn(reinterpret_cast<T*>(obj)); };
     }
 
     void flush_object(UserData user_data, u64 size)

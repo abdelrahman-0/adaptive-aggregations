@@ -10,6 +10,7 @@
 #include <tbb/concurrent_queue.h>
 #include <tbb/scalable_allocator.h>
 
+#include "bench/bench.h"
 #include "connection.h"
 #include "core/memory/alloc.h"
 #include "core/memory/allocators/rpmalloc/rpmalloc_allocator.h"
@@ -20,7 +21,6 @@
 #include "misc/concepts_traits/concepts_page.h"
 #include "misc/exceptions/exceptions_io_uring.h"
 #include "page_communication.h"
-#include "bench/bench.h"
 
 template <typename T>
 // using VecAlloc = RPMallocAllocator<T>;
@@ -42,8 +42,7 @@ class NetworkManagerOld {
     void init_ring(bool sqpoll)
     {
         int ret;
-        if ((ret = io_uring_queue_init(next_power_2(nwdepth), &ring,
-                                       IORING_SETUP_SINGLE_ISSUER | (sqpoll ? IORING_SETUP_SQPOLL : 0))) < 0) {
+        if ((ret = io_uring_queue_init(next_power_2(nwdepth), &ring, IORING_SETUP_SINGLE_ISSUER | (sqpoll ? IORING_SETUP_SQPOLL : 0))) < 0) {
             throw IOUringInitError{ret};
         }
     }
@@ -77,12 +76,10 @@ class NetworkManagerOld {
     }
 
   protected:
-    explicit NetworkManagerOld(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets,
-                            bool register_bufs = false)
+    explicit NetworkManagerOld(u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets, bool register_bufs = false)
         : nwdepth(nwdepth), /*buffers(nbuffers),*/ free_pages(nbuffers)
     {
-        auto* ptr =
-            ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        auto* ptr = ::mmap(nullptr, nbuffers * sizeof(BufferPage), PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
         if (ptr == MAP_FAILED) {
             throw std::runtime_error("Failed to allocate memory for the buffer pool");
         }
@@ -96,8 +93,7 @@ class NetworkManagerOld {
         init_buffers(register_bufs);
     }
 
-    explicit NetworkManagerOld(u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, bool register_bufs = false)
-        : nwdepth(nwdepth)
+    explicit NetworkManagerOld(u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, bool register_bufs = false) : nwdepth(nwdepth)
     {
         init_ring(sqpoll);
         if (not sockets.empty()) {
@@ -128,7 +124,10 @@ class SimpleIngressNetworkManager : public NetworkManagerOld<BufferPage> {
     {
     }
 
-    auto get_pages_recv() const { return pages_recv; }
+    auto get_pages_recv() const
+    {
+        return pages_recv;
+    }
 
     void post_recvs(u16 dst)
     {
@@ -154,8 +153,7 @@ class SimpleIngressNetworkManager : public NetworkManagerOld<BufferPage> {
                 if (cqes[i]->res != sizeof(BufferPage)) {
                     throw IOUringRecvError(cqes[i]->res);
                 }
-                if (get_pointer<BufferPage>(io_uring_cqe_get_data(cqes[i]))->get_num_tuples() >
-                    BufferPage::max_tuples_per_page) {
+                if (get_pointer<BufferPage>(io_uring_cqe_get_data(cqes[i]))->get_num_tuples() > BufferPage::max_tuples_per_page) {
                     hexdump(get_pointer<BufferPage>(io_uring_cqe_get_data(cqes[i])), sizeof(BufferPage));
                     throw std::runtime_error{"received fragmented page!"};
                 }
@@ -190,13 +188,16 @@ class IngressNetworkManager : public NetworkManagerOld<BufferPage> {
     PageConsumerFn consumer_fn;
 
   public:
-    IngressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets,
-                          PageConsumerFn consumer_fn, BlockAlloc& block_alloc)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(block_alloc),
-          consumer_fn(std::move(consumer_fn))
+    IngressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, BlockAlloc& block_alloc)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(block_alloc)
     {
         for (u32 peer{0u}; peer < npeers; peer++)
             _post_recvs(block_alloc.get_page(), peer);
+    }
+
+    void register_consumer_fn(PageConsumerFn _consumer_fn)
+    {
+        consumer_fn = _consumer_fn;
     }
 
     DEBUGGING(auto get_pages_recv() const { return pages_recv; })
@@ -233,7 +234,10 @@ class IngressNetworkManager : public NetworkManagerOld<BufferPage> {
         return peers_done;
     }
 
-    void done_page(BufferPage* page) { block_alloc.return_page(page); }
+    void done_page(BufferPage* page)
+    {
+        block_alloc.return_page(page);
+    }
 };
 
 template <typename BufferPage>
@@ -256,8 +260,7 @@ class ConcurrentIngressNetworkManager : public NetworkManagerOld<BufferPage> {
 
   public:
     ConcurrentIngressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), nbuffers(nbuffers),
-          peers_left(npeers), has_inflight(npeers, false)
+        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), cqes(nwdepth * 2), nbuffers(nbuffers), peers_left(npeers), has_inflight(npeers, false)
     {
         for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
             free_pages.push(buffers_start + page_idx);
@@ -267,7 +270,10 @@ class ConcurrentIngressNetworkManager : public NetworkManagerOld<BufferPage> {
         }
     }
 
-    auto get_pages_recv() const { return pages_recv; }
+    auto get_pages_recv() const
+    {
+        return pages_recv;
+    }
 
     void post_recvs(u16 dst)
     {
@@ -318,7 +324,10 @@ class ConcurrentIngressNetworkManager : public NetworkManagerOld<BufferPage> {
         return nullptr;
     }
 
-    void done_page(BufferPage* page) { free_pages.push(page); }
+    void done_page(BufferPage* page)
+    {
+        free_pages.push(page);
+    }
 
     [[nodiscard]]
     bool pending_peers() const
@@ -350,8 +359,7 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
 
   public:
     HeterogeneousIngressNetworkManager(u16 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10, 100),
-          peers_left(npeers), pending_peers(true)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10, 100), peers_left(npeers), pending_peers(true)
     {
         for (auto dst{0u}; dst < npeers; ++dst) {
             post_recvs(dst);
@@ -400,7 +408,10 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
         return nullptr;
     }
 
-    void done_page(BufferPage* page) { block_alloc.return_page(page); }
+    void done_page(BufferPage* page)
+    {
+        block_alloc.return_page(page);
+    }
 
     [[nodiscard]]
     bool pending() const
@@ -433,8 +444,7 @@ class MultishotIngressNetworkManager : public NetworkManagerOld<BufferPage> {
                 throw IOUringSetupBufRingError{ret};
             }
             for (auto j{0u}; j < nbuffers; j++) {
-                io_uring_buf_ring_add(buf_ring, buffers_start + i * nbuffers + j, sizeof(BufferPage), j,
-                                      io_uring_buf_ring_mask(nbuffers), j);
+                io_uring_buf_ring_add(buf_ring, buffers_start + i * nbuffers + j, sizeof(BufferPage), j, io_uring_buf_ring_mask(nbuffers), j);
             }
             io_uring_buf_ring_advance(buf_ring, nbuffers);
             buf_rings[i] = buf_ring;
@@ -443,8 +453,7 @@ class MultishotIngressNetworkManager : public NetworkManagerOld<BufferPage> {
 
   public:
     MultishotIngressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : NetworkManagerOld<BufferPage>(nwdepth, nbuffers * npeers, sqpoll, sockets), cqes(nwdepth * 2), buf_rings(npeers),
-          nbuffers_per_peer(nbuffers)
+        : NetworkManagerOld<BufferPage>(nwdepth, nbuffers * npeers, sqpoll, sockets), cqes(nwdepth * 2), buf_rings(npeers), nbuffers_per_peer(nbuffers)
     {
         setup_buf_rings(nbuffers);
     }
@@ -484,8 +493,7 @@ class MultishotIngressNetworkManager : public NetworkManagerOld<BufferPage> {
     void done_page(u16 dst, u16 buf_idx)
     {
         // advance buffers cqe and re-register buffer
-        io_uring_buf_ring_add(buf_rings[dst], buffers_start + buf_idx, sizeof(BufferPage), buf_idx,
-                              io_uring_buf_ring_mask(nbuffers_per_peer), 0);
+        io_uring_buf_ring_add(buf_rings[dst], buffers_start + buf_idx, sizeof(BufferPage), buf_idx, io_uring_buf_ring_mask(nbuffers_per_peer), 0);
         io_uring_buf_ring_cq_advance(&ring, buf_rings[dst], 1);
     }
 };
@@ -573,7 +581,9 @@ class SimpleEgressNetworkManager : public NetworkManagerOld<BufferPage> {
         }
     }
 
-    void try_drain_pending() const {}
+    void try_drain_pending() const
+    {
+    }
 
     void wait_all()
     {
@@ -611,8 +621,7 @@ class BufferedEgressNetworkManager : public NetworkManagerOld<BufferPage> {
 
   public:
     BufferedEgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), active_buffer(npeers, nullptr), pending_pages(npeers),
-          has_inflight(npeers, false), cqes(nwdepth * 2)
+        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), active_buffer(npeers, nullptr), pending_pages(npeers), has_inflight(npeers, false), cqes(nwdepth * 2)
     {
         for (auto peer{0u}; peer < npeers; ++peer) {
             get_new_page(peer);
@@ -767,12 +776,14 @@ class EgressNetworkManagerOld : public NetworkManagerOld<BufferPage> {
 
   public:
     EgressNetworkManagerOld(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false),
-          cqes(nwdepth * 2)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), pending_pages(npeers), has_inflight(npeers, false), cqes(nwdepth * 2)
     {
     }
 
-    void register_page_consumer_fn(PageConsumerFn _consume_page_fn) { consume_page_fn = _consume_page_fn; }
+    void register_page_consumer_fn(PageConsumerFn _consume_page_fn)
+    {
+        consume_page_fn = _consume_page_fn;
+    }
 
     void flush(u16 dst, BufferPage* page)
     {
@@ -863,10 +874,9 @@ class BufferedZeroCopyEgressNetworkManager : public NetworkManagerOld<BufferPage
     u32 total_retrieved{0};
 
   public:
-    BufferedZeroCopyEgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll,
-                                         const std::vector<int>& sockets)
-        : NetworkManagerOld<BufferPage>(nwdepth, nbuffers, sqpoll, sockets, true), active_buffer(npeers, nullptr),
-          pending_pages(npeers), has_inflight(npeers, false), cqes(nwdepth * 2)
+    BufferedZeroCopyEgressNetworkManager(u32 npeers, u32 nwdepth, u32 nbuffers, bool sqpoll, const std::vector<int>& sockets)
+        : NetworkManagerOld<BufferPage>(nwdepth, nbuffers, sqpoll, sockets, true), active_buffer(npeers, nullptr), pending_pages(npeers), has_inflight(npeers, false),
+          cqes(nwdepth * 2)
     {
         for (auto peer{0u}; peer < npeers; ++peer) {
             get_new_page(peer);
@@ -1032,10 +1042,9 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManagerOld<BufferPa
     u16 npeers;
 
   public:
-    ConcurrentBufferedEgressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, u16 nthreads, bool sqpoll,
-                                           const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), has_inflight(npeers, false), cqes(nwdepth * 2),
-          nbuffers(nbuffers), page_ptrs(npeers), nthreads(nthreads), npeers(npeers)
+    ConcurrentBufferedEgressNetworkManager(u16 npeers, u32 nwdepth, u32 nbuffers, u16 nthreads, bool sqpoll, const std::vector<int>& sockets)
+        : BaseNetworkManager(nwdepth, nbuffers, sqpoll, sockets), has_inflight(npeers, false), cqes(nwdepth * 2), nbuffers(nbuffers), page_ptrs(npeers),
+          nthreads(nthreads), npeers(npeers)
     {
         for (auto page_idx{0u}; page_idx < nbuffers; ++page_idx) {
             free_pages.push(buffers_start + page_idx);
@@ -1148,7 +1157,10 @@ class ConcurrentBufferedEgressNetworkManager : public NetworkManagerOld<BufferPa
         }
     }
 
-    void finished_egress() { continue_egress = false; }
+    void finished_egress()
+    {
+        continue_egress = false;
+    }
 };
 
 struct SubmissionInfo {
@@ -1167,7 +1179,6 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
     using BaseNetworkManager::ring;
     using PageConsumerFn = std::function<void(BufferPage*)>;
 
-
   private:
     std::mutex registration_mtx;
     tbb::concurrent_bounded_queue<BufferPage*> free_pages;
@@ -1184,10 +1195,9 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
     u16 npeers;
 
   public:
-    HeterogeneousEgressNetworkManager(u16 npeers, u32 nwdepth, u16 nthreads, bool sqpoll,
-                                      const std::vector<int>& sockets, u32 qthreads)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), has_inflight(npeers, false), cqes(nwdepth * 2),
-          page_ptrs(npeers), nthreads(nthreads), npeers(npeers), consumer_fns(qthreads)
+    HeterogeneousEgressNetworkManager(u16 npeers, u32 nwdepth, u16 nthreads, bool sqpoll, const std::vector<int>& sockets, u32 qthreads)
+        : BaseNetworkManager(nwdepth, sqpoll, sockets), has_inflight(npeers, false), cqes(nwdepth * 2), page_ptrs(npeers), nthreads(nthreads), npeers(npeers),
+          consumer_fns(qthreads)
     {
     }
 
@@ -1197,7 +1207,10 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
         consumer_fns[thread_id] = _consumer_fn;
     }
 
-    void enqueue_page(u16 dst, BufferPage* page) { page_ptrs[dst].push(page); }
+    void enqueue_page(u16 dst, BufferPage* page)
+    {
+        page_ptrs[dst].push(page);
+    }
 
     void _flush(u16 dst, BufferPage* page)
     {
@@ -1290,5 +1303,8 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
         }
     }
 
-    void finished_egress() { continue_egress = false; }
+    void finished_egress()
+    {
+        continue_egress = false;
+    }
 };
