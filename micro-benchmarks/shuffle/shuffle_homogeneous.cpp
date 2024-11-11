@@ -3,7 +3,7 @@
 
 #include "bench/stopwatch.h"
 #include "core/network/connection.h"
-#include "core/network/network_manager.h"
+#include "core/network/network_manager_old.h"
 #include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
@@ -32,7 +32,7 @@ using ResultPage = PageLocal<ResultTuple>;
 
 using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
 using IngressManager = SimpleIngressNetworkManager<NetworkPage>;
-using EgressManager = EgressNetworkManager<NetworkPage>;
+using EgressManager = EgressNetworkManagerOld<NetworkPage>;
 
 /* ----------- FUNCTIONS ----------- */
 

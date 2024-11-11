@@ -13,7 +13,7 @@
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
-#include "core/network/network_manager.h"
+#include "core/network/network_manager_old.h"
 #include "core/sketch/cpc_wrapper.h"
 #include "core/sketch/hll_custom.h"
 #include "core/storage/page_local.h"

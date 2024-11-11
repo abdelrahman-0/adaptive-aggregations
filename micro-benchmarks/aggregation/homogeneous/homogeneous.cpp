@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
     for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
                               &global_ht_construction_complete, &times_preagg,
-                              &pages_pre_agg DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)]() {
+                              &pages_pre_agg DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)] {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -109,7 +109,7 @@ int main(int argc, char* argv[])
 
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
             IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds, ingress_consumer_fn, recv_alloc};
-            EgressManager manager_send{npeers, FLAGS_depthnw, 0, FLAGS_sqpoll, socket_fds};
+            EgressManager manager_send{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             u32 peers_done = 0;
 
             /* ----------- LOCAL I/O ----------- */
@@ -154,12 +154,14 @@ int main(int argc, char* argv[])
             }
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
-            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, FLAGS_nodes, partition_buffer};
+            auto partition_groups = next_power_2(FLAGS_partitions);
+            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, partition_groups, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ LAMBDAS ------------ */
 
-            manager_send.register_page_consumer_fn([&block_alloc](PageBuffer* pg) { block_alloc.return_page(pg); });
+            std::function<void(PageBuffer*)> page_consumer_fn = [&block_alloc](PageBuffer* pg) -> void { block_alloc.return_page(pg); };
+            manager_send.register_object_fn(page_consumer_fn);
 
             // TODO add adaptive_preagg
             auto process_local_page = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
@@ -212,6 +214,11 @@ int main(int argc, char* argv[])
                 }
             }
             partition_buffer.finalize();
+            // send sketches
+            for (u32 part_grp : range(partition_groups)) {
+                // TODO need to map part_group to node
+                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
+            }
             while (peers_done < npeers) {
                 peers_done += consume_ingress();
                 manager_send.try_drain_pending();

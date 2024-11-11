@@ -4,7 +4,7 @@
 #include "bench/stopwatch.h"
 #include "common/alignment.h"
 #include "core/network/connection.h"
-#include "core/network/network_manager.h"
+#include "core/network/network_manager_old.h"
 #include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"

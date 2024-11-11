@@ -9,7 +9,7 @@
 #include "core/buffer/partition_buffer.h"
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
-#include "core/network/network_manager.h"
+#include "core/network/network_manager_old.h"
 #include "core/network/page_communication.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"

@@ -13,6 +13,7 @@
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
+#include "core/network/network_manager_old.h"
 #include "core/sketch/cpc_wrapper.h"
 #include "core/sketch/hll_custom.h"
 #include "core/storage/page_local.h"
@@ -101,4 +102,4 @@ using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 using PageTable = PageLocal<SCHEMA>;
 
 using IngressManager = IngressNetworkManager<PageBuffer, BlockAlloc>;
-using EgressManager = EgressNetworkManager<PageBuffer>;
+using EgressManager = network::EgressNetworkManager<PageBuffer, SketchLocal>;

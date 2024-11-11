@@ -88,7 +88,7 @@ struct PartitionedAggregationInserter {
         insert(key, value, key_hash, part_no, part_page);
     }
 
-    const auto& get_sketch(u32 part_no)
+    const auto& get_sketch(u32 part_no) const
     {
         return part_groups[part_no].sketch;
     }
