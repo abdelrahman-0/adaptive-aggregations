@@ -11,33 +11,24 @@ namespace network {
 
 // tagged pointer with two 8-bit tags
 class UserData {
-
-    struct Tag {
-        u8 top;
-        u8 bottom;
-
-        operator u16() const
-        {
-            return *reinterpret_cast<u16 const*>(this);
-        }
-    };
-    static_assert(sizeof(Tag) == 2);
-
   private:
     static constexpr u64 pointer_tag_mask = 0x0000FFFFFFFFFFFF;
+    static constexpr u64 bottom_tag_mask = 0x00FF000000000000;
+    static constexpr u64 top_tag_mask = bottom_tag_mask << 8;
     static constexpr u8 tag_shift = 48;
+    static constexpr u8 top_tag_shift = tag_shift + 8;
 
     uintptr_t data;
 
     [[nodiscard]]
     auto get_tag() const
     {
-        return static_cast<Tag>(data >> tag_shift);
+        return data >> tag_shift;
     }
 
     static inline auto tag_pointer(auto* ptr, std::integral auto top_tag, std::integral auto bottom_tag = 0)
     {
-        return reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(Tag{static_cast<u8>(top_tag), static_cast<u8>(bottom_tag)}) << tag_shift);
+        return reinterpret_cast<uintptr_t>(ptr) | (static_cast<u64>(bottom_tag) << tag_shift) | (static_cast<u64>(top_tag) << top_tag_shift);
     }
 
   public:
@@ -69,13 +60,13 @@ class UserData {
     [[nodiscard]]
     u8 get_bottom_tag() const
     {
-        return get_tag().bottom;
+        return (data & bottom_tag_mask) >> tag_shift;
     }
 
     [[nodiscard]]
     u8 get_top_tag() const
     {
-        return get_tag().top;
+        return (data & top_tag_mask) >> top_tag_shift;
     }
 };
 

@@ -215,10 +215,10 @@ int main(int argc, char* argv[])
             }
             partition_buffer.finalize();
             // send sketches
-            for (u32 part_grp : range(partition_groups)) {
-                // TODO need to map part_group to node
-                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
-            }
+//            for (u32 part_grp : range(partition_groups)) {
+//                // TODO need to map part_group to node
+//                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
+//            }
             while (peers_done < npeers) {
                 peers_done += consume_ingress();
                 manager_send.try_drain_pending();
