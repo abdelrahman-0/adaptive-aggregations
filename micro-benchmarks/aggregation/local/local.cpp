@@ -90,22 +90,13 @@ int main(int argc, char* argv[])
 
             std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
-                if (FLAGS_consumepart) {
-                    eviction_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
-                        if (not page->empty()) {
-                            page->retire();
-                            storage_glob.add_page(page, part_no);
-                        }
-                    };
-                }
-                else {
-                    eviction_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
-                        if (not page->empty()) {
-                            page->retire();
-                            storage_glob.add_page(page, 0);
-                        }
-                    };
-                }
+                auto final_part_no = FLAGS_consumepart ? part_no : 0;
+                eviction_fns[part_no] = [final_part_no, &storage_glob](PageBuffer* page, bool) {
+                    if (not page->empty()) {
+                        page->retire();
+                        storage_glob.add_page(page, final_part_no);
+                    }
+                };
             }
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
