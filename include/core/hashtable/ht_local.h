@@ -63,7 +63,8 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     [[nodiscard]]
     bool is_useless() const
     {
-        return ((group_not_found >= (npartitions * page_t::max_tuples_per_page)) and (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg));
+        return ((group_not_found + group_found) > 0) and (group_not_found >= (npartitions * page_t::max_tuples_per_page)) and
+               (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg);
     }
 };
 
