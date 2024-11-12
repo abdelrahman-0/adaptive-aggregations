@@ -70,13 +70,35 @@ class UserData {
     }
 };
 
+static_assert(sizeof(UserData) == 8);
+
+// base class for sending/receiving fixed-size objects of unique types
+template <typename... object_ts>
 class BaseNetworkManager {
 
   protected:
+    static constexpr auto nobjects = sizeof...(object_ts);
     io_uring ring{};
     std::vector<io_uring_cqe*> cqes;
-
+    // access object sizes at runtime
+    std::vector<u64> object_sizes{sizeof(object_ts)...};
     u32 nwdepth;
+    DEBUGGING(u64 pages_submitted{0});
+
+    template <u16 idx>
+    using arg_t = std::tuple_element_t<idx, std::tuple<object_ts...>>;
+
+    template <typename T, u16 idx = 0>
+    constexpr u16 get_type_idx()
+    {
+        static_assert(idx < nobjects);
+        if constexpr (std::is_same_v<std::remove_cv_t<T>, arg_t<idx>>) {
+            return idx;
+        }
+        else {
+            return get_type_idx<T, idx + 1>();
+        }
+    }
 
     void init_ring(bool sqpoll)
     {
@@ -94,82 +116,41 @@ class BaseNetworkManager {
         }
     }
 
-    //    void init_buffers(bool register_bufs)
-    //    {
-    //        std::iota(free_pages.rbegin(), free_pages.rend(), 0u);
-    //    }
-
-  protected:
     explicit BaseNetworkManager(u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, bool register_bufs = false) : nwdepth(nwdepth), cqes(nwdepth * 2)
     {
         init_ring(sqpoll);
         if (not sockets.empty()) {
             register_sockets(sockets);
         }
-        //        init_buffers(register_bufs);
     }
 };
 
 // class for sending fixed-size objects of unique types
 template <typename... object_ts>
-class EgressNetworkManager : public BaseNetworkManager {
-    using BaseNetworkManager = BaseNetworkManager;
-    using BaseNetworkManager::cqes;
-    using BaseNetworkManager::ring;
-
-  public:
-    static constexpr auto nobjects = sizeof...(object_ts);
-
-    template <u16 idx>
-    using arg_t = std::tuple_element_t<idx, std::tuple<object_ts...>>;
-
-    template <typename T, u16 idx = 0>
-    constexpr u16 get_type_idx()
-    {
-        static_assert(idx < nobjects);
-        if constexpr (std::is_same_v<std::remove_cv_t<T>, arg_t<idx>>) {
-            return idx;
-        }
-        else {
-            return get_type_idx<T, idx + 1>();
-        }
-    }
+class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
+    using base_t = BaseNetworkManager<object_ts...>;
+    using base_t::cqes;
+    using base_t::nobjects;
+    using base_t::object_sizes;
+    using base_t::ring;
 
   private:
-    std::vector<std::function<void(void*)>> consumer_fns;
-    // access object sizes at runtime
-    std::vector<u64> object_sizes{sizeof(object_ts)...};
     std::vector<std::queue<UserData>> pending_objects;
     std::vector<bool> has_inflight;
     u32 inflight_egress{0};
-    DEBUGGING(u64 pages_sent{0});
-
-    template <u16 idx = 0>
-    void initialize_empty_consumer_fns()
-    {
-        if constexpr (idx < nobjects) {
-            consumer_fns[idx] = [](void*) {};
-            initialize_empty_consumer_fns<idx + 1>();
-        }
-    }
-
-    void consume_object(void* ptr, u16 type)
-    {
-        consumer_fns[type](ptr);
-    }
+    std::vector<std::function<void(void*)>> consumer_fns;
 
   public:
     EgressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
-        : BaseNetworkManager(nwdepth, sqpoll, sockets), consumer_fns(nobjects), pending_objects(npeers), has_inflight(npeers, false)
+        : base_t(nwdepth, sqpoll, sockets), pending_objects(npeers), has_inflight(npeers, false), consumer_fns(nobjects, [](void*) {})
     {
-        initialize_empty_consumer_fns();
     }
 
     template <typename T>
-    void register_object_fn(std::function<void(T*)> fn)
+    void register_consumer_fn(std::function<void(T*)>& fn)
     {
         // wrapper to allow void* args
-        consumer_fns[get_type_idx<T>()] = [fn](void* obj) { fn(reinterpret_cast<T*>(obj)); };
+        consumer_fns[base_t::template get_type_idx<T>()] = [fn](void* obj) { fn(reinterpret_cast<T*>(obj)); };
     }
 
     void flush_object(UserData user_data, u64 size)
@@ -194,7 +175,7 @@ class EgressNetworkManager : public BaseNetworkManager {
     template <typename T>
     void try_flush(u16 dst, T* obj)
     {
-        UserData user_data{obj, dst, get_type_idx<T>()};
+        UserData user_data{obj, dst, base_t::template get_type_idx<T>()};
         if (has_inflight[dst]) {
             pending_objects[dst].push(user_data);
         }
@@ -240,7 +221,8 @@ class EgressNetworkManager : public BaseNetworkManager {
                 throw IOUringWaitError(ret);
             }
             UserData user_data{io_uring_cqe_get_data(cqes[0])};
-            if (cqes[0]->res != object_sizes[user_data.get_bottom_tag()]) {
+            auto obj_idx = user_data.get_bottom_tag();
+            if (cqes[0]->res != object_sizes[obj_idx]) {
                 throw IOUringSendError{cqes[0]->res};
             }
             io_uring_cq_advance(&ring, 1);
@@ -249,8 +231,66 @@ class EgressNetworkManager : public BaseNetworkManager {
                 flush_object(pending_objects[dst].front());
                 pending_objects[dst].pop();
             }
-            consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer());
+            consumer_fns[obj_idx](user_data.get_pointer());
         }
+    }
+};
+
+// class for receiving fixed-size objects of unique types
+template <typename... object_ts>
+class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
+    using base_t = BaseNetworkManager<object_ts...>;
+    using base_t::cqes;
+    using base_t::nobjects;
+    using base_t::object_sizes;
+    using base_t::ring;
+    DEBUGGING(using base_t::pages_submitted);
+
+  private:
+    std::vector<std::function<void(void*, u32 /* local dst */)>> consumer_fns;
+
+    // TODO post recvs just outside morsel loop
+  public:
+    IngressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
+        : base_t(nwdepth, sqpoll, sockets), consumer_fns(nobjects, [](void*, u32) {})
+    {
+    }
+
+    template <typename T>
+    void register_consumer_fn(std::function<void(T*, u32 /* local dst */)>& fn)
+    {
+        // wrapper to allow void* args
+        consumer_fns[base_t::template get_type_idx<T>()] = [fn](void* obj, u32 dst) { fn(reinterpret_cast<T*>(obj), dst); };
+    }
+
+    DEBUGGING(auto get_pages_recv() const { return pages_submitted; })
+
+    void post_recvs(UserData user_data, u64 size)
+    {
+        auto* sqe = io_uring_get_sqe(&ring);
+        io_uring_prep_recv(sqe, user_data.get_top_tag(), user_data.get_pointer(), size, MSG_WAITALL);
+        io_uring_sqe_set_data(sqe, user_data.as_data());
+        sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
+        io_uring_submit(&ring);
+    }
+
+    template <typename T>
+    void post_recvs(u16 dst, T* obj)
+    {
+        UserData user_data{obj, dst, base_t::template get_type_idx<T>()};
+        post_recvs(user_data, sizeof(T));
+    }
+
+    void consume_pages()
+    {
+        auto cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
+        for (auto i{0u}; i < cqes_peeked; ++i) {
+            UserData user_data{io_uring_cqe_get_data(cqes[i])};
+            DEBUGGING(if (cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) { throw IOUringRecvError(cqes[i]->res); })
+            consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer(), user_data.get_top_tag());
+        }
+        DEBUGGING(pages_submitted += cqes_peeked;)
+        io_uring_cq_advance(&ring, cqes_peeked);
     }
 };
 

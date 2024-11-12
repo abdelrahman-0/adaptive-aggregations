@@ -42,7 +42,7 @@ struct HLLSketch {
         value = std::max(value, rank);
     }
 
-    u64 get_estimate()
+    u64 get_estimate() const
     {
         double sum = 0;
         unsigned zero_cnt = 0;

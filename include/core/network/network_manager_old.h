@@ -177,15 +177,14 @@ class IngressNetworkManager : public NetworkManagerOld<BufferPage> {
     using PageConsumerFn = std::function<void(BufferPage*)>;
 
   private:
-    // needed for dependent lookups
     using BaseNetworkManager::buffers;
     using BaseNetworkManager::buffers_start;
     using BaseNetworkManager::free_pages;
     using BaseNetworkManager::ring;
     std::vector<io_uring_cqe*> cqes;
     BlockAlloc& block_alloc;
-    u64 pages_recv{0};
     PageConsumerFn consumer_fn;
+    DEBUGGING(u64 pages_recv{0});
 
   public:
     IngressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets, BlockAlloc& block_alloc)

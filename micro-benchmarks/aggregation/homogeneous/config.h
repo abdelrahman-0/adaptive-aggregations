@@ -101,5 +101,5 @@ using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 using PageTable = PageLocal<SCHEMA>;
 
-using IngressManager = IngressNetworkManager<PageBuffer, BlockAlloc>;
+using IngressManager = network::IngressNetworkManager<PageBuffer, SketchLocal>;
 using EgressManager = network::EgressNetworkManager<PageBuffer, SketchLocal>;

@@ -127,7 +127,7 @@ int main(int argc, char* argv[])
 
             auto process_page_glob = [&ht_glob](PageBuffer& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
-                    ht_glob.insert(page.get_attribute_ref(j));
+                    ht_glob.insert(page.get_tuple_ref(j));
                 }
             };
 
@@ -148,7 +148,7 @@ int main(int argc, char* argv[])
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
                 auto swizzled_idx =
-                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips.data();
+                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
                 thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
@@ -178,6 +178,7 @@ int main(int argc, char* argv[])
             ::pthread_barrier_wait(&barrier_preagg);
 
             if (thread_id == 0) {
+                // thread 0 initializes global ht
                 ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
                 // reset morsel
                 current_swip = 0;
@@ -277,4 +278,13 @@ int main(int argc, char* argv[])
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
     LIKWID_MARKER_CLOSE;
+
+    u64 count{0};
+    for (u64 idx : range(ht_glob.ht_mask + 1)) {
+        auto* slot = ht_glob.slots[idx].load();
+        if (slot) {
+            count += std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+        }
+    }
+    print("COUNT:", count);
 }

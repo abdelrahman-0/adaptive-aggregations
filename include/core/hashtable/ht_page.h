@@ -72,7 +72,7 @@ struct PageAggregation
     using base_t = PageCommunication<defaults::hashtable_page_size, entry_t, use_ptr>;
     using base_t::columns;
     using base_t::emplace_back;
-    using base_t::get_attribute_ref;
+    using base_t::get_tuple_ref;
     using base_t::get_num_tuples;
     using base_t::num_tuples;
     using idx_t = agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, is_chained, next_first>;
@@ -82,7 +82,7 @@ struct PageAggregation
 
     ALWAYS_INLINE GroupAttributes& get_group(std::unsigned_integral auto idx)
     {
-        return get_attribute_ref(idx).get_group();
+        return get_tuple_ref(idx).get_group();
     }
 
     ALWAYS_INLINE GroupAttributes& get_group(entry_t* tuple_ptr)
@@ -92,7 +92,7 @@ struct PageAggregation
 
     ALWAYS_INLINE AggregateAttributes& get_aggregates(std::unsigned_integral auto idx)
     {
-        return get_attribute_ref(idx).get_aggregates();
+        return get_tuple_ref(idx).get_aggregates();
     }
 
     ALWAYS_INLINE AggregateAttributes& get_aggregates(entry_t* tuple_ptr)
@@ -103,7 +103,7 @@ struct PageAggregation
     ALWAYS_INLINE auto& get_next(std::unsigned_integral auto idx)
     requires(is_chained)
     {
-        return get_attribute_ref(idx).get_next();
+        return get_tuple_ref(idx).get_next();
     }
 
     ALWAYS_INLINE auto& get_next(entry_t* tuple_ptr)

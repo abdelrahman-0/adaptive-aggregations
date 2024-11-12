@@ -42,7 +42,7 @@ struct Page {
         num_tuples = 0;
     }
 
-    template <u16 col_idx = 0>
+    template <u16 col_idx>
     auto& get_attribute_ref(std::unsigned_integral auto row_idx)
     {
         return std::get<col_idx>(columns)[row_idx];
@@ -207,6 +207,11 @@ struct PageRowStore : public Page<page_size, Attribute> {
     requires(use_ptr)
     {
         num_tuples = ptr - std::get<0>(columns).data();
+    }
+
+    auto get_tuple_ref(std::unsigned_integral auto row_idx) -> decltype(auto)
+    {
+        return std::get<0>(columns)[row_idx];
     }
 
     auto begin()

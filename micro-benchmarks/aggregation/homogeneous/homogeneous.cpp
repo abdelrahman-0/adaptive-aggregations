@@ -106,14 +106,29 @@ int main(int argc, char* argv[])
 
             auto npeers = FLAGS_nodes - 1;
 
-            // TODO add FLAGS_consumepart
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
-            IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds, recv_alloc};
+            IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             EgressManager manager_send{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+            std::vector<SketchLocal> remote_sketches(npeers);
             u32 peers_done = 0;
 
-            auto ingress_consumer_fn = [&storage_glob](PageBuffer* page) { storage_glob.add_page(page, page->get_part_no()); };
-            manager_recv.register_consumer_fn(ingress_consumer_fn);
+            std::function<void(PageBuffer*, u32)> ingress_page_consumer_fn = [&peers_done, &recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageBuffer* page,
+                                                                                                                                                        u32 dst) {
+                storage_glob.add_page(page, page->get_part_no());
+                if (page->is_last_page()) {
+                    // recv sketch after last page
+                    manager_recv.post_recvs(dst, remote_sketches.data() + dst);
+                }
+                else {
+                    manager_recv.post_recvs(dst, recv_alloc.get_page());
+                }
+            };
+            std::function<void(SketchLocal*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
+                sketch_glob.merge_concurrent(*sketch);
+                peers_done++;
+            };
+            manager_recv.register_consumer_fn(ingress_page_consumer_fn);
+            manager_recv.register_consumer_fn(ingress_sketch_consumer_fn);
 
             /* ----------- LOCAL I/O ----------- */
 
@@ -132,21 +147,21 @@ int main(int argc, char* argv[])
                 auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
                 bool final_dst_partition = ((part_no - part_offset + 1) % parts_per_dst) == 0;
                 part_offset += final_dst_partition ? parts_per_dst : 0;
+                auto final_part_no = FLAGS_consumepart ? part_no : 0;
                 if (dst == node_id) {
-                    // TODO FLAGS_consumepart
-                    eviction_fns[part_no] = [part_no, &storage_glob](PageBuffer* page, bool) {
+                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageBuffer* page, bool) {
                         if (not page->empty()) {
                             page->retire();
-                            storage_glob.add_page(page, part_no);
+                            storage_glob.add_page(page, final_part_no);
                         }
                     };
                 }
                 else {
                     auto actual_dst = dst - (dst > node_id);
-                    eviction_fns[part_no] = [part_no, actual_dst, final_dst_partition, &manager_send](PageBuffer* page, bool is_last = false) {
+                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageBuffer* page, bool is_last = false) {
                         if (not page->empty() or final_dst_partition) {
                             page->retire();
-                            page->set_part_no(part_no);
+                            page->set_part_no(final_part_no);
                             if (is_last and final_dst_partition) {
                                 page->set_last_page();
                             }
@@ -157,17 +172,16 @@ int main(int argc, char* argv[])
             }
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
-            auto partition_groups = next_power_2(FLAGS_partitions);
+            auto partition_groups = next_power_2(FLAGS_nodes);
             InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, partition_groups, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ LAMBDAS ------------ */
 
-            std::function<void(PageBuffer*)> page_consumer_fn = [&block_alloc](PageBuffer* pg) -> void { block_alloc.return_page(pg); };
-            manager_send.register_object_fn(page_consumer_fn);
+            std::function<void(PageBuffer*)> egress_page_consumer_fn = [&block_alloc](PageBuffer* pg) -> void { block_alloc.return_page(pg); };
+            manager_send.register_consumer_fn(egress_page_consumer_fn);
 
-            // TODO add adaptive_preagg
-            auto process_local_page = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
@@ -176,11 +190,22 @@ int main(int argc, char* argv[])
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
+            auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+                for (auto j{0u}; j < page.num_tuples; ++j) {
+                    auto group = page.get_tuple<GPR_KEYS_IDX>(j);
+                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    inserter_loc.insert(group, agg);
+                }
+                DEBUGGING(local_tuples_processed += page.num_tuples);
+            };
+
+            std::function<void(const PageTable&)> process_local_page = insert_into_ht;
+
             auto consume_ingress = [&manager_recv]() { return manager_recv.consume_pages(); };
 
             auto process_page_glob = [&ht_glob](PageBuffer& page) {
                 for (auto j{0u}; j < page.get_num_tuples(); ++j) {
-                    ht_glob.insert(page.get_attribute_ref(j));
+                    ht_glob.insert(page.get_tuple_ref(j));
                 }
             };
 
@@ -191,23 +216,28 @@ int main(int argc, char* argv[])
 
             /* ----------- BEGIN ----------- */
 
+            for (u16 dst : range(npeers)) {
+                manager_recv.post_recvs(dst, recv_alloc.get_page());
+            }
             // morsel loop
-            u32 morsel_begin, morsel_end;
+            u64 morsel_begin, morsel_end;
+            const u64 nswips = swips.size();
+            auto* swips_begin = swips.data();
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, static_cast<u32>(swips.size()));
+                morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
 
                 // handle communication
                 manager_send.try_drain_pending();
                 if (peers_done < npeers) {
-                    peers_done += consume_ingress();
+                    consume_ingress();
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
                 auto swizzled_idx =
-                    std::stable_partition(swips.data() + morsel_begin, swips.data() + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips.data();
+                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
-                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips.begin() + morsel_begin, swips.begin() + swizzled_idx}, io_buffers, true);
+                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
 
                 while (swizzled_idx < morsel_end) {
                     process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
@@ -215,24 +245,64 @@ int main(int argc, char* argv[])
                 while (thread_io.has_inflight_requests()) {
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
+
+                if (do_adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
+                    // turn off pre-aggregation
+                    FLAGS_preagg = false;
+                    process_local_page = insert_into_buffer;
+                }
             }
             partition_buffer.finalize();
-            // send sketches
-            //            for (u32 part_grp : range(partition_groups)) {
-            //                // TODO need to map part_group to node
-            //                manager_send.try_flush(part_grp, &inserter_loc.get_sketch(part_grp));
-            //            }
+            for (u32 part_grp : range(partition_groups)) {
+                if (part_grp == node_id) {
+                    // merge local sketch
+                    sketch_glob.merge_concurrent(inserter_loc.get_sketch(part_grp));
+                }
+                else {
+                    // send remote sketches
+                    auto actual_dst = part_grp - (part_grp > node_id);
+                    manager_send.try_flush(actual_dst, &inserter_loc.get_sketch(part_grp));
+                }
+            }
             while (peers_done < npeers) {
-                peers_done += consume_ingress();
+                consume_ingress();
                 manager_send.try_drain_pending();
             }
             manager_send.wait_all();
-            // TODO send sketch and combine incoming
 
             swatch_preagg.stop();
             ::pthread_barrier_wait(&barrier_preagg);
 
-            // TODO create global HT and start building it
+            if (thread_id == 0) {
+                // thread 0 initializes global ht
+                ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
+                // reset morsel
+                current_swip = 0;
+                global_ht_construction_complete = true;
+                global_ht_construction_complete.notify_all();
+            }
+            else {
+                global_ht_construction_complete.wait(false);
+            }
+
+            if (FLAGS_consumepart) {
+                // consume partitions
+                while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
+                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                        process_page_glob(*page);
+                    }
+                }
+            }
+            else {
+                // consume pages from partition 0 (only partition)
+                const u64 npages = storage_glob.partition_pages[0].size();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                    while (morsel_begin < morsel_end) {
+                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
+                    }
+                }
+            }
 
             times_preagg[thread_id] = swatch_preagg.time_ms;
             // barrier
@@ -315,4 +385,13 @@ int main(int argc, char* argv[])
         DEBUGGING(.log("pages received", pages_recv))                                                //
         DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
+
+    u64 count{0};
+    for (u64 idx : range(ht_glob.ht_mask + 1)) {
+        auto slot = ht_glob.slots[idx].load();
+        if (slot) {
+            count += std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+        }
+    }
+    print("COUNT:", count);
 }

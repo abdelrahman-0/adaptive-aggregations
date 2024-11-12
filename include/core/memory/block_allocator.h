@@ -11,22 +11,22 @@
 
 namespace mem {
 
-template <typename PageType, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>, bool has_concurrent_free_pages = false>
+template <typename page_t, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>, bool has_concurrent_free_pages = false>
 class BlockAllocator {
     struct BlockAllocation {
         u64 npages;
         u64 used;
-        PageType* ptr; // pointer bumping
+        page_t* ptr; // pointer bumping
     };
 
   private:
     // In a heterogeneous model, network threads (and not the query thread) can push to free_pages
-    std::conditional_t<has_concurrent_free_pages, tbb::concurrent_queue<PageType*>, std::queue<PageType*>> free_pages;
+    std::conditional_t<has_concurrent_free_pages, tbb::concurrent_queue<page_t*>, std::queue<page_t*>> free_pages;
     std::vector<BlockAllocation> allocations;
     u64 allocations_budget;
     u32 block_sz;
 
-    PageType* try_bump_pointer()
+    page_t* try_bump_pointer()
     {
         auto& current_allocation = allocations.back();
         if (current_allocation.used != current_allocation.npages) {
@@ -48,24 +48,24 @@ class BlockAllocator {
     ~BlockAllocator()
     {
         // loop through partitions and deallocate them
-        for (auto& allocation : allocations) {
-            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(PageType));
-        }
+//        for (auto& allocation : allocations) {
+//            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(page_t));
+//        }
     }
 
     [[maybe_unused]]
-    PageType* allocate(bool consume = true)
+    page_t* allocate(bool consume = true)
     {
-        auto block = Alloc::template alloc<PageType>(block_sz * sizeof(PageType));
+        auto block = Alloc::template alloc<page_t>(block_sz * sizeof(page_t));
         allocations.push_back({block_sz, consume ? 1u : 0u, block});
         allocations_budget--;
         return block;
     }
 
-    PageType* get_page()
+    page_t* get_page()
     requires(not has_concurrent_free_pages)
     {
-        PageType* page;
+        page_t* page;
         if ((page = try_bump_pointer())) {
             return page;
         }
@@ -82,10 +82,10 @@ class BlockAllocator {
         throw BlockAllocError{"Exhausted allocation budget"};
     }
 
-    PageType* get_page()
+    page_t* get_page()
     requires(has_concurrent_free_pages)
     {
-        PageType* page;
+        page_t* page;
         if ((page = try_bump_pointer()) or free_pages.try_pop(page)) {
             return page;
         }
@@ -97,7 +97,7 @@ class BlockAllocator {
         throw BlockAllocError{"Exhausted allocation budget"};
     }
 
-    void return_page(PageType* page)
+    void return_page(page_t* page)
     {
         free_pages.push(page);
     }
