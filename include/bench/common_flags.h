@@ -16,8 +16,9 @@ DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,10
 DEFINE_uint32(morselsz, 10, "number of pages to process in one morsel");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 
-DEFINE_uint32(partitions, 32, "number of hashtable partitions to use");
+DEFINE_uint32(partitions, 32, "number of hashtable partitions (per node) to use");
 DEFINE_uint64(groups, 10'000, "number of unique groups to use");
+DEFINE_uint64(seed, 0, "random generator seed");
 
 DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");
 DEFINE_uint32(maxalloc, 50'000, "maximum number of calls the block allocator can be called");

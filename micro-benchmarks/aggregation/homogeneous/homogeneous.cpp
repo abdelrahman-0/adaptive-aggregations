@@ -4,7 +4,7 @@ int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    FLAGS_partitions = FLAGS_nodes * next_power_2(FLAGS_partitions);
     FLAGS_slots = next_power_2(FLAGS_slots);
 
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
@@ -36,7 +36,7 @@ int main(int argc, char* argv[])
     auto& swips = table.get_swips();
 
     // prepare cache
-    u32 num_pages_cache = FLAGS_random ? ((FLAGS_cache * swips.size()) / 100u) : FLAGS_npages / FLAGS_nodes;
+    u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
     Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
     DEBUGGING(print("finished populating cache"));
@@ -172,7 +172,7 @@ int main(int argc, char* argv[])
             }
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
-            auto partition_groups = next_power_2(FLAGS_nodes);
+            auto partition_groups = FLAGS_nodes;
             InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, partition_groups, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
@@ -343,8 +343,8 @@ int main(int argc, char* argv[])
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);                                                     //
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);                                                     //
 
+    auto groups_actual = FLAGS_groups / FLAGS_nodes;
     auto groups_estimate = sketch_glob.get_estimate();
-    auto error_percentage = (100.0 * std::abs(static_cast<s64>(FLAGS_groups) - static_cast<s64>(groups_estimate))) / FLAGS_groups;
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("node id", node_id)
@@ -375,9 +375,9 @@ int main(int argc, char* argv[])
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
-        .log("groups (actual)", FLAGS_groups)
+        .log("group seed", FLAGS_seed)
+        .log("groups (actual)", groups_actual)
         .log("groups (estimate)", groups_estimate)
-        .log("groups estimate error (%)", error_percentage)
         .log("pages pre-agg", pages_pre_agg)
         .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
         .log("time (ms)", swatch.time_ms)                                                            //

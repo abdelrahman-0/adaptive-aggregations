@@ -10,10 +10,12 @@
 #include "misc/concepts_traits/concepts_common.h"
 
 DECLARE_uint64(groups);
+DECLARE_uint64(seed);
 
 namespace librand {
 
-thread_local auto rng = std::mt19937{0};
+thread_local auto rng = std::mt19937{FLAGS_seed};
+thread_local auto rng_idx = std::mt19937{static_cast<unsigned long>(std::chrono::high_resolution_clock::now().time_since_epoch().count())};
 
 template <concepts::is_char T>
 ALWAYS_INLINE T random(T min = 33 /* ! */, T max = 126 /* ~ */)
@@ -86,7 +88,7 @@ void random_iterable(iter_t& iterable, iterable_entry_t<iter_t> _min = std::nume
         if (amount_to_copy < iterable.size()) {
             // then sample remaining entries from groups
             thread_local std::uniform_int_distribution<u64> dist_idxs(0, FLAGS_groups - 1);
-            std::generate(std::begin(iterable) + amount_to_copy, std::end(iterable), [&] { return groups[dist_idxs(rng)]; });
+            std::generate(std::begin(iterable) + amount_to_copy, std::end(iterable), [&] { return groups[dist_idxs(rng_idx)]; });
         }
     }
     else {

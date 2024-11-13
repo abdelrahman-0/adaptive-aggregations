@@ -7,6 +7,7 @@
 #include "core/page.h"
 #include "defaults.h"
 #include "misc/concepts_traits/concepts_common.h"
+#include "misc/concepts_traits/concepts_page.h"
 #include "utils/hash.h"
 
 static constexpr std::size_t highest_bit_mask = static_cast<std::size_t>(~0) >> 1;
@@ -20,9 +21,13 @@ struct Swip {
   public:
     Swip() = default;
 
-    explicit Swip(const PageIdx idx) : val(idx | (~highest_bit_mask)) {}
+    explicit Swip(const PageIdx idx) : val(idx | (~highest_bit_mask))
+    {
+    }
 
-    explicit Swip(concepts::is_pointer auto ptr) : val(ptr) {}
+    explicit Swip(concepts::is_pointer auto ptr) : val(ptr)
+    {
+    }
 
     Swip& operator=(PageIdx idx)
     {
@@ -42,9 +47,15 @@ struct Swip {
         return not is_page_idx();
     }
 
-    ALWAYS_INLINE void set_pointer(concepts::is_pointer auto ptr) { val = reinterpret_cast<uintptr_t>(ptr); }
+    ALWAYS_INLINE void set_pointer(concepts::is_pointer auto ptr)
+    {
+        val = reinterpret_cast<uintptr_t>(ptr);
+    }
 
-    ALWAYS_INLINE void set_page_index(const PageIdx idx) { val = idx | (~highest_bit_mask); }
+    ALWAYS_INLINE void set_page_index(const PageIdx idx)
+    {
+        val = idx | (~highest_bit_mask);
+    }
 
     [[nodiscard]]
     ALWAYS_INLINE PageIdx get_page_index() const
@@ -82,7 +93,10 @@ template <concepts::is_page CachePage>
 struct Cache {
     std::vector<CachePage> pages;
 
-    explicit Cache(std::size_t num_pages_cache) { pages.resize(num_pages_cache); };
+    explicit Cache(std::size_t num_pages_cache)
+    {
+        pages.resize(num_pages_cache);
+    };
 
     ~Cache() = default;
 

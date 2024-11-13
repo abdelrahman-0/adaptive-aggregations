@@ -13,7 +13,6 @@
 #include "core/hashtable/ht_local.h"
 #include "core/network/connection.h"
 #include "core/network/network_manager.h"
-#include "core/network/network_manager_old.h"
 #include "core/sketch/cpc_wrapper.h"
 #include "core/sketch/hll_custom.h"
 #include "core/storage/page_local.h"
@@ -60,7 +59,11 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 }
 
 using SketchLocal = ht::HLLSketch;
-// using SketchLocal = ht::CPCSketch;
+// cannot use default CPCSketch since it allocates vectors via std::allocator (part of the sketch is on the heap, so it cannot be sent directly)
+// => the solution is to pass a custom allocator to the underlying sketch type as follows:
+//       cpc_sketch_alloc<std::allocator<uint8_t>>
+//    and route the allocated memory block via the network (i.e. serialize the sketch via the allocator). It is also necessary to dehydrate any
+//    pointers and make them use relative addressing inside the allocated block
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
