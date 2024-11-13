@@ -11,9 +11,9 @@ class Logger {
   private:
     std::vector<std::string> header{};
     std::vector<std::string> row{};
+    std::mutex mutex{};
     bool print_header{};
     bool csv_output{};
-    std::mutex mutex{};
 
   public:
     explicit Logger(bool print_header, bool csv_output) : print_header(print_header), csv_output(csv_output) {};
@@ -28,7 +28,7 @@ class Logger {
         }
         else {
             u64 max_header_len{0};
-            std::for_each(header.begin(), header.end(), [&max_header_len](const std::string& a) { max_header_len = std::max(max_header_len, a.size()); });
+            std::for_each(header.begin(), header.end(), [&max_header_len](const std::string& str) { max_header_len = std::max(max_header_len, str.size()); });
             for (u64 i : range(header.size())) {
                 auto space_to_leave = max_header_len - header[i].size() + 1;
                 logln(header[i], ":", std::string(space_to_leave, ' '), row[i]);
