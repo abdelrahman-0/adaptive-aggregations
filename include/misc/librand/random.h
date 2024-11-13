@@ -77,19 +77,9 @@ void random_iterable(iter_t& iterable, iterable_entry_t<iter_t> _min = std::nume
             std::generate(std::begin(groups), std::end(groups), [&] { return dist(rng); });
             generated_grps = true;
         }
-        // guarantee all groups are contained at least once
-        thread_local auto copy_begin = 0ul;
-        thread_local auto copy_end = groups.size();
-        auto amount_to_copy = std::min(copy_end - copy_begin, iterable.size());
-        if (amount_to_copy) {
-            std::copy(groups.begin() + copy_begin, groups.begin() + copy_begin + amount_to_copy, iterable.begin());
-            copy_begin += amount_to_copy;
-        }
-        if (amount_to_copy < iterable.size()) {
-            // then sample remaining entries from groups
-            thread_local std::uniform_int_distribution<u64> dist_idxs(0, FLAGS_groups - 1);
-            std::generate(std::begin(iterable) + amount_to_copy, std::end(iterable), [&] { return groups[dist_idxs(rng_idx)]; });
-        }
+        // then, sample entries from groups
+        thread_local std::uniform_int_distribution<u64> dist_idxs(0, FLAGS_groups - 1);
+        std::generate(std::begin(iterable), std::end(iterable), [&] { return groups[dist_idxs(rng_idx)]; });
     }
     else {
         thread_local std::uniform_int_distribution<unsigned char> dist_char(0, 255);
