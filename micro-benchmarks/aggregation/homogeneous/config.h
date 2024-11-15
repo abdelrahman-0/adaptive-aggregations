@@ -68,8 +68,8 @@ using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketc
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
-static constexpr double threshold_preagg = 0.7;
-static constexpr bool do_adaptive_preagg = true;
+static constexpr double threshold_preagg = 0.0;
+static constexpr bool do_adaptive_preagg = false;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 

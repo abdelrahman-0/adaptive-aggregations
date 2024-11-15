@@ -19,7 +19,7 @@ struct BaseAggregationHashtable {
     using slot_idx_t = std::conditional_t<is_concurrent, std::atomic<slot_idx_raw_t>, slot_idx_raw_t>;
 
     slot_idx_t* slots{nullptr};
-    u64 ht_mask{0};
+    u8 mod_shift{0};
 
   protected:
     BaseAggregationHashtable() = default;
@@ -38,8 +38,7 @@ struct BaseAggregationHashtable {
     void initialize(u64 size)
     {
         ASSERT(size == next_power_2(size));
-        ht_mask = size - 1;
-
+        mod_shift = 64 - __builtin_ctz(size);
         // alloc ht
         slots = Alloc::template alloc<slot_idx_t>(sizeof(slot_idx_t) * size);
     }

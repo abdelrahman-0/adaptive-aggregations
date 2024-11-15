@@ -60,7 +60,7 @@ struct ConcurrentChainedAggregationHashtable : public BaseAggregationHashtable<k
 template <typename key_t, typename value_t, IDX_MODE entry_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, bool is_salted = true>
 struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true> {
     using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true>;
-    using base_t::ht_mask;
+    using base_t::mod_shift;
     using base_t::slots;
     using typename base_t::entry_t;
     using typename base_t::page_t;
@@ -69,17 +69,27 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
 
     static constexpr u16 BITS_SALT = 16;
     static constexpr u16 BITS_SLOT = (sizeof(slot_idx_t) * 8) - BITS_SALT;
+    u64 size_mask{0};
 
-    ConcurrentOpenAggregationHashtable() = default;
+    ConcurrentOpenAggregationHashtable() : base_t()
+    {
+    }
+
+    void initialize(u64 size)
+    {
+        base_t::initialize(size);
+        size_mask = size - 1;
+    }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash, entry_t* addr)
     {
-        // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
+        // TODO remove node bits
+        // extract top bits from hash
+        u64 mod = key_hash >> mod_shift;
         slot_idx_raw_t slot = slots[mod].load();
 
-        // use top bits for salt
-        u16 hash_prefix = key_hash >> BITS_SLOT;
+        // use bottom bits for salt
+        u16 hash_prefix = static_cast<u16>(key_hash);
 
         while (true) {
             // walk slots
@@ -96,7 +106,7 @@ struct ConcurrentOpenAggregationHashtable : public BaseAggregationHashtable<key_
                         return;
                     }
                 }
-                mod = (mod + 1) & ht_mask;
+                mod = (mod + 1) & size_mask;
                 slot = slots[mod].load();
             }
             if constexpr (is_salted) {

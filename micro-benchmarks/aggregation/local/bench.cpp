@@ -276,7 +276,7 @@ int main(int argc, char* argv[])
     LIKWID_MARKER_CLOSE;
 
     u64 count{0};
-    for (u64 idx : range(ht_glob.ht_mask + 1)) {
+    for (u64 idx : range(ht_glob.size_mask + 1)) {
         auto* slot = ht_glob.slots[idx].load();
         if (slot) {
             count += std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());

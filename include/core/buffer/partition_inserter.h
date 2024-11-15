@@ -37,15 +37,13 @@ struct PartitionedAggregationInserter {
   private:
     std::vector<PartitionGroup> part_groups;
     part_buf_t& part_buffer;
-    u64 partition_mask{0};
-    u32 partition_shift{0};
     u32 group_shift{0};
+    u8 partition_shift{0};
 
   public:
     // need to pass number of slots to know which bits to use for radix partitions
     PartitionedAggregationInserter(u32 _npartitions, u32 _nslots, u32 _npartgroups, part_buf_t& _part_buffer)
-        : part_groups(_npartgroups), part_buffer(_part_buffer), partition_mask(_npartitions - 1), group_shift(__builtin_ctz(_npartitions) - __builtin_ctz(_npartgroups)),
-          partition_shift(__builtin_ctz(_nslots))
+        : part_groups(_npartgroups), part_buffer(_part_buffer), group_shift(__builtin_ctz(_npartitions / _npartgroups)), partition_shift(64 - __builtin_ctz(_npartitions))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
         ASSERT(_nslots == next_power_2(_nslots));
@@ -83,7 +81,7 @@ struct PartitionedAggregationInserter {
     {
         // extract lower bits from hash
         u64 key_hash = hash_tuple(key);
-        u64 part_no = (key_hash >> partition_shift) & partition_mask;
+        u64 part_no = key_hash >> partition_shift;
         auto* part_page = part_buffer.get_partition_page(part_no);
         insert(key, value, key_hash, part_no, part_page);
     }

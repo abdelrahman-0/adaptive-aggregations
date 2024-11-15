@@ -41,7 +41,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     u64 group_not_found{0};
     u64 group_found{0};
     u32 npartitions{};
-    u32 partition_shift{0};
+    u8 partition_shift{0};
 
     PartitionedAggregationHashtable() : base_t() {};
 
@@ -196,9 +196,9 @@ struct PartitionedOpenAggregationHashtable
     using base_t::clear_slots;
     using base_t::group_found;
     using base_t::group_not_found;
-    using base_t::ht_mask;
     using base_t::inserter;
     using base_t::is_chained;
+    using base_t::mod_shift;
     using base_t::part_buffer;
     using base_t::partition_shift;
     using base_t::slots;
@@ -226,15 +226,15 @@ struct PartitionedOpenAggregationHashtable
     void aggregate(const key_t& key, const value_t& value, u64 key_hash)
     requires(slots_mode == DIRECT)
     {
-        // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
+        // extract top bits from hash
+        u64 mod = key_hash >> mod_shift;
         u64 part_no = mod >> partition_shift;
         u64 partition_mask = part_no << partition_shift;
         auto* part_page = part_buffer.get_partition_page(part_no);
         slot_idx_t slot = slots[mod];
 
-        // use top bits for salt
-        u16 hash_prefix = key_hash >> BITS_SLOT;
+        // use bottom bits for salt
+        u16 hash_prefix = static_cast<u16>(key_hash);
 
         // walk sequence of slots
         while (slot) {
@@ -258,7 +258,7 @@ struct PartitionedOpenAggregationHashtable
         auto [ht_entry_raw, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
         if (evicted) {
             // reset mod
-            mod = key_hash & ht_mask;
+            mod = key_hash >> mod_shift;
             clear_slots(part_no);
         }
         auto ht_entry = reinterpret_cast<uintptr_t>(ht_entry_raw);
@@ -277,15 +277,15 @@ struct PartitionedOpenAggregationHashtable
     requires(slots_mode != DIRECT)
     {
         static constexpr auto slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
-        // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
+        // extract top bits from hash
+        u64 mod = key_hash >> mod_shift;
         u64 part_no = mod >> partition_shift;
         u64 partition_mask = part_no << partition_shift;
         auto* part_page = part_buffer.get_partition_page(part_no);
         slot_idx_t slot = slots[mod];
 
-        // use top bits for salt
-        u16 hash_prefix = key_hash >> BITS_SLOT;
+        // use bottom bits for salt
+        u16 hash_prefix = static_cast<u16>(key_hash);
 
         // walk sequence of slots
         while (slot) {
@@ -309,7 +309,7 @@ struct PartitionedOpenAggregationHashtable
         auto [ht_entry, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
         if (evicted) {
             // reset mod
-            mod = key_hash & ht_mask;
+            mod = key_hash >> mod_shift;
             clear_slots(part_no);
         }
         if constexpr (is_salted) {
