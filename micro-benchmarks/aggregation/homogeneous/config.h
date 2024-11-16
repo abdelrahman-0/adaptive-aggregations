@@ -32,7 +32,7 @@ DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
-DEFINE_bool(preagg, true, "turn pre-aggregation on/off initially");
+DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
 
 /* --------------------------------------- */
 
@@ -68,8 +68,8 @@ using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketc
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
-static constexpr double threshold_preagg = 0.0;
-static constexpr bool do_adaptive_preagg = false;
+static constexpr double threshold_preagg = 0.7;
+static constexpr bool do_adaptive_preagg = true;
 
 static_assert(idx_mode_slots != ht::NO_IDX);
 
@@ -84,9 +84,9 @@ using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, id
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_glob_salted>;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, true, is_glob_salted>;
 #else
-using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, true>;
 #endif
 
 using PageBuffer = HashtableLocal::page_t;

@@ -2,6 +2,7 @@
 // 2023 Maximilian Kuschewski
 // -----------------------------------------------------------------------------
 
+// - Changed implementation to use trailing zeros
 // - Modified signature of some functions to match cpc sketch
 // - Simplified struct to use u64 as register type
 
@@ -20,6 +21,7 @@ struct HLLSketch {
     static constexpr u64 REG_CNT = ONE << WIDTH;
     static constexpr u8 CNT = WIDTH * 8;
     static constexpr u8 REG_SHIFT = CNT - WIDTH;
+    static constexpr u8 REG_MASK = 0xFF;
     std::mutex merge_mtx{};
     // estimation correction factor
     static constexpr float ALPHA = 0.7213 / (1 + (1.079 / REG_CNT));
@@ -31,17 +33,24 @@ struct HLLSketch {
 
     HLLSketch()
     {
+        initialize();
+    }
+
+    void initialize()
+    {
         std::fill(registers.begin(), registers.end(), 0);
     }
 
     void update(u64 hash)
     {
-        auto& value = registers[hash >> REG_SHIFT];
-        u64 rest = hash << WIDTH;
-        uint8_t rank = rest == 0 ? REG_SHIFT : (__builtin_clzl(rest) + 1);
+        auto& value = registers[hash & REG_MASK];
+        // TODO zero out group_id bits
+        u64 rest = hash >> WIDTH;
+        uint8_t rank = rest == 0 ? REG_SHIFT : (__builtin_ctzl(rest) + 1);
         value = std::max(value, rank);
     }
 
+    [[nodiscard]]
     u64 get_estimate() const
     {
         double sum = 0;

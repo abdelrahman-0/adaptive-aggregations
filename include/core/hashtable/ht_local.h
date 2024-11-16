@@ -7,11 +7,14 @@
 #include <map>
 #include <optional>
 #include <tbb/concurrent_queue.h>
+#include <unordered_set>
 
 #include "bench/bench.h"
 #include "core/buffer/eviction_buffer.h"
+#include "core/buffer/partition_inserter.h"
 #include "core/memory/alloc.h"
 #include "core/memory/block_allocator.h"
+#include "core/sketch/hll_custom.h"
 #include "defaults.h"
 #include "ht_base.h"
 #include "ht_page.h"
@@ -209,7 +212,6 @@ struct PartitionedOpenAggregationHashtable
     using typename base_t::slot_idx_t;
 
     static constexpr u16 BITS_SALT = 16;
-    static constexpr u16 BITS_SLOT = (sizeof(slot_idx_t) * 8) - BITS_SALT;
 
   private:
     u64 slots_mask;
@@ -253,7 +255,7 @@ struct PartitionedOpenAggregationHashtable
             }
 
             mod = (mod + 1) & slots_mask;
-            slot = slots[mod | partition_mask];
+            slot = slots[partition_mask | mod];
         }
         auto [ht_entry_raw, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
         if (evicted) {
@@ -263,20 +265,19 @@ struct PartitionedOpenAggregationHashtable
         }
         auto ht_entry = reinterpret_cast<uintptr_t>(ht_entry_raw);
         if constexpr (is_salted) {
-            slots[mod | partition_mask] = reinterpret_cast<slot_idx_t>((ht_entry << BITS_SALT) | hash_prefix);
+            slots[partition_mask | mod] = reinterpret_cast<slot_idx_t>((ht_entry << BITS_SALT) | hash_prefix);
         }
         else {
-            slots[mod | partition_mask] = reinterpret_cast<slot_idx_t>(ht_entry);
+            slots[partition_mask | mod] = reinterpret_cast<slot_idx_t>(ht_entry);
         }
         group_not_found++;
     }
 
-    // TODO  and ((1 << ((sizeof(slot_idx_t) * 8) - (16 * is_salted))) > page_t::max_tuples_per_page))
     // require that indirect addressing can index all slots on a page (minus the bits used for salting)
     void aggregate(const key_t& key, const value_t& value, u64 key_hash)
-    requires(slots_mode != DIRECT)
+    requires(slots_mode != DIRECT and ((1 << ((sizeof(slot_idx_t) * 8) - (16 * is_salted))) > page_t::max_tuples_per_page))
     {
-        static constexpr auto slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
+        static constexpr slot_idx_t slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
         // extract top bits from hash
         u64 mod = key_hash >> mod_shift;
         u64 part_no = mod >> partition_shift;
@@ -304,7 +305,7 @@ struct PartitionedOpenAggregationHashtable
             }
 
             mod = (mod + 1) & slots_mask;
-            slot = slots[mod | partition_mask];
+            slot = slots[partition_mask | mod];
         }
         auto [ht_entry, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
         if (evicted) {
@@ -313,10 +314,10 @@ struct PartitionedOpenAggregationHashtable
             clear_slots(part_no);
         }
         if constexpr (is_salted) {
-            slots[mod | partition_mask] = (ht_entry << BITS_SALT) | hash_prefix | (~slot_idx_mask);
+            slots[partition_mask | mod] = (ht_entry << BITS_SALT) | hash_prefix | (~slot_idx_mask);
         }
         else {
-            slots[mod | partition_mask] = ht_entry | (~slot_idx_mask);
+            slots[partition_mask | mod] = ht_entry | (~slot_idx_mask);
         }
         group_not_found++;
     }

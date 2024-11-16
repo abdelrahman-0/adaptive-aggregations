@@ -81,7 +81,7 @@ class BaseNetworkManager {
     io_uring ring{};
     std::vector<io_uring_cqe*> cqes;
     // access object sizes at runtime
-    std::vector<u64> object_sizes{sizeof(object_ts)...};
+    std::array<u64, nobjects> object_sizes{sizeof(object_ts)...};
     u32 nwdepth;
     DEBUGGING(u64 pages_submitted{0});
 

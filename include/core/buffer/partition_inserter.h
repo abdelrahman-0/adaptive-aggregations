@@ -50,6 +50,7 @@ struct PartitionedAggregationInserter {
         ASSERT(_npartgroups == next_power_2(_npartgroups));
     }
 
+    std::unordered_map<int, int> updates;
     [[maybe_unused]]
     auto insert(const key_t& key, const value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
     {
@@ -86,9 +87,9 @@ struct PartitionedAggregationInserter {
         insert(key, value, key_hash, part_no, part_page);
     }
 
-    const auto& get_sketch(u32 part_no) const
+    const auto& get_sketch(u32 grp_no) const
     {
-        return part_groups[part_no].sketch;
+        return part_groups[grp_no].sketch;
     }
 
     [[nodiscard]]

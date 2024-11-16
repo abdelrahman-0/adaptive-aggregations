@@ -31,7 +31,7 @@ DEFINE_uint32(slots, 8192, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
-DEFINE_bool(preagg, true, "turn pre-aggregation on/off initially");
+DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
 
 /* --------------------------------------- */
 
@@ -79,9 +79,9 @@ using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, id
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, is_glob_salted>;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, false, is_glob_salted>;
 #else
-using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc>;
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, false>;
 #endif
 
 using PageBuffer = HashtableLocal::page_t;

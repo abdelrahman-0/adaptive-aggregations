@@ -1,5 +1,5 @@
-#include "bench/PerfEvent.hpp"
 #include "config.h"
+
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
@@ -126,7 +126,6 @@ int main(int argc, char* argv[])
                 }
             };
             std::function<void(SketchLocal*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
-                print("received sketch:", sketch->get_estimate());
                 sketch_glob.merge_concurrent(*sketch);
                 peers_done++;
             };
@@ -249,9 +248,9 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
 
-                if (do_adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
+                if (do_adaptive_preagg and FLAGS_adapre and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    FLAGS_preagg = false;
+                    FLAGS_adapre = false;
                     process_local_page = insert_into_buffer;
                 }
             }
@@ -263,7 +262,6 @@ int main(int argc, char* argv[])
                 }
                 else {
                     // send remote sketches
-                    print("sent sketch:", inserter_loc.get_sketch(part_grp).get_estimate());
                     auto actual_dst = part_grp - (part_grp > node_id);
                     manager_send.try_flush(actual_dst, &inserter_loc.get_sketch(part_grp));
                 }
@@ -289,37 +287,23 @@ int main(int argc, char* argv[])
                 global_ht_construction_complete.wait(false);
             }
 
-            {
-                PerfEventBlock e;
-                if (FLAGS_consumepart) {
-                    print("finished pre-agg");
-                    // consume partitions
-                    const auto npartitions = storage_glob.partition_pages.size();
-                    for (u64 part : range(npartitions)) {
-                        u64 total_tuples{0};
-                        std::for_each(storage_glob.partition_pages[part].begin(), storage_glob.partition_pages[part].end(),
-                                      [&total_tuples](const auto* page) { total_tuples += page->get_num_tuples(); });
-                        print("PART:", part, "has", storage_glob.partition_pages[part].size(), "pages with a total of", total_tuples, "tuples");
-                    }
-                    while ((morsel_begin = current_swip.fetch_add(1)) < npartitions) {
-                        for (auto* page : storage_glob.partition_pages[morsel_begin]) {
-                            //                        process_page_glob(*page);
-                        }
+            print("finished pre-agg");
+            if (FLAGS_consumepart) {
+                // consume partitions
+                const auto npartitions = storage_glob.partition_pages.size();
+                while ((morsel_begin = current_swip.fetch_add(1)) < npartitions) {
+                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                        process_page_glob(*page);
                     }
                 }
-                else {
-                    u64 part = 0;
-                    u64 total_tuples{0};
-                    std::for_each(storage_glob.partition_pages[part].begin(), storage_glob.partition_pages[part].end(),
-                                  [&total_tuples](const auto* page) { total_tuples += page->get_num_tuples(); });
-                    print("PART:", part, "has", storage_glob.partition_pages[part].size(), "pages with a total of", total_tuples, "tuples");
-                    // consume pages from partition 0 (only partition)
-                    const u64 npages = storage_glob.partition_pages[0].size();
-                    while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
-                        morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
-                        while (morsel_begin < morsel_end) {
-                            process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
-                        }
+            }
+            else {
+                // consume pages from partition 0 (only partition)
+                const u64 npages = storage_glob.partition_pages[0].size();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                    while (morsel_begin < morsel_end) {
+                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
                     }
                 }
             }
@@ -403,17 +387,17 @@ int main(int argc, char* argv[])
         DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
 
-    print("global ht size", ht_glob.ht_mask + 1);
-    u64 count{0};
-    u64 inserts{0};
-    for (u64 i : range(ht_glob.ht_mask + 1)) {
-        auto slot = ht_glob.slots[i].load();
-        if (slot) {
-            auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-            count += slot_count;
-            inserts++;
-        }
-    }
-    print("INSERTS:", inserts);
-    print("COUNT:", count);
+//    print("global ht size", ht_glob.size_mask + 1);
+//    u64 count{0};
+//    u64 inserts{0};
+//    for (u64 i : range(ht_glob.size_mask + 1)) {
+//        auto slot = ht_glob.slots[i].load();
+//        if (slot) {
+//            auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+//            count += slot_count;
+//            inserts++;
+//        }
+//    }
+//    print("INSERTS:", inserts);
+//    print("COUNT:", count);
 }

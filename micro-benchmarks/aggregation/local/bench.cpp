@@ -163,9 +163,9 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
 
-                if (do_adaptive_preagg and FLAGS_preagg and ht_loc.is_useless()) {
+                if (do_adaptive_preagg and FLAGS_adapre and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    FLAGS_preagg = false;
+                    FLAGS_adapre = false;
                     process_local_page = insert_into_buffer;
                 }
             }
@@ -274,13 +274,4 @@ int main(int argc, char* argv[])
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
     LIKWID_MARKER_CLOSE;
-
-    u64 count{0};
-    for (u64 idx : range(ht_glob.size_mask + 1)) {
-        auto* slot = ht_glob.slots[idx].load();
-        if (slot) {
-            count += std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-        }
-    }
-    print("COUNT:", count);
 }
