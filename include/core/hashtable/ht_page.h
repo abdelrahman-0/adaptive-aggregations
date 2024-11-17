@@ -147,6 +147,12 @@ struct PageAggregation
     {
         return base_t::get_num_tuples() & num_tuples_mask;
     }
+
+    [[nodiscard]]
+    bool empty() const
+    {
+        return get_num_tuples() == 0;
+    }
 };
 
 } // namespace ht

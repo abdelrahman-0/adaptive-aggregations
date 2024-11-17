@@ -116,13 +116,15 @@ int main(int argc, char* argv[])
 
             std::function<void(PageBuffer*, u32)> ingress_page_consumer_fn = [&peers_done, &recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageBuffer* page,
                                                                                                                                                         u32 dst) {
-                storage_glob.add_page(page, page->get_part_no());
                 if (page->is_last_page()) {
                     // recv sketch after last page
                     manager_recv.post_recvs(dst, remote_sketches.data() + dst);
                 }
                 else {
                     manager_recv.post_recvs(dst, recv_alloc.get_page());
+                }
+                if (not page->empty()) {
+                    storage_glob.add_page(page, page->get_part_no());
                 }
             };
             std::function<void(SketchLocal*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
@@ -287,7 +289,6 @@ int main(int argc, char* argv[])
                 global_ht_construction_complete.wait(false);
             }
 
-            print("finished pre-agg");
             if (FLAGS_consumepart) {
                 // consume partitions
                 const auto npartitions = storage_glob.partition_pages.size();
@@ -387,17 +388,17 @@ int main(int argc, char* argv[])
         DEBUGGING(.log("local throughput (Gb/s)", (local_sz * 8 * 1000) / (1e9 * swatch.time_ms)))   //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
 
-//    print("global ht size", ht_glob.size_mask + 1);
-//    u64 count{0};
-//    u64 inserts{0};
-//    for (u64 i : range(ht_glob.size_mask + 1)) {
-//        auto slot = ht_glob.slots[i].load();
-//        if (slot) {
-//            auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-//            count += slot_count;
-//            inserts++;
-//        }
-//    }
-//    print("INSERTS:", inserts);
-//    print("COUNT:", count);
+    print("global ht size", ht_glob.size_mask + 1);
+    u64 count{0};
+    u64 inserts{0};
+    for (u64 i : range(ht_glob.size_mask + 1)) {
+        auto slot = ht_glob.slots[i].load();
+        if (slot) {
+            auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+            count += slot_count;
+            inserts++;
+        }
+    }
+    print("INSERTS:", inserts);
+    print("COUNT:", count);
 }
