@@ -11,7 +11,8 @@ for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
   fi
   for NPAGES in 2400000; do
     for THREADS in 1 4 6 12 24 30 32; do
-      for NGROUPS in 1 100 10000 100000 1000000 10000000; do
+      #      for NGROUPS in 1 100 10000 100000 1000000 10000000; do
+      for NGROUPS in 100000000; do
         for TRY in $(seq 1 5); do
           if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
             sleep 5s
