@@ -33,6 +33,7 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
+DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
 
 /* --------------------------------------- */
 
@@ -75,11 +76,11 @@ static_assert(idx_mode_slots != ht::NO_IDX);
 
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg,
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
                                                                true, is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
 using HashtableLocal =
-    ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg, true>;
+    ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true>;
 #endif
 using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, true, idx_mode_slots == ht::DIRECT>;
 

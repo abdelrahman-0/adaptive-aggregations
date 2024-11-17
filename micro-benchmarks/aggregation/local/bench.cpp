@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             InserterLocal inserter_loc{FLAGS_partitions, partition_buffer};
-            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
+            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 

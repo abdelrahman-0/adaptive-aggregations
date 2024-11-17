@@ -178,7 +178,7 @@ int main(int argc, char* argv[])
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             auto partition_groups = FLAGS_nodes;
             InserterLocal inserter_loc{FLAGS_partitions, partition_buffer, partition_groups};
-            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
+            HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
 
             /* ------------ LAMBDAS ------------ */
 

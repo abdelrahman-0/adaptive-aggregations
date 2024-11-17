@@ -24,8 +24,8 @@
 
 namespace ht {
 
-template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t,
-          double threshold_preagg, bool is_grouped, bool use_ptr, bool is_heterogeneous>
+template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool is_grouped,
+          bool use_ptr, bool is_heterogeneous>
 struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, use_ptr> {
     using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, use_ptr>;
     using base_t::slots;
@@ -41,6 +41,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     // global hashtables are non-inserters
     part_buf_t& part_buffer;
     inserter_t& inserter;
+    double threshold_preagg{};
     u64 group_not_found{0};
     u64 group_found{0};
     u32 npartitions{};
@@ -48,8 +49,9 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
 
     PartitionedAggregationHashtable() : base_t() {};
 
-    PartitionedAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer, inserter_t& _inserter)
-        : base_t(_npartitions * _nslots), part_buffer(_part_buffer), inserter(_inserter), npartitions(_npartitions), partition_shift(__builtin_ctz(_nslots))
+    PartitionedAggregationHashtable(u32 _npartitions, u32 _nslots, double _threshold_preagg, part_buf_t& _part_buffer, inserter_t& _inserter)
+        : base_t(_npartitions * _nslots), threshold_preagg(_threshold_preagg), part_buffer(_part_buffer), inserter(_inserter), npartitions(_npartitions),
+          partition_shift(__builtin_ctz(_nslots))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
         ASSERT(_nslots == next_power_2(_nslots));
@@ -72,12 +74,11 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
 };
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc,
-          concepts::is_sketch sketch_t, double threshold_preagg, bool is_grouped, bool is_heterogeneous = false>
+          concepts::is_sketch sketch_t, bool is_grouped, bool is_heterogeneous = false>
 requires(entry_mode != NO_IDX and slots_mode != NO_IDX)
-struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg,
-                                                                                       is_grouped, slots_mode == DIRECT, is_heterogeneous> {
-    using base_t =
-        PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg, is_grouped, slots_mode == DIRECT, is_heterogeneous>;
+struct PartitionedChainedAggregationHashtable
+    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, slots_mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, slots_mode == DIRECT, is_heterogeneous>;
     using base_t::clear_slots;
     using base_t::group_found;
     using base_t::group_not_found;
@@ -93,8 +94,8 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
     using typename base_t::slot_idx_t;
 
   public:
-    PartitionedChainedAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer, inserter_t& _inserter)
-        : base_t(_npartitions, _nslots, _part_buffer, _inserter)
+    PartitionedChainedAggregationHashtable(u32 _npartitions, u32 _nslots, double _threshold_preagg, part_buf_t& _part_buffer, inserter_t& _inserter)
+        : base_t(_npartitions, _nslots, _threshold_preagg, _part_buffer, _inserter)
     {
     }
 
@@ -192,12 +193,11 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
 };
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc,
-          concepts::is_sketch sketch_t, double threshold_preagg, bool is_grouped, bool is_salted = true, bool is_heterogeneous = false>
+          concepts::is_sketch sketch_t, bool is_grouped, bool is_salted = true, bool is_heterogeneous = false>
 requires(not is_salted or entry_mode != INDIRECT_16) // need at least 32 bits for 16-bit salt
-struct PartitionedOpenAggregationHashtable : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg, is_grouped,
-                                                                                    slots_mode == DIRECT, is_heterogeneous> {
-    using base_t =
-        PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, threshold_preagg, is_grouped, slots_mode == DIRECT, is_heterogeneous>;
+struct PartitionedOpenAggregationHashtable
+    : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, slots_mode == DIRECT, is_heterogeneous> {
+    using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, slots_mode == DIRECT, is_heterogeneous>;
     using base_t::clear_slots;
     using base_t::group_found;
     using base_t::group_not_found;
@@ -219,8 +219,8 @@ struct PartitionedOpenAggregationHashtable : public PartitionedAggregationHashta
     u64 slots_mask;
 
   public:
-    PartitionedOpenAggregationHashtable(u32 _npartitions, u32 _nslots, part_buf_t& _part_buffer, inserter_t& _inserter)
-        : base_t(_npartitions, _nslots, _part_buffer, _inserter), slots_mask(_nslots - 1)
+    PartitionedOpenAggregationHashtable(u32 _npartitions, u32 _nslots, double _threshold_preagg, part_buf_t& _part_buffer, inserter_t& _inserter)
+        : base_t(_npartitions, _nslots, _threshold_preagg, _part_buffer, _inserter), slots_mask(_nslots - 1)
     {
         if (_nslots <= page_t::max_tuples_per_page) {
             throw InvalidOptionError{"Open-addressing hashtable needs more slots"};
