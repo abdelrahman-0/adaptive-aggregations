@@ -57,7 +57,7 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-using SketchLocal = ht::HLLSketch;
+using SketchLocal = ht::HLLSketch<false>;
 // using SketchLocal = ht::CPCSketch;
 using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
 
@@ -71,11 +71,11 @@ static_assert(idx_mode_slots != ht::NO_IDX);
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg,
-                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
+                                                               false, is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg>;
 #endif
-using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, idx_mode_slots == ht::DIRECT>;
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, false, idx_mode_slots == ht::DIRECT>;
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;

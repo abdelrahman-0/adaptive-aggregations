@@ -58,7 +58,7 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-using SketchLocal = ht::HLLSketch;
+using SketchLocal = ht::HLLSketch<true>;
 // cannot use default CPCSketch since it allocates vectors via std::allocator (part of the sketch is on the heap, so it cannot be sent directly)
 // => the solution is to pass a custom allocator to the underlying sketch type as follows:
 //       cpc_sketch_alloc<std::allocator<uint8_t>>
@@ -76,11 +76,12 @@ static_assert(idx_mode_slots != ht::NO_IDX);
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg,
-                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
+                                                               true, is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
-using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg>;
+using HashtableLocal =
+    ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, threshold_preagg, true>;
 #endif
-using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, idx_mode_slots == ht::DIRECT>;
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, true, idx_mode_slots == ht::DIRECT>;
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;

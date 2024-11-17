@@ -21,7 +21,7 @@
 
 namespace buf {
 
-template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool use_ptr,
+template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool is_grouped, bool use_ptr,
           bool is_heterogeneous = false>
 struct PartitionedAggregationInserter {
     static constexpr bool is_chained = entry_mode != ht::NO_IDX;
@@ -35,24 +35,34 @@ struct PartitionedAggregationInserter {
     };
 
   private:
-    std::vector<PartitionGroup> part_groups;
+    std::conditional_t<is_grouped, std::vector<PartitionGroup>, PartitionGroup> group_data;
     part_buf_t& part_buffer;
     u32 group_shift{0};
     u8 partition_shift{0};
 
   public:
-    // need to pass number of slots to know which bits to use for radix partitions
-    PartitionedAggregationInserter(u32 _npartitions, u32 _nslots, u32 _npartgroups, part_buf_t& _part_buffer)
-        : part_groups(_npartgroups), part_buffer(_part_buffer), group_shift(__builtin_ctz(_npartitions / _npartgroups)), partition_shift(64 - __builtin_ctz(_npartitions))
+    PartitionedAggregationInserter(u32 _npartitions, part_buf_t& _part_buffer, u32 _npartgroups)
+    requires(is_grouped)
+        : group_data(_npartgroups), part_buffer(_part_buffer), group_shift(__builtin_ctz(_npartitions / _npartgroups)), partition_shift(64 - __builtin_ctz(_npartitions))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
-        ASSERT(_nslots == next_power_2(_nslots));
+        ASSERT(_npartgroups == next_power_2(_npartgroups));
+        for (auto& grp : group_data) {
+            grp = PartitionGroup{sketch_t{_npartgroups}};
+        }
+    }
+
+    PartitionedAggregationInserter(u32 _npartitions, part_buf_t& _part_buffer)
+    requires(not is_grouped)
+        : part_buffer(_part_buffer), partition_shift(64 - __builtin_ctz(_npartitions))
+    {
+        ASSERT(_npartitions == next_power_2(_npartitions));
         ASSERT(_npartgroups == next_power_2(_npartgroups));
     }
 
-    std::unordered_map<int, int> updates;
     [[maybe_unused]]
     auto insert(const key_t& key, const value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
+    requires(is_grouped)
     {
         bool evicted{false};
         if ((evicted = part_page->full())) {
@@ -60,12 +70,27 @@ struct PartitionedAggregationInserter {
             part_page = part_buffer.evict(part_no, part_page);
             part_page->clear_tuples();
         }
-        part_groups[part_no >> group_shift].sketch.update(key_hash);
+        group_data[part_no >> group_shift].sketch.update(key_hash);
+        return std::pair(part_page->emplace_back_grp(key, value), evicted);
+    }
+
+    [[maybe_unused]]
+    auto insert(const key_t& key, const value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
+    requires(not is_grouped)
+    {
+        bool evicted{false};
+        if ((evicted = part_page->full())) {
+            // evict if full
+            part_page = part_buffer.evict(part_no, part_page);
+            part_page->clear_tuples();
+        }
+        group_data.sketch.update(key_hash);
         return std::pair(part_page->emplace_back_grp(key, value), evicted);
     }
 
     [[maybe_unused]]
     auto insert(const key_t& key, const value_t& value, page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
+    requires(is_grouped)
     {
         bool evicted{false};
         if ((evicted = part_page->full())) {
@@ -74,7 +99,22 @@ struct PartitionedAggregationInserter {
             part_page->clear_tuples();
             offset = 0;
         }
-        part_groups[part_no >> group_shift].sketch.update(key_hash);
+        group_data[part_no >> group_shift].sketch.update(key_hash);
+        return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
+    }
+
+    [[maybe_unused]]
+    auto insert(const key_t& key, const value_t& value, page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
+    requires(not is_grouped)
+    {
+        bool evicted{false};
+        if ((evicted = part_page->full())) {
+            // evict if full
+            part_page = part_buffer.evict(part_no, part_page);
+            part_page->clear_tuples();
+            offset = 0;
+        }
+        group_data.sketch.update(key_hash);
         return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
     }
 
@@ -88,8 +128,15 @@ struct PartitionedAggregationInserter {
     }
 
     const auto& get_sketch(u32 grp_no) const
+    requires(is_grouped)
     {
-        return part_groups[grp_no].sketch;
+        return group_data[grp_no].sketch;
+    }
+
+    const auto& get_sketch() const
+    requires(not is_grouped)
+    {
+        return group_data.sketch;
     }
 
     [[nodiscard]]

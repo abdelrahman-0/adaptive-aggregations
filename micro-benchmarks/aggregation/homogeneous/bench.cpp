@@ -68,7 +68,7 @@ int main(int argc, char* argv[])
 
     // create threads
     std::vector<std::jthread> threads{};
-    for (auto thread_id{0u}; thread_id < FLAGS_threads; ++thread_id) {
+    for (u16 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
                               &global_ht_construction_complete, &times_preagg,
                               &pages_pre_agg DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)] {
@@ -90,10 +90,10 @@ int main(int argc, char* argv[])
             }
 
             // connect to [node_id + 1, FLAGS_nodes)
-            for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
+            for (u16 peer : range(node_id + 1u, FLAGS_nodes)) {
+                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : peer));
                 Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
-                conn.setup_egress(i);
+                conn.setup_egress(peer);
                 socket_fds.emplace_back(conn.socket_fds[0]);
             }
 
@@ -146,7 +146,7 @@ int main(int argc, char* argv[])
 
             u32 part_offset{0};
             std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
-            for (u64 part_no{0}; part_no < FLAGS_partitions; ++part_no) {
+            for (u64 part_no : range(FLAGS_partitions)) {
                 u16 dst = (part_no * FLAGS_nodes) / FLAGS_partitions;
                 auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
                 bool final_dst_partition = ((part_no - part_offset + 1) % parts_per_dst) == 0;
@@ -177,7 +177,7 @@ int main(int argc, char* argv[])
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             auto partition_groups = FLAGS_nodes;
-            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, partition_groups, partition_buffer};
+            InserterLocal inserter_loc{FLAGS_partitions, partition_buffer, partition_groups};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ LAMBDAS ------------ */

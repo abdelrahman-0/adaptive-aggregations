@@ -101,7 +101,7 @@ int main(int argc, char* argv[])
 
             BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
-            InserterLocal inserter_loc{FLAGS_partitions, FLAGS_slots, 1u, partition_buffer};
+            InserterLocal inserter_loc{FLAGS_partitions, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, partition_buffer, inserter_loc};
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
@@ -170,7 +170,7 @@ int main(int argc, char* argv[])
                 }
             }
             partition_buffer.finalize();
-            sketch_glob.merge_concurrent(inserter_loc.get_sketch(0));
+            sketch_glob.merge_concurrent(inserter_loc.get_sketch());
 
             swatch_preagg.stop();
             LIKWID_MARKER_STOP("pre-aggregation");

@@ -2,14 +2,14 @@ TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_hom
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=1000 --pin"
+FLAGS="--nolocal --random --morselsz=1000 --pin --seed=${LOCAL_NODE_ID}"
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
   if [[ "${NODES}" == 3 ]]; then
     continue
   fi
-  for NPAGES in 240000 2400000; do
+  for NPAGES in 2400000; do
     for THREADS in 1 4 6 12 24 30 32; do
       for NGROUPS in 1 100 10000 100000 1000000 10000000; do
         for TRY in $(seq 1 5); do
