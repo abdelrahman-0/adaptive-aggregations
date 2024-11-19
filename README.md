@@ -8,7 +8,7 @@
 <h6>see micro-benchmarks/aggregation folder</h6>
 <ol>
 <li>local aggregation (done)</li>
-<li>homogeneous aggregation (WIP)</li>
+<li>homogeneous aggregation (done)</li>
 <li>heterogeneous aggregation (WIP)</li>
 <li>adaptive (not started)</li>
 </ol>
@@ -19,9 +19,9 @@
 <li>Adaptive Joins</li>
 <li>Distributed Query Optimization</li>
 </ol>
-</p>
+
 <details open>
-<summary><code><b>Getting Started</b></code></summary>
+<summary><b>Getting Started</b></summary>
 <ul>
 <li>
 clone repository:
@@ -43,7 +43,8 @@ make install
 </details>
 
 <details>
-<summary><code><b>Additional Remarks</b></code></summary>
+<summary><b>Additional Remarks</b></summary>
+
 startup TODO:
 
 Check if deps were installed correctly on your EC2 instance
