@@ -4,9 +4,6 @@ int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    FLAGS_partitions = next_power_2(FLAGS_partitions);
-    FLAGS_slots = next_power_2(FLAGS_slots);
-
     auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
 
@@ -14,34 +11,19 @@ int main(int argc, char* argv[])
 
     /* ----------- DATA LOAD ----------- */
 
-    auto node_id = local_node.get_id();
-    Table table{FLAGS_random};
-    if (FLAGS_random) {
-        table.prepare_random_swips(FLAGS_npages / FLAGS_nodes);
-    }
-    else {
-        // prepare local IO at node offset (adjusted for page boundaries)
-        File file{FLAGS_path, FileMode::READ};
-        auto offset_begin = (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
-        auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) * defaults::local_page_size;
-        if (node_id == FLAGS_nodes - 1) {
-            offset_end = file.get_total_size();
-        }
-        file.set_offset(offset_begin, offset_end);
-        table.bind_file(std::move(file));
-        table.prepare_file_swips();
-        DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
-    }
-
+    u16 node_id = local_node.get_id();
+    Table table{node_id};
     auto& swips = table.get_swips();
 
     // prepare cache
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
     Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
-    DEBUGGING(print("finished populating cache"));
 
     /* ----------- THREAD SETUP ----------- */
+
+    FLAGS_partitions = next_power_2(FLAGS_partitions);
+    FLAGS_slots = next_power_2(FLAGS_slots);
 
     // control atomics
     ::pthread_barrier_t barrier_start{};

@@ -13,5 +13,5 @@ target_link_libraries(aggregation_homogeneous TBB::tbb TBB::tbbmalloc gflags -lu
 
 
 # heterogeneous micro-benchmark
-add_executable(aggregation_heterogeneous heterogeneous/heterogeneous.cpp)
+add_executable(aggregation_heterogeneous heterogeneous/bench.cpp)
 target_link_libraries(aggregation_heterogeneous TBB::tbb TBB::tbbmalloc gflags -luring -ljemalloc)
