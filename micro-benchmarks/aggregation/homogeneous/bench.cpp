@@ -151,7 +151,7 @@ int main(int argc, char* argv[])
                             if (is_last and final_dst_partition) {
                                 page->set_last_page();
                             }
-                            manager_send.try_flush(actual_dst, page);
+                            manager_send.send(actual_dst, page);
                         }
                     };
                 }
@@ -247,7 +247,7 @@ int main(int argc, char* argv[])
                 else {
                     // send remote sketches
                     auto actual_dst = part_grp - (part_grp > node_id);
-                    manager_send.try_flush(actual_dst, &inserter_loc.get_sketch(part_grp));
+                    manager_send.send(actual_dst, &inserter_loc.get_sketch(part_grp));
                 }
             }
             while (peers_done < npeers) {

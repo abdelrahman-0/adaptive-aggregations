@@ -75,11 +75,10 @@ static_assert(idx_mode_slots != ht::NO_IDX);
 
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal,
-                                                               true, is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true,
+                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
-using HashtableLocal =
-    ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true>;
 #endif
 using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, true, idx_mode_slots == ht::DIRECT>;
 
@@ -105,5 +104,5 @@ using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 using PageTable = PageLocal<SCHEMA>;
 
-using IngressManager = network::IngressNetworkManager<PageBuffer, SketchLocal>;
-using EgressManager = network::EgressNetworkManager<PageBuffer, SketchLocal>;
+using IngressManager = network::IngressNetworkManager<false, PageBuffer, SketchLocal>;
+using EgressManager = network::HomogeneousEgressNetworkManager<PageBuffer, SketchLocal>;

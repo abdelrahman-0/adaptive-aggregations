@@ -3,6 +3,7 @@
 #include <atomic>
 #include <cassert>
 #include <cstdint>
+#include <gflags/gflags.h>
 #include <numeric>
 #include <string>
 #include <vector>
@@ -14,32 +15,42 @@
 #include "io_manager.h"
 #include "utils/utils.h"
 
+DECLARE_bool(random);
+DECLARE_uint32(npages);
+DECLARE_uint32(nodes);
+DECLARE_string(path);
+
 static std::atomic<int> global_segment_id = 0;
 
 class Table {
   private:
     std::vector<Swip> swips;
     File file;
-    bool random_contents;
 
   public:
     int segment_id;
 
-    explicit Table(bool random) : random_contents(random)
+    explicit Table(uint16_t node_id)
     {
         segment_id = global_segment_id.fetch_add(1);
+        if (FLAGS_random) {
+            prepare_random_swips(FLAGS_npages);
+        }
+        else {
+            // prepare local IO at node offset (adjusted for page boundaries)
+            file = File{FLAGS_path, FileMode::READ};
+            auto offset_begin = (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
+            auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) * defaults::local_page_size;
+            if (node_id == FLAGS_nodes - 1) {
+                offset_end = file.get_total_size();
+            }
+            file.set_offset(offset_begin, offset_end);
+            prepare_file_swips();
+            DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
+        }
     };
 
     ~Table() = default;
-
-    void bind_file(File&& table_file)
-    {
-        file = std::move(table_file);
-    }
-
-    void prepare_swips()
-    {
-    }
 
     void prepare_file_swips()
     {
@@ -62,7 +73,7 @@ class Table {
     void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io)
     {
         std::vector<std::jthread> threads;
-        if (random_contents) {
+        if (FLAGS_random) {
             // populate cache using 1 thread
             for (u64 idx{0}; idx < num_pages_cache; ++idx) {
                 auto& page = cache.get_page(idx);

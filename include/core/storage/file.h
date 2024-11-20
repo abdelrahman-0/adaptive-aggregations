@@ -74,17 +74,6 @@ class File {
         determine_size();
     }
 
-    File& operator=(File&& other) noexcept
-    {
-        path = std::move(other.path);
-        fd = other.fd;
-        size_in_bytes = other.size_in_bytes;
-        offset_begin = other.offset_begin;
-        offset_end = other.offset_end;
-        other.fd = -1;
-        return *this;
-    }
-
     ~File()
     {
         if (fd > 0) {
