@@ -10,6 +10,7 @@
 namespace network {
 
 // tagged pointer with two 8-bit tags
+// TODO 3 tags for heterogeneous
 class UserData {
   private:
     static constexpr u64 pointer_tag_mask = 0x0000FFFFFFFFFFFF;
@@ -32,6 +33,8 @@ class UserData {
     }
 
   public:
+    UserData() = default;
+
     explicit UserData(auto* ptr) : data(reinterpret_cast<uintptr_t>(ptr))
     {
     }
@@ -126,7 +129,7 @@ class BaseNetworkManager {
 };
 
 // class for sending fixed-size objects of unique types
-template <typename... object_ts>
+template <bool is_heterogeneous, typename... object_ts>
 class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
     using base_t = BaseNetworkManager<object_ts...>;
     using base_t::cqes;
@@ -134,15 +137,16 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
     using base_t::object_sizes;
     using base_t::ring;
 
-  private:
-    std::vector<std::queue<UserData>> pending_objects;
+  protected:
+    std::vector<std::conditional_t<is_heterogeneous, tbb::concurrent_queue<UserData>, std::queue<UserData>>> pending_objects;
     std::vector<bool> has_inflight;
-    u32 inflight_egress{0};
     std::vector<std::function<void(void*)>> consumer_fns;
+    u32 inflight_egress{0};
+    u16 npeers;
 
   public:
     EgressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
-        : base_t(nwdepth, sqpoll, sockets), pending_objects(npeers), has_inflight(npeers, false), consumer_fns(nobjects, [](void*) {})
+        : base_t(nwdepth, sqpoll, sockets), pending_objects(npeers), has_inflight(npeers, false), consumer_fns(nobjects, [](void*) {}), npeers(npeers)
     {
     }
 
@@ -162,8 +166,8 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
         io_uring_prep_send(sqe, user_data.get_top_tag(), user_data.get_pointer(), size, 0);
         sqe->flags |= IOSQE_FIXED_FILE | IOSQE_IO_LINK;
         io_uring_sqe_set_data(sqe, user_data.as_data());
-        inflight_egress++;
         io_uring_submit(&ring);
+        inflight_egress++;
     }
 
     void flush_object(UserData user_data)
@@ -172,40 +176,40 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
         flush_object(user_data, object_sizes[user_data.get_bottom_tag()]);
     }
 
-    template <typename T>
-    void try_flush(u16 dst, T* obj)
+    [[maybe_unused]]
+    bool flush_dst(u16 dst)
+    requires(is_heterogeneous)
     {
-        UserData user_data{obj, dst, base_t::template get_type_idx<T>()};
-        if (has_inflight[dst]) {
-            pending_objects[dst].push(user_data);
+        UserData user_data{};
+        if (pending_objects[dst].try_pop(user_data)) {
+            flush_object(user_data);
+            return true;
         }
-        else {
-            has_inflight[dst] = true;
-            if (pending_objects[dst].empty()) {
-                flush_object(user_data, sizeof(T));
-            }
-            else {
-                // flush first object in dst queue and add current object to queue
-                flush_object(pending_objects[dst].front());
-                pending_objects[dst].pop();
-                pending_objects[dst].push(user_data);
-            }
+        return false;
+    }
+
+    [[maybe_unused]]
+    bool flush_dst(u16 dst)
+    requires(not is_heterogeneous)
+    {
+        if (not pending_objects[dst].empty()) {
+            flush_object(pending_objects[dst].front());
+            pending_objects[dst].pop();
+            return true;
         }
+        return false;
     }
 
     void try_drain_pending()
     {
         auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
-        for (auto i{0u}; i < peeked; ++i) {
+        for (u32 i{0}; i < peeked; ++i) {
+            if (cqes[i]->res <= 0) {
+                throw IOUringSendError{cqes[i]->res};
+            }
             UserData user_data{io_uring_cqe_get_data(cqes[i])};
-            auto peeked_dst = user_data.get_top_tag();
-            if (not pending_objects[peeked_dst].empty()) {
-                flush_object(pending_objects[peeked_dst].front());
-                pending_objects[peeked_dst].pop();
-            }
-            else {
-                has_inflight[peeked_dst] = false;
-            }
+            u16 peeked_dst = user_data.get_top_tag();
+            has_inflight[peeked_dst] = flush_dst(peeked_dst);
             consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer());
         }
         io_uring_cq_advance(&ring, peeked);
@@ -226,18 +230,97 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
                 throw IOUringSendError{cqes[0]->res};
             }
             io_uring_cq_advance(&ring, 1);
-            auto dst = user_data.get_top_tag();
-            if (not pending_objects[dst].empty()) {
-                flush_object(pending_objects[dst].front());
-                pending_objects[dst].pop();
-            }
+            flush_dst(user_data.get_top_tag());
             consumer_fns[obj_idx](user_data.get_pointer());
         }
     }
 };
 
-// class for receiving fixed-size objects of unique types
 template <typename... object_ts>
+class HomogeneousEgressNetworkManager : public EgressNetworkManager<false, object_ts...> {
+    using base_t = EgressNetworkManager<false, object_ts...>;
+    using base_t::flush_dst;
+    using base_t::flush_object;
+    using base_t::has_inflight;
+    using base_t::pending_objects;
+
+  private:
+  public:
+    HomogeneousEgressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets) : base_t(npeers, nwdepth, sqpoll, sockets)
+    {
+    }
+
+    template <typename T>
+    void send(u16 dst, T* obj)
+    {
+        UserData user_data{obj, dst, base_t::template get_type_idx<T>()};
+        if (has_inflight[dst]) {
+            pending_objects[dst].push(user_data);
+        }
+        else {
+            has_inflight[dst] = true;
+            if (flush_dst(dst)) {
+                pending_objects[dst].push(user_data);
+            }
+            else {
+                flush_object(user_data, sizeof(T));
+            }
+        }
+    }
+};
+
+template <typename... object_ts>
+class HeterogeneousEgressNetworkManager : public EgressNetworkManager<true, object_ts...> {
+    using base_t = EgressNetworkManager<true, object_ts...>;
+    using base_t::flush_dst;
+    using base_t::has_inflight;
+    using base_t::inflight_egress;
+    using base_t::npeers;
+    using base_t::pending_objects;
+
+  private:
+    std::atomic<bool> continue_egress{true};
+
+  public:
+    HeterogeneousEgressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets) : base_t(npeers, nwdepth, sqpoll, sockets)
+    {
+    }
+
+    template <typename T>
+    void send(u16 dst, T* obj)
+    {
+        pending_objects[dst].push(UserData{obj, dst, base_t::template get_type_idx<T>()});
+    }
+
+    [[maybe_unused]]
+    bool try_flush_all()
+    {
+        bool flushed_dst{false};
+        for (auto dst{0u}; dst < npeers; ++dst) {
+            if (not has_inflight[dst]) {
+                // no short-circuit
+                flushed_dst |= (has_inflight[dst] = flush_dst(dst));
+            }
+        }
+        return flushed_dst;
+    }
+
+    void wait_all()
+    {
+        do {
+            base_t::wait_all();
+            inflight_egress = 0;
+        } while (continue_egress.load() or try_flush_all());
+    }
+
+    void finished_egress()
+    {
+        continue_egress = false;
+    }
+};
+
+// class for receiving fixed-size objects of unique types
+template <bool is_heterogeneous, typename... object_ts>
 class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
     using base_t = BaseNetworkManager<object_ts...>;
     using base_t::cqes;
@@ -249,7 +332,6 @@ class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
   private:
     std::vector<std::function<void(void*, u32 /* local dst */)>> consumer_fns;
 
-    // TODO post recvs just outside morsel loop
   public:
     IngressNetworkManager(u32 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
         : base_t(nwdepth, sqpoll, sockets), consumer_fns(nobjects, [](void*, u32) {})
@@ -281,17 +363,25 @@ class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
         post_recvs(user_data, sizeof(T));
     }
 
-    void consume_pages()
+    void consume_done()
     {
         auto cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
         for (auto i{0u}; i < cqes_peeked; ++i) {
             UserData user_data{io_uring_cqe_get_data(cqes[i])};
-            DEBUGGING(if (cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) { throw IOUringRecvError(cqes[i]->res); })
+            if (cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) {
+                throw IOUringRecvError(cqes[i]->res);
+            }
             consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer(), user_data.get_top_tag());
         }
         DEBUGGING(pages_submitted += cqes_peeked;)
         io_uring_cq_advance(&ring, cqes_peeked);
     }
 };
+
+template <typename... object_ts>
+using HomogeneousIngressNetworkManager = IngressNetworkManager<false, object_ts...>;
+
+template <typename... object_ts>
+using HeterogeneousIngressNetworkManager = IngressNetworkManager<true, object_ts...>;
 
 } // namespace network

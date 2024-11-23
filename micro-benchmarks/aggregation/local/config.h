@@ -88,7 +88,7 @@ using PageBuffer = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
-using BlockAlloc = mem::BlockAllocator<PageBuffer, MemAlloc, false>;
+using BlockAlloc = mem::BlockAllocatorNonConcurrent<PageBuffer, MemAlloc>;
 using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
 using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 

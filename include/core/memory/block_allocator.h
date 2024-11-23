@@ -11,35 +11,49 @@
 
 namespace mem {
 
-template <typename page_t, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>, bool has_concurrent_free_pages = false>
+template <typename page_t, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>, bool is_concurrent = false>
 class BlockAllocator {
     struct BlockAllocation {
         u64 npages;
-        u64 used;
+        std::conditional_t<is_concurrent, std::atomic<u64>, u64> used;
         page_t* ptr; // pointer bumping
+
+        BlockAllocation(u64 _npages, u64 _used, page_t* _ptr) : npages(_npages), used(_used), ptr(_ptr)
+        {
+        }
+
+        BlockAllocation(const BlockAllocation& other)
+        {
+            npages = other.npages;
+            if constexpr (is_concurrent) {
+                used = other.used.load();
+            }
+            else {
+                used = other.used;
+            }
+            ptr = other.ptr;
+        }
     };
 
-  private:
+  protected:
     // In a heterogeneous model, network threads (and not the query thread) can push to free_pages
-    std::conditional_t<has_concurrent_free_pages, tbb::concurrent_queue<page_t*>, std::queue<page_t*>> free_pages;
-    std::vector<BlockAllocation> allocations;
-    u64 allocations_budget;
+    std::conditional_t<is_concurrent, tbb::concurrent_queue<page_t*>, std::queue<page_t*>> free_pages;
+    std::conditional_t<is_concurrent, tbb::concurrent_vector<BlockAllocation>, std::vector<BlockAllocation>> allocations;
+    std::conditional_t<is_concurrent, std::atomic<u64>, u64> allocation_budget;
     u32 block_sz;
 
     page_t* try_bump_pointer()
     {
         auto& current_allocation = allocations.back();
-        if (current_allocation.used != current_allocation.npages) {
-            // try pointer bumping
-            return current_allocation.ptr + current_allocation.used++;
+        u64 offset{0};
+        if ((offset = current_allocation.used++) < current_allocation.npages) {
+            return current_allocation.ptr + offset;
         }
         return nullptr;
     }
 
   public:
-    BlockAllocator() = delete;
-
-    explicit BlockAllocator(u32 block_sz, u64 max_allocations) : block_sz(block_sz), allocations_budget(max_allocations)
+    explicit BlockAllocator(u32 block_sz, u64 max_allocations) : block_sz(block_sz), allocation_budget(max_allocations)
     {
         allocations.reserve(100);
         allocate(false);
@@ -48,22 +62,42 @@ class BlockAllocator {
     ~BlockAllocator()
     {
         // loop through partitions and deallocate them
-//        for (auto& allocation : allocations) {
-//            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(page_t));
-//        }
+        // TODO commented out so that we can sum up counts in micro-benchmarks
+        //        for (auto& allocation : allocations) {
+        //            Alloc::dealloc(allocation.ptr, allocation.npages * sizeof(page_t));
+        //        }
     }
 
     [[maybe_unused]]
     page_t* allocate(bool consume = true)
     {
-        auto block = Alloc::template alloc<page_t>(block_sz * sizeof(page_t));
-        allocations.push_back({block_sz, consume ? 1u : 0u, block});
-        allocations_budget--;
+        auto* block = Alloc::template alloc<page_t>(block_sz * sizeof(page_t));
+        auto muster = BlockAllocation{block_sz, (consume ? 1u : 0u), block};
+        allocations.push_back(muster);
+        allocation_budget--;
         return block;
     }
 
+    void return_page(page_t* page)
+    {
+        free_pages.push(page);
+    }
+};
+
+template <typename page_t, concepts::is_mem_allocator Alloc>
+class BlockAllocatorNonConcurrent : public BlockAllocator<page_t, Alloc, false> {
+    using base_t = BlockAllocator<page_t, Alloc, false>;
+    using base_t::allocate;
+    using base_t::allocation_budget;
+    using base_t::free_pages;
+    using base_t::try_bump_pointer;
+
+  public:
+    BlockAllocatorNonConcurrent(u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
+    {
+    }
+
     page_t* get_page()
-    requires(not has_concurrent_free_pages)
     {
         page_t* page;
         if ((page = try_bump_pointer())) {
@@ -75,31 +109,49 @@ class BlockAllocator {
             free_pages.pop();
             return page;
         }
-        else if (allocations_budget) {
+        else if (allocation_budget) {
             // allocate new block
             return allocate();
         }
         throw BlockAllocError{"Exhausted allocation budget"};
     }
+};
+
+template <typename page_t, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>>
+class BlockAllocatorConcurrent : public BlockAllocator<page_t, Alloc, true> {
+    using base_t = BlockAllocator<page_t, Alloc, true>;
+    using base_t::allocate;
+    using base_t::allocation_budget;
+    using base_t::free_pages;
+    using base_t::try_bump_pointer;
+
+    std::atomic<bool> allocation_lock;
+
+  public:
+    BlockAllocatorConcurrent(u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
+    {
+    }
 
     page_t* get_page()
-    requires(has_concurrent_free_pages)
     {
+    retry:;
         page_t* page;
         if ((page = try_bump_pointer()) or free_pages.try_pop(page)) {
             return page;
         }
-        else if (allocations_budget) {
+        else if (allocation_budget) {
             // allocate new block
-            return allocate();
+            bool expected{false};
+            if (allocation_lock.compare_exchange_strong(expected, true)) {
+                auto* result = allocate();
+                allocation_lock = false;
+                allocation_lock.notify_all();
+                return result;
+            }
+            allocation_lock.wait(true);
+            goto retry;
         }
-        // throw error (could also wait for cqe?)
         throw BlockAllocError{"Exhausted allocation budget"};
-    }
-
-    void return_page(page_t* page)
-    {
-        free_pages.push(page);
     }
 };
 

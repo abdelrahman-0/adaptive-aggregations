@@ -180,7 +180,7 @@ int main(int argc, char* argv[])
                 manager_recv.post_recvs(peer);
             }
 
-            mem::BlockAllocator<NetworkPage> block_alloc{npeers * 3,
+            mem::BlockAllocatorNonConc<NetworkPage> block_alloc{npeers * 3,
                                                                                                FLAGS_maxalloc};
             std::vector<NetworkPage*> partitions(FLAGS_partitions);
             for (u32 part{0}; part < FLAGS_partitions; ++part) {

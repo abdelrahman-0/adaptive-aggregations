@@ -1,4 +1,4 @@
-TARGET_PATH='../../build-release/micro-benchmarks/aggregation/heterogeneous'
+TARGET_PATH='../../build-release/micro-benchmarks/aggregation/aggregation_heterogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4

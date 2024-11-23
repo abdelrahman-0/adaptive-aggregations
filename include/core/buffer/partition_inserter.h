@@ -26,7 +26,7 @@ template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, concepts::i
 struct PartitionedAggregationInserter {
     static constexpr bool is_chained = entry_mode != ht::NO_IDX;
     using page_t = ht::PageAggregation<key_t, value_t, entry_mode, is_chained, use_ptr>;
-    using block_alloc_t = mem::BlockAllocator<page_t, Alloc, is_heterogeneous>;
+    using block_alloc_t = std::conditional_t<is_heterogeneous, mem::BlockAllocatorConcurrent<page_t, Alloc>, mem::BlockAllocatorNonConcurrent<page_t, Alloc>>;
     using part_buf_t = EvictionBuffer<page_t, block_alloc_t>;
 
     // partitions in the same group share the same sketch
@@ -57,7 +57,6 @@ struct PartitionedAggregationInserter {
         : part_buffer(_part_buffer), partition_shift(64 - __builtin_ctz(_npartitions))
     {
         ASSERT(_npartitions == next_power_2(_npartitions));
-        ASSERT(_npartgroups == next_power_2(_npartgroups));
     }
 
     [[maybe_unused]]

@@ -36,8 +36,13 @@ struct HLLSketch {
     HLLSketch()
     requires(not is_grouped)
     {
-        ASSERT(ngroups == next_power_2(ngroups));
         std::fill(registers.begin(), registers.end(), 0);
+    }
+
+    HLLSketch(const HLLSketch& other) noexcept
+    {
+        registers = other.registers;
+        group_mask = other.group_mask;
     }
 
     HLLSketch& operator=(const HLLSketch& other)
@@ -50,7 +55,7 @@ struct HLLSketch {
     explicit HLLSketch(u32 ngroups = 0)
     requires(is_grouped)
     {
-        ASSERT(ngroups == next_power_2(ngroups));
+        ASSERT(ngroups == 0 or ngroups == next_power_2(ngroups));
         group_mask = 0xFFFFFFFFFFFFFFFF >> __builtin_ctz(ngroups);
         std::fill(registers.begin(), registers.end(), 0);
     }

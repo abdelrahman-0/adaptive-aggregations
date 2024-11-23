@@ -35,7 +35,7 @@ using ResultPage = PageLocal<ResultTuple>;
 /* ----------- NETWORK ----------- */
 
 using NetworkPage = PageCommunication<defaults::network_page_size, ResultTuple>;
-using IngressManager = HeterogeneousIngressNetworkManager<NetworkPage>;
+using IngressManager = HeterogeneousIngressNetworkManagerOld<NetworkPage>;
 using EgressManager = ConcurrentBufferedEgressNetworkManager<NetworkPage>;
 using ThreadGroup = ubench::HeterogeneousThreadGroup<EgressManager, IngressManager, NetworkPage>;
 
@@ -161,7 +161,7 @@ int main(int argc, char* argv[])
                 static_cast<u16>(FLAGS_nthreads), FLAGS_sqpoll,  socket_fds};
             IngressManager manager_recv{static_cast<u16>(npeers), FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
 
-            auto* recv_alloc = &(thread_grps[thread_id].ingress_block_alloc);
+            auto* recv_alloc = &(thread_grps[thread_id].alloc_ingress);
 
             thread_grps[thread_id].egress_mgr = &manager_send;
             thread_grps[thread_id].ingress_mgr = &manager_recv;

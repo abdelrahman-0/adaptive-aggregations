@@ -93,7 +93,7 @@ using PageBuffer = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
-using BlockAlloc = mem::BlockAllocator<PageBuffer, MemAlloc, false>;
+using BlockAlloc = mem::BlockAllocatorNonConcurrent<PageBuffer, MemAlloc>;
 using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
 using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
@@ -104,5 +104,5 @@ using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 using PageTable = PageLocal<SCHEMA>;
 
-using IngressManager = network::IngressNetworkManager<false, PageBuffer, SketchLocal>;
+using IngressManager = network::HomogeneousIngressNetworkManager<PageBuffer, SketchLocal>;
 using EgressManager = network::HomogeneousEgressNetworkManager<PageBuffer, SketchLocal>;

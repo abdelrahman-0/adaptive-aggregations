@@ -4,7 +4,7 @@ add_executable(shuffle_ingress shuffle_ingress.cpp)
 add_executable(shuffle_homogeneous shuffle_homogeneous.cpp)
 add_executable(shuffle_heterogeneous shuffle_heterogeneous.cpp)
 add_executable(groupby_homogeneous ../aggregation/homogeneous/bench.cpp)
-add_executable(groupby_heterogeneous ../aggregation/heterogeneous/heterogeneous.cpp)
+add_executable(groupby_heterogeneous ../aggregation/heterogeneous/bench.cpp)
 
 target_link_libraries(shuffle TBB::tbb gflags -luring)
 target_link_libraries(shuffle_receiver TBB::tbb gflags -luring)

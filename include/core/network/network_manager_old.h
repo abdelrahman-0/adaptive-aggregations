@@ -342,7 +342,7 @@ class ConcurrentIngressNetworkManager : public NetworkManagerOld<BufferPage> {
 };
 
 template <typename BufferPage>
-class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> {
+class HeterogeneousIngressNetworkManagerOld : public NetworkManagerOld<BufferPage> {
     // needed for dependent lookups
     using BaseNetworkManager = NetworkManagerOld<BufferPage>;
     using BaseNetworkManager::ring;
@@ -351,13 +351,13 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
     std::vector<io_uring_cqe*> cqes;
     tbb::concurrent_queue<BufferPage*> page_ptrs;
     u64 pages_recv{0};
-    mem::BlockAllocator<BufferPage, mem::MMapAllocator<true>, true> block_alloc;
+    mem::BlockAllocatorNonConc<BufferPage, mem::MMapAllocator<true>, true> block_alloc;
     u16 peers_left;
     std::atomic<bool> pending_peers;
     DEBUGGING(u64 total_submitted{0});
 
   public:
-    HeterogeneousIngressNetworkManager(u16 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
+    HeterogeneousIngressNetworkManagerOld(u16 npeers, u32 nwdepth, bool sqpoll, const std::vector<int>& sockets)
         : BaseNetworkManager(nwdepth, sqpoll, sockets), cqes(nwdepth * 2), block_alloc(npeers * 10, 100), peers_left(npeers), pending_peers(true)
     {
         for (auto dst{0u}; dst < npeers; ++dst) {
@@ -386,6 +386,7 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
             auto user_data = io_uring_cqe_get_data(cqes[i]);
             auto* page_ptr = get_pointer<BufferPage>(user_data);
             auto peeked_dst = get_tag(user_data);
+            // TODO put in consumer function
             if (page_ptr->is_last_page()) {
                 pending_peers = --peers_left;
             }
@@ -400,6 +401,8 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
 
     BufferPage* try_dequeue_page()
     {
+        // TODO put in consumer function
+        // TODO add to concurrent queue in shared state
         BufferPage* page;
         if (page_ptrs.try_pop(page)) {
             return page;
@@ -409,6 +412,7 @@ class HeterogeneousIngressNetworkManager : public NetworkManagerOld<BufferPage> 
 
     void done_page(BufferPage* page)
     {
+        // TODO put in consumer function
         block_alloc.return_page(page);
     }
 
@@ -1170,7 +1174,7 @@ struct SubmissionInfo {
 static constexpr u16 dst_mask = 0x00FF;
 
 template <typename BufferPage>
-class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
+class HeterogeneousEgressNetworkManagerOld : public NetworkManagerOld<BufferPage> {
     // needed for dependent lookups
     using BaseNetworkManager = NetworkManagerOld<BufferPage>;
     using BaseNetworkManager::buffers;
@@ -1194,7 +1198,7 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
     u16 npeers;
 
   public:
-    HeterogeneousEgressNetworkManager(u16 npeers, u32 nwdepth, u16 nthreads, bool sqpoll, const std::vector<int>& sockets, u32 qthreads)
+    HeterogeneousEgressNetworkManagerOld(u16 npeers, u32 nwdepth, u16 nthreads, bool sqpoll, const std::vector<int>& sockets, u32 qthreads)
         : BaseNetworkManager(nwdepth, sqpoll, sockets), has_inflight(npeers, false), cqes(nwdepth * 2), page_ptrs(npeers), nthreads(nthreads), npeers(npeers),
           consumer_fns(qthreads)
     {
@@ -1253,6 +1257,7 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
             }
             auto* page_ptr = get_pointer<BufferPage>(user_data);
             //            page_ptr->clear_tuples();
+            // TODO put in consumer_fn
             free_pages.push(page_ptr);
             u16 tag = get_tag(user_data);
             auto peeked_dst = tag & dst_mask;
@@ -1288,6 +1293,7 @@ class HeterogeneousEgressNetworkManager : public NetworkManagerOld<BufferPage> {
                 }
                 auto* user_data = io_uring_cqe_get_data(cqe);
                 io_uring_cq_advance(&ring, 1);
+                // TODO put in consumer_fns
                 auto* page_ptr = get_pointer<BufferPage>(user_data);
                 page_ptr->clear_tuples();
                 free_pages.push(page_ptr);
