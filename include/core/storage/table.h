@@ -34,7 +34,7 @@ class Table {
     {
         segment_id = global_segment_id.fetch_add(1);
         if (FLAGS_random) {
-            prepare_random_swips(FLAGS_npages);
+            prepare_random_swips(FLAGS_npages / FLAGS_nodes);
         }
         else {
             // prepare local IO at node offset (adjusted for page boundaries)

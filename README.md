@@ -9,7 +9,7 @@
 <ol>
 <li>local aggregation (done)</li>
 <li>homogeneous aggregation (done)</li>
-<li>heterogeneous aggregation (WIP)</li>
+<li>heterogeneous aggregation (done)</li>
 <li>adaptive (not started)</li>
 </ol>
 <h4>Future TODOs (out of scope for now):</h4>

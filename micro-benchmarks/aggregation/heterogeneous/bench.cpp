@@ -56,6 +56,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_qthreads + 1);
     ::pthread_barrier_init(&barrier_preaggregation, nullptr, FLAGS_qthreads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_nthreads + FLAGS_qthreads + 1);
+    std::atomic<bool> global_ht_construction_complete{false};
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
     SketchGlobal sketch_glob;
     HashtableGlobal ht_glob;
@@ -164,7 +165,8 @@ int main(int argc, char* argv[])
     std::vector<std::jthread> threads_query;
     for (u16 qthread_id : range(FLAGS_qthreads)) {
         threads_query.emplace_back([=, &local_node, &barrier_preaggregation, &current_swip, &swips, &table, &barrier_start, &barrier_end, &times_preagg, &thread_grps,
-                                    &storage_glob, &sketch_glob, &pages_pre_agg DEBUGGING(, &tuples_local, &tuples_sent, &tuples_received, &pages_recv)]() {
+                                    &storage_glob, &sketch_glob, &pages_pre_agg, &global_ht_construction_complete, &ht_glob DEBUGGING(, &tuples_local, &tuples_sent,
+                                                                                                                             &tuples_received, &pages_recv)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(qthread_id + FLAGS_nthreads);
             }
@@ -252,6 +254,12 @@ int main(int argc, char* argv[])
 
             std::function<void(const PageTable&)> process_local_page = insert_into_ht;
 
+            auto process_page_glob = [&ht_glob](PageBuffer& page) {
+                for (auto j{0u}; j < page.get_num_tuples(); ++j) {
+                    ht_glob.insert(page.get_tuple_ref(j));
+                }
+            };
+
             // barrier
             ::pthread_barrier_wait(&barrier_start);
             Stopwatch swatch_preagg{};
@@ -324,7 +332,38 @@ int main(int argc, char* argv[])
             // barrier
             ::pthread_barrier_wait(&barrier_preaggregation);
 
-            // TODO global ht
+            if (qthread_id == 0) {
+                // thread 0 initializes global ht
+                ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
+                // reset morsel
+                current_swip = 0;
+                global_ht_construction_complete = true;
+                global_ht_construction_complete.notify_all();
+            }
+            else {
+                global_ht_construction_complete.wait(false);
+            }
+
+            if (FLAGS_consumepart) {
+                // consume partitions
+                const auto npartitions = storage_glob.partition_pages.size();
+                while ((morsel_begin = current_swip.fetch_add(1)) < npartitions) {
+                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                        process_page_glob(*page);
+                    }
+                }
+            }
+            else {
+                // consume pages from partition 0 (only partition)
+                const u64 npages = storage_glob.partition_pages[0].size();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                    while (morsel_begin < morsel_end) {
+                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
+                    }
+                }
+            }
+
             times_preagg[qthread_id] = swatch_preagg.time_ms;
             ::pthread_barrier_wait(&barrier_end);
 
@@ -395,7 +434,7 @@ int main(int argc, char* argv[])
         .log("time (ms)", swatch.time_ms)                                                            //
         DEBUGGING(.log("pages received", pages_recv))                                                //
         DEBUGGING(.log("network throughput (Gb/s)", (recv_sz * 8 * 1000) / (1e9 * swatch.time_ms))); //
-    return 0;
+
     print("global ht size", ht_glob.size_mask + 1);
     u64 count{0};
     u64 inserts{0};
