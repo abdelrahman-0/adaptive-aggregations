@@ -23,7 +23,6 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     /* --------------------------------------- */
     auto current_swip                    = std::atomic{0ul};
-    auto global_ht_construction_complete = std::atomic{false};
     /* --------------------------------------- */
     FLAGS_partitions                     = next_power_2(FLAGS_partitions) * FLAGS_nodes;
     auto npeers                          = u32{FLAGS_nodes - 1};
