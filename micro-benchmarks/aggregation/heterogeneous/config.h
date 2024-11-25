@@ -61,13 +61,13 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 
-using SketchLocal = ht::HLLSketch<true>;
+using Sketch = ht::HLLSketch<true>;
 // cannot use default CPCSketch since it allocates vectors via std::allocator (part of the sketch is on the heap, so it cannot be sent directly)
 // => the solution is to pass a custom allocator to the underlying sketch type as follows:
 //       cpc_sketch_alloc<std::allocator<uint8_t>>
 //    and route the allocated memory block via the network (i.e. serialize the sketch via the allocator). It is also necessary to dehydrate any
 //    pointers and make them use relative addressing inside the allocated block
-using SketchGlobal = std::conditional_t<std::is_same_v<SketchLocal, ht::CPCSketch>, ht::CPCUnion, SketchLocal>;
+using SketchGlobal = std::conditional_t<std::is_same_v<Sketch, ht::CPCSketch>, ht::CPCUnion, Sketch>;
 
 static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
@@ -76,29 +76,29 @@ static constexpr bool do_adaptive_preagg = true;
 static_assert(idx_mode_slots != ht::NO_IDX);
 
 #if defined(LOCAL_OPEN_HT)
-static constexpr bool is_loc_salted = true;
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true,
-                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16, true>;
+static constexpr bool is_ht_loc_salted = true;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, true,
+                                                               is_ht_loc_salted and idx_mode_slots != ht::INDIRECT_16, true>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true, true>;
 #endif
-using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, true, idx_mode_slots == ht::DIRECT, true>;
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, Sketch, true, idx_mode_slots == ht::DIRECT, true>;
 
 #if defined(GLOBAL_OPEN_HT)
-static constexpr bool is_glob_salted = true;
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, true, is_glob_salted>;
+static constexpr bool is_ht_glob_salted = true;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, true, is_ht_glob_salted>;
 #else
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, true>;
 #endif
 
-using PageBuffer = HashtableLocal::page_t;
+using PageHashtable = HashtableLocal::page_t;
 
 /* ----------- STORAGE ----------- */
 
-using BlockAllocEgress = mem::BlockAllocatorConcurrent<PageBuffer, MemAlloc>;
-using BlockAllocIngress = mem::BlockAllocatorNonConcurrent<PageBuffer, MemAlloc>;
-using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAllocEgress>;
-using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
+using BlockAllocEgress = mem::BlockAllocatorConcurrent<PageHashtable, MemAlloc>;
+using BlockAllocIngress = mem::BlockAllocatorNonConcurrent<PageHashtable, MemAlloc>;
+using BufferLocal = buf::EvictionBuffer<PageHashtable, BlockAllocEgress>;
+using StorageGlobal = buf::PartitionBuffer<PageHashtable, true>;
 
 // #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 //  TPCH lineitem
@@ -109,12 +109,12 @@ using PageTable = PageLocal<SCHEMA>;
 
 /* ----------- NETWORK ----------- */
 
-using EgressManager = network::HeterogeneousEgressNetworkManager<PageBuffer, SketchGlobal>;
-using IngressManager = network::HeterogeneousIngressNetworkManager<PageBuffer, SketchGlobal>;
+using EgressManager = network::HeterogeneousEgressNetworkManager<PageHashtable, SketchGlobal>;
+using IngressManager = network::HeterogeneousIngressNetworkManager<PageHashtable, SketchGlobal>;
 
 struct QueryThreadGroup {
-    std::vector<SketchLocal> sketches_ingress{};
-    std::vector<SketchLocal> sketches_egress{};
+    std::vector<Sketch> sketches_ingress{};
+    std::vector<Sketch> sketches_egress{};
     BlockAllocEgress* alloc_egress{nullptr};
     BlockAllocIngress* alloc_ingress{nullptr};
 

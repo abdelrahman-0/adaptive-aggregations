@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
             thread_grps[nthread_id].alloc_egress = &alloc_egress;
 
             const auto& sketches_ingress = thread_grps[nthread_id].sketches_ingress;
-            std::function<void(PageBuffer*, u32)> ingress_page_consumer_fn = [&alloc_ingress, &storage_glob, &sketches_ingress, &manager_recv](PageBuffer* page,
+            std::function<void(PageHashtable*, u32)> ingress_page_consumer_fn = [&alloc_ingress, &storage_glob, &sketches_ingress, &manager_recv](PageHashtable* page,
                                                                                                                                                u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
@@ -121,14 +121,14 @@ int main(int argc, char* argv[])
             };
 
             auto& peers_done = thread_grps[nthread_id].peers_done;
-            std::function<void(SketchLocal*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
+            std::function<void(Sketch*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](Sketch* sketch, u32) {
                 sketch_glob.merge_concurrent(*sketch);
                 peers_done++;
             };
             manager_recv.register_consumer_fn(ingress_page_consumer_fn);
             manager_recv.register_consumer_fn(ingress_sketch_consumer_fn);
 
-            std::function<void(PageBuffer*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageBuffer* page) {
+            std::function<void(PageHashtable*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageHashtable* page) {
                 thread_grps[nthread_id].alloc_egress->return_page(page);
             };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
@@ -205,7 +205,7 @@ int main(int argc, char* argv[])
                 // partition number is local to the recipient node
                 auto final_part_no = FLAGS_consumepart ? part_no - (dst * parts_per_dst) : 0;
                 if (dst == node_id) {
-                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageBuffer* page, bool) {
+                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageHashtable* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, final_part_no);
@@ -214,7 +214,7 @@ int main(int argc, char* argv[])
                 }
                 else {
                     auto actual_dst = dst - (dst > node_id);
-                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageBuffer* page, bool is_last = false) {
+                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageHashtable* page, bool is_last = false) {
                         if (not page->empty() or final_dst_partition) {
                             page->set_part_no(final_part_no);
                             page->retire();
@@ -254,7 +254,7 @@ int main(int argc, char* argv[])
 
             std::function<void(const PageTable&)> process_local_page = insert_into_ht;
 
-            auto process_page_glob = [&ht_glob](PageBuffer& page) {
+            auto process_page_glob = [&ht_glob](PageHashtable& page) {
                 for (auto j{0u}; j < page.get_num_tuples(); ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -409,10 +409,10 @@ int main(int argc, char* argv[])
         .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("max tuples per page (hashtable)", PageBuffer::max_tuples_per_page)
+        .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
-        .log("sketch (local)", SketchLocal::get_type())
+        .log("sketch (local)", Sketch::get_type())
         .log("sketch (global)", SketchGlobal::get_type())
         .log("consume partitions", FLAGS_consumepart)
         .log("adaptive pre-aggregation", do_adaptive_preagg)
