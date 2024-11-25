@@ -33,4 +33,4 @@ add_subdirectory(micro-benchmarks)
 add_executable(grasshopper_db
         include/misc/concepts_traits/concepts_common.h
         include/core/network/connection.h
-        micro-benchmarks/shuffle/shuffle.cpp)
+        micro-benchmarks/shuffle_old/shuffle.cpp)

@@ -10,7 +10,6 @@
 namespace network {
 
 // tagged pointer with two 8-bit tags
-// TODO 3 tags for heterogeneous
 class UserData {
   private:
     static constexpr u64 pointer_tag_mask = 0x0000FFFFFFFFFFFF;

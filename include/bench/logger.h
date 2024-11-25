@@ -27,11 +27,10 @@ class Logger {
             logln<','>(row);
         }
         else {
-            u64 max_header_len{0};
-            std::for_each(header.begin(), header.end(), [&max_header_len](const std::string& str) { max_header_len = std::max(max_header_len, str.size()); });
-            for (u64 i : range(header.size())) {
-                auto space_to_leave = max_header_len - header[i].size() + 1;
-                logln(header[i], ":", std::string(space_to_leave, ' '), row[i]);
+            u64 max_header_len = std::max_element(header.begin(), header.end(), [](const auto& s1, const auto& s2) { return s1.size() < s2.size(); })->size();
+            for (u64 j : range(header.size())) {
+                auto space_to_leave = max_header_len - header[j].size() + 1;
+                logln(header[j], ":", std::string(space_to_leave, ' '), row[j]);
             }
         }
     }

@@ -1,12 +1,8 @@
 // Abdelrahman Adel (2024)
 
 #pragma once
-#include <atomic>
+
 #include <cmath>
-#include <cstdint>
-#include <map>
-#include <optional>
-#include <tbb/concurrent_queue.h>
 
 #include "bench/bench.h"
 #include "core/buffer/eviction_buffer.h"
@@ -21,13 +17,9 @@
 
 namespace buf {
 
-template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool is_grouped, bool use_ptr,
-          bool is_heterogeneous = false>
+template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, typename part_buf_t, concepts::is_sketch sketch_t, bool is_grouped, bool use_ptr>
 struct PartitionedAggregationInserter {
-    static constexpr bool is_chained = entry_mode != ht::NO_IDX;
-    using page_t = ht::PageAggregation<key_t, value_t, entry_mode, is_chained, use_ptr>;
-    using block_alloc_t = std::conditional_t<is_heterogeneous, mem::BlockAllocatorConcurrent<page_t, Alloc>, mem::BlockAllocatorNonConcurrent<page_t, Alloc>>;
-    using part_buf_t = EvictionBuffer<page_t, block_alloc_t>;
+    using page_t = ht::PageAggregation<key_t, value_t, entry_mode, use_ptr, true>;
 
     // partitions in the same group share the same sketch
     struct PartitionGroup {
@@ -141,7 +133,7 @@ struct PartitionedAggregationInserter {
     [[nodiscard]]
     static std::string get_type()
     {
-        return "inserter-"s + ht::get_idx_mode_str(entry_mode) + "_entry" + (is_chained ? "-is_chained" : "");
+        return "inserter-"s + ht::get_idx_mode_str(entry_mode) + "_entry";
     }
 };
 

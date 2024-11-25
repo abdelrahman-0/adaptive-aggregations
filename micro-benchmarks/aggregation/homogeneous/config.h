@@ -19,9 +19,6 @@
 #include "core/storage/table.h"
 #include "defaults.h"
 #include "system/node.h"
-#include "system/topology.h"
-#include "utils/hash.h"
-#include "utils/utils.h"
 
 using namespace std::chrono_literals;
 
@@ -75,12 +72,22 @@ static_assert(idx_mode_slots != ht::NO_IDX);
 
 #if defined(LOCAL_OPEN_HT)
 static constexpr bool is_loc_salted = true;
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true,
-                                                               is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
+using HashtableLocal =
+    ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true, is_loc_salted and idx_mode_slots != ht::INDIRECT_16>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true>;
 #endif
-using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, MemAlloc, SketchLocal, true, idx_mode_slots == ht::DIRECT>;
+
+using PageBuffer = ht::PageAggregation<Groups, Aggregates, idx_mode_entries, idx_mode_slots == ht::DIRECT, true>;
+// using PageBuffer = HashtableLocal::page_t;
+
+/* ----------- STORAGE ----------- */
+
+using BlockAlloc = mem::BlockAllocatorNonConcurrent<PageBuffer, MemAlloc>;
+using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
+using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
+
+using InserterLocal = buf::PartitionedAggregationInserter<Groups, Aggregates, idx_mode_entries, BufferLocal, SketchLocal, true, idx_mode_slots == ht::DIRECT>;
 
 #if defined(GLOBAL_OPEN_HT)
 static constexpr bool is_glob_salted = true;
@@ -88,14 +95,6 @@ using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregate
 #else
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, true>;
 #endif
-
-using PageBuffer = HashtableLocal::page_t;
-
-/* ----------- STORAGE ----------- */
-
-using BlockAlloc = mem::BlockAllocatorNonConcurrent<PageBuffer, MemAlloc>;
-using BufferLocal = buf::EvictionBuffer<PageBuffer, BlockAlloc>;
-using StorageGlobal = buf::PartitionBuffer<PageBuffer, true>;
 
 // #define SCHEMA GRP_KEYS, u32, u32, std::array<char, 4>
 //  TPCH lineitem

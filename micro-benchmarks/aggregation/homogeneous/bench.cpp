@@ -11,6 +11,7 @@ int main(int argc, char* argv[])
 
     /* ----------- DATA LOAD ----------- */
 
+    FLAGS_npages = std::max(1u, FLAGS_npages);
     u16 node_id = local_node.get_id();
     Table table{node_id};
     auto& swips = table.get_swips();
@@ -38,6 +39,7 @@ int main(int argc, char* argv[])
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
     SketchGlobal sketch_glob;
     HashtableGlobal ht_glob;
+    auto npeers = FLAGS_nodes - 1;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
     DEBUGGING(std::atomic<u64> tuples_sent{0});
     DEBUGGING(std::atomic<u64> tuples_received{0});
@@ -51,8 +53,7 @@ int main(int argc, char* argv[])
     std::vector<std::jthread> threads{};
     for (u16 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preaggregation, &barrier_end, &ht_glob, &sketch_glob,
-                              &global_ht_construction_complete, &times_preagg,
-                              &pages_pre_agg DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)] {
+                              &global_ht_construction_complete, &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)] {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -87,15 +88,13 @@ int main(int argc, char* argv[])
 
             /* ----------- NETWORK I/O ----------- */
 
-            auto npeers = FLAGS_nodes - 1;
-
             BlockAlloc recv_alloc{npeers * 10, FLAGS_maxalloc};
             IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             EgressManager manager_send{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             std::vector<SketchLocal> remote_sketches(npeers);
             u32 peers_done = 0;
 
-            std::function<void(PageBuffer*, u32)> ingress_page_consumer_fn = [&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageBuffer* page, u32 dst) {
+            std::function ingress_page_consumer_fn = [&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageBuffer* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
                     manager_recv.post_recvs(dst, remote_sketches.data() + dst);
@@ -108,7 +107,7 @@ int main(int argc, char* argv[])
                 }
                 storage_glob.add_page(page, page->get_part_no());
             };
-            std::function<void(SketchLocal*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
+            std::function ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](SketchLocal* sketch, u32) {
                 sketch_glob.merge_concurrent(*sketch);
                 peers_done++;
             };
@@ -184,7 +183,7 @@ int main(int argc, char* argv[])
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
-            std::function<void(const PageTable&)> process_local_page = insert_into_ht;
+            std::function process_local_page = insert_into_buffer;
 
             auto consume_ingress = [&manager_recv]() { return manager_recv.consume_done(); };
 
@@ -218,8 +217,7 @@ int main(int argc, char* argv[])
                 }
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx =
-                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
+                auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
                 thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
@@ -257,7 +255,6 @@ int main(int argc, char* argv[])
 
             swatch_preagg.stop();
             ::pthread_barrier_wait(&barrier_preaggregation);
-
             if (thread_id == 0) {
                 // thread 0 initializes global ht
                 ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
@@ -298,8 +295,7 @@ int main(int argc, char* argv[])
 
             if (thread_id == 0) {
                 if (FLAGS_consumepart) {
-                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(),
-                                  [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
                 }
                 else {
                     pages_pre_agg = storage_glob.partition_pages[0].size();

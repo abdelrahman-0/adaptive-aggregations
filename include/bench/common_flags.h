@@ -10,14 +10,14 @@ DEFINE_uint32(bufs_per_peer, 4, "number of egress buffers to use per peer");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
-DEFINE_uint32(npages, 1'000, "number of random pages to generate (only applicable if 'random' flag is set)");
+DEFINE_uint32(npages, 2, "number of random pages to generate (only applicable if 'random' flag is set)");
 DEFINE_string(path, "data/random.tbl", "path to input relation (ignored if 'random' flag is set)");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
 DEFINE_uint32(morselsz, 10, "number of pages to process in one morsel");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 
 DEFINE_uint32(partitions, 32, "number of hashtable partitions (per node) to use");
-DEFINE_uint64(groups, 10'000, "number of unique groups to use");
+DEFINE_uint64(groups, 1, "number of unique groups to use");
 DEFINE_uint64(seed, 0, "random generator seed");
 
 DEFINE_bool(pin, true, "pin threads using balanced affinity at core granularity");

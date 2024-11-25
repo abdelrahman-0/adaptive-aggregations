@@ -5,16 +5,16 @@
 namespace ht {
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, concepts::is_mem_allocator Alloc, bool is_multinode>
-struct ConcurrentAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true> {
+struct ConcurrentAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true> {
     using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true>;
     using base_t::mod_shift;
 
     u64 size_mask{0};
-    u8 group_shift;
+    u8 group_shift{};
 
     void initialize(u64 size, u8 npartgroups = 0)
     {
-        ASSERT(npartgroups == next_power_2(npartgroups));
+        ASSERT(npartgroups == 0 or npartgroups == next_power_2(npartgroups));
         group_shift = __builtin_ctz(npartgroups);
         base_t::initialize(size);
         size_mask = size - 1;
@@ -88,7 +88,7 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
 };
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, bool is_multinode,
-          bool is_salted = true>
+          bool is_salted>
 struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtable<key_t, value_t, entry_mode, Alloc, is_multinode> {
     using base_t = ConcurrentAggregationHashtable<key_t, value_t, entry_mode, Alloc, is_multinode>;
     using base_t::get_pos;
@@ -123,6 +123,8 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
                 }
                 if (condition) {
                     slot = reinterpret_cast<slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_salted * BITS_SALT));
+                    auto grp = slot->get_group();
+                    auto agg = slot->get_aggregates();
                     if (slot->get_group() == key) {
                         fn_agg(slot->get_aggregates(), value);
                         return;
