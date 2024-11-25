@@ -17,9 +17,6 @@ int main(int argc, char* argv[])
     auto cache          = Cache<PageTable>{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
     /* --------------------------------------- */
-    FLAGS_partitions            = next_power_2(FLAGS_partitions);
-    FLAGS_slots                 = next_power_2(FLAGS_slots);
-    /* --------------------------------------- */
     auto barrier_start          = ::pthread_barrier_t{};
     auto barrier_preaggregation = ::pthread_barrier_t{};
     auto barrier_end            = ::pthread_barrier_t{};
@@ -32,11 +29,13 @@ int main(int argc, char* argv[])
     auto global_ht_construction_complete  = std::atomic{false};
     auto times_preagg                     = tbb::concurrent_vector<u64>(FLAGS_threads);
     /* --------------------------------------- */
+    FLAGS_slots                           = next_power_2(FLAGS_slots);
+    FLAGS_partitions                      = next_power_2(FLAGS_partitions);
     auto storage_glob                     = StorageGlobal{FLAGS_consumepart ? FLAGS_partitions : 1};
+    FLAGS_partitions                     *= FLAGS_nodes;
     auto sketch_glob                      = Sketch{};
     auto ht_glob                          = HashtableGlobal{};
     auto npeers                           = u32{FLAGS_nodes - 1};
-    FLAGS_partitions                     *= FLAGS_nodes;
     DEBUGGING(auto tuples_processed = std::atomic{0ul});
     DEBUGGING(auto tuples_sent = std::atomic{0ul});
     DEBUGGING(auto tuples_received = std::atomic{0ul});
@@ -53,11 +52,11 @@ int main(int argc, char* argv[])
             /* --------------------------------------- */
             // setup connections to each node, forming a logical clique topology
             // note that connections need to be setup in a particular order to avoid deadlocks!
-            std::vector<int> socket_fds{};
+            auto socket_fds = std::vector<int>{};
             /* --------------------------------------- */
             // accept from [0, node_id)
             if (node_id) {
-                Connection conn{node_id, FLAGS_threads, thread_id, node_id};
+                auto conn = Connection{node_id, FLAGS_threads, thread_id, node_id};
                 conn.setup_ingress();
                 socket_fds = std::move(conn.socket_fds);
             }
@@ -65,7 +64,7 @@ int main(int argc, char* argv[])
             // connect to [node_id + 1, FLAGS_nodes)
             for (u16 peer : range(node_id + 1u, FLAGS_nodes)) {
                 auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : peer));
-                Connection conn{node_id, FLAGS_threads, thread_id, destination_ip, 1};
+                auto conn           = Connection{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(peer);
                 socket_fds.emplace_back(conn.socket_fds[0]);
             }
@@ -75,13 +74,13 @@ int main(int argc, char* argv[])
             DEBUGGING(u64 local_tuples_sent{0});
             DEBUGGING(u64 local_tuples_received{0});
             /* --------------------------------------- */
-            auto recv_alloc                        = BlockAlloc{npeers * 10, FLAGS_maxalloc};
-            auto manager_recv                      = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto manager_send                      = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto remote_sketches                   = std::vector<Sketch>(npeers);
-            u32 peers_done                         = 0;
+            auto recv_alloc                 = BlockAlloc{npeers * 10, FLAGS_maxalloc};
+            auto manager_recv               = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+            auto manager_send               = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+            auto remote_sketches            = std::vector<Sketch>(npeers);
+            u32 peers_done                  = 0;
             /* --------------------------------------- */
-            std::function ingress_page_consumer_fn = [&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageHashtable* page, u32 dst) {
+            auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageHashtable* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
                     manager_recv.post_recvs(dst, remote_sketches.data() + dst);
@@ -93,22 +92,23 @@ int main(int argc, char* argv[])
                     manager_recv.post_recvs(dst, recv_alloc.get_page());
                 }
                 storage_glob.add_page(page, page->get_part_no());
-            };
-            std::function ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](const Sketch* sketch, u32) {
+            }};
+            auto ingress_sketch_consumer_fn = std::function{[&sketch_glob, &peers_done](const Sketch* sketch, u32) {
                 sketch_glob.merge_concurrent(*sketch);
                 peers_done++;
-            };
+            }};
             manager_recv.register_consumer_fn(ingress_page_consumer_fn);
             manager_recv.register_consumer_fn(ingress_sketch_consumer_fn);
             /* --------------------------------------- */
             // setup local uring manager
-            IO_Manager thread_io{FLAGS_depthio, FLAGS_sqpoll};
+            auto thread_io = IO_Manager{FLAGS_depthio, FLAGS_sqpoll};
             if (not FLAGS_random and not FLAGS_path.empty()) {
                 thread_io.register_files({table.get_file().get_file_descriptor()});
             }
             /* --------------------------------------- */
-            auto part_offset = u32{0};
-            std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
+            // dependency injection
+            u32 part_offset   = 0;
+            auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
             for (u64 part_no : range(FLAGS_partitions)) {
                 u16 dst                   = (part_no * FLAGS_nodes) / FLAGS_partitions;
                 auto parts_per_dst        = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
@@ -279,7 +279,6 @@ int main(int argc, char* argv[])
     }
     /* --------------------------------------- */
     Stopwatch swatch{};
-    /* --------------------------------------- */
     ::pthread_barrier_wait(&barrier_start);
     swatch.start();
     ::pthread_barrier_wait(&barrier_end);
