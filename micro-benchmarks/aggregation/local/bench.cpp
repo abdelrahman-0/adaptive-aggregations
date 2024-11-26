@@ -250,18 +250,5 @@ int main(int argc, char* argv[])
         .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
-    print("global ht size", ht_glob.size_mask + 1);
-    u64 count{0};
-    u64 inserts{0};
-    for (u64 i : range(ht_glob.size_mask + 1)) {
-        if (auto slot = ht_glob.slots[i].load()) {
-            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-            count           += slot_count;
-            ++inserts;
-        }
-    }
-    print("INSERTS:", inserts);
-    print("COUNT:", count);
-
     LIKWID_MARKER_CLOSE;
 }
