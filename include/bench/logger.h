@@ -35,18 +35,26 @@ class Logger {
         }
     }
 
-    template <typename T>
-    requires std::is_same_v<std::string, T> or requires(T t) { std::to_string(t); }
-    auto& log(const std::string& param, T&& val)
+    template <typename... T>
+    requires(std::is_same_v<std::string, T> and ...) or ((requires(T... t) { (std::to_string(t), ...); }))
+    auto& log(const std::string& param, T&&... val)
     {
-        std::unique_lock<std::mutex> _{mutex};
+        auto _   = std::unique_lock{mutex};
+        using namespace std::string_literals;
+        auto str = ""s;
         header.push_back(param);
-        if constexpr (std::is_same_v<std::string, T>) {
-            row.push_back(val);
+        if constexpr ((std::is_same_v<std::string, T>, ...)) {
+            str = (... + (val + ','));
         }
         else {
-            row.push_back(std::to_string(val));
+            str = (... + (std::to_string(val) + ','));
         }
+        // remove trailing comma
+        str.pop_back();
+        if constexpr (sizeof...(val) > 1) {
+            str = "\""s + str + "\""s;
+        }
+        row.push_back(str);
         return *this;
     }
 };

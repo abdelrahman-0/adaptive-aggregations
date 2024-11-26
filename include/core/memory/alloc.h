@@ -19,7 +19,7 @@
 
 namespace mem {
 
-template <bool huge = true>
+template <bool huge>
 struct MMapAllocator {
 
     template <typename T = void>
@@ -46,7 +46,7 @@ struct MMapAllocator {
     }
 };
 
-template <bool huge = true>
+template <bool huge>
 struct JEMALLOCator {
 
     template <typename T = void>
@@ -55,6 +55,9 @@ struct JEMALLOCator {
         void* ptr = mallocx(size, MALLOCX_ZERO);
         if (not ptr) {
             throw JEMALLOCError{size};
+        }
+        if constexpr (huge) {
+            ::madvise(ptr, size, MADV_HUGEPAGE);
         }
         return reinterpret_cast<T*>(ptr);
     }

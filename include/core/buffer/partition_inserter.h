@@ -17,10 +17,49 @@
 
 namespace buf {
 
-template <typename key_t, typename value_t, ht::IDX_MODE entry_mode, typename part_buf_t, concepts::is_sketch sketch_t, bool is_grouped, bool use_ptr>
-struct PartitionedAggregationInserter {
-    using page_t = ht::PageAggregation<key_t, value_t, entry_mode, use_ptr, true>;
+template <typename page_t, typename part_buf_t>
+struct PartitionedTupleInserter {
 
+  private:
+    part_buf_t& part_buffer;
+    u8 partition_shift{0};
+
+  public:
+    PartitionedTupleInserter(u32 _npartitions, part_buf_t& _part_buffer) : part_buffer(_part_buffer), partition_shift(64 - __builtin_ctz(_npartitions))
+    {
+        ASSERT(_npartitions == next_power_2(_npartitions));
+    }
+
+    [[maybe_unused]]
+    auto insert(const auto& tup, u64 part_no, page_t* part_page)
+    {
+        bool evicted{false};
+        if ((evicted = part_page->full())) {
+            // evict if full
+            part_page = part_buffer.evict(part_no, part_page);
+            part_page->clear_tuples();
+        }
+        return std::pair(part_page->emplace_back(tup), evicted);
+    }
+
+    void insert(const auto& tup, const auto& key)
+    {
+        // extract lower bits from hash
+        u64 part_no     = hash_tuple(key) >> partition_shift;
+        auto* part_page = part_buffer.get_partition_page(part_no);
+        insert(tup, part_no, part_page);
+    }
+
+
+    [[nodiscard]]
+    static std::string get_type()
+    {
+        return "inserter"s;
+    }
+};
+
+template <typename page_t, ht::IDX_MODE entry_mode, typename part_buf_t, concepts::is_sketch sketch_t, bool is_grouped>
+struct PartitionedAggregationInserter {
     // partitions in the same group share the same sketch
     struct PartitionGroup {
         sketch_t sketch;
@@ -52,7 +91,7 @@ struct PartitionedAggregationInserter {
     }
 
     [[maybe_unused]]
-    auto insert(const key_t& key, const value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
+    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
     requires(is_grouped)
     {
         bool evicted{false};
@@ -66,7 +105,7 @@ struct PartitionedAggregationInserter {
     }
 
     [[maybe_unused]]
-    auto insert(const key_t& key, const value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
+    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
     requires(not is_grouped)
     {
         bool evicted{false};
@@ -80,7 +119,7 @@ struct PartitionedAggregationInserter {
     }
 
     [[maybe_unused]]
-    auto insert(const key_t& key, const value_t& value, page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
+    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, typename page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
     requires(is_grouped)
     {
         bool evicted{false};
@@ -95,7 +134,7 @@ struct PartitionedAggregationInserter {
     }
 
     [[maybe_unused]]
-    auto insert(const key_t& key, const value_t& value, page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
+    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, typename page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
     requires(not is_grouped)
     {
         bool evicted{false};
@@ -109,11 +148,11 @@ struct PartitionedAggregationInserter {
         return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
     }
 
-    void insert(key_t& key, value_t& value)
+    void insert(typename page_t::key_t& key, typename page_t::value_t& value)
     {
         // extract lower bits from hash
-        u64 key_hash = hash_tuple(key);
-        u64 part_no = key_hash >> partition_shift;
+        u64 key_hash    = hash_tuple(key);
+        u64 part_no     = key_hash >> partition_shift;
         auto* part_page = part_buffer.get_partition_page(part_no);
         insert(key, value, key_hash, part_no, part_page);
     }

@@ -3,7 +3,6 @@
 #include <arpa/inet.h>
 #include <cstring>
 #include <liburing.h>
-#include <mutex>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -12,9 +11,7 @@
 #include <vector>
 
 #include "defaults.h"
-#include "misc/concepts_traits/concepts_common.h"
 #include "misc/exceptions/exceptions_network.h"
-#include "utils/utils.h"
 
 static constexpr auto communication_port_base = defaults::port;
 static char ip_buffer[INET_ADDRSTRLEN];
@@ -23,31 +20,30 @@ static auto get_connection_hints(bool use_ipv6 = false)
 {
     ::addrinfo hints{};
     ::memset(&hints, 0, sizeof(addrinfo));
-    hints.ai_family = use_ipv6 ? AF_INET6 : AF_INET; // use IPv4/IPv6
-    hints.ai_socktype = SOCK_STREAM;                 // TCP
-    hints.ai_flags = AI_PASSIVE | AI_NUMERICHOST;    // use my IP
+    hints.ai_family   = use_ipv6 ? AF_INET6 : AF_INET; // use IPv4/IPv6
+    hints.ai_socktype = SOCK_STREAM;                   // TCP
+    hints.ai_flags    = AI_PASSIVE | AI_NUMERICHOST;   // use my IP
     return hints;
 }
 
 // open multiple TCP connections to a particular destination
 struct Connection {
-    u32 num_connections{};
     std::string connection_ip{};
     std::vector<int> socket_fds{};
+    u32 num_connections{};
     u32 node_id{};
     u32 nthreads{};
     u32 thread_id{};
 
     Connection() = default;
 
-    explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, u32 num_connections = 1)
-        : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections), socket_fds(num_connections, -1)
+    explicit Connection(const u32 node_id, const u32 nthreads, const u32 thread_id, const u32 num_connections = 1)
+        : socket_fds(num_connections, -1), num_connections(num_connections), node_id(node_id), nthreads(nthreads), thread_id(thread_id)
     {
     }
 
-    explicit Connection(u32 node_id, u32 nthreads, u32 thread_id, std::string connection_ip, u32 num_connections = 1)
-        : node_id(node_id), nthreads(nthreads), thread_id(thread_id), num_connections(num_connections), connection_ip(std::move(connection_ip)),
-          socket_fds(num_connections, -1)
+    explicit Connection(const u32 node_id, const u32 nthreads, const u32 thread_id, std::string connection_ip, const u32 num_connections = 1)
+        : connection_ip(std::move(connection_ip)), socket_fds(num_connections, -1), num_connections(num_connections), node_id(node_id), nthreads(nthreads), thread_id(thread_id)
     {
     }
 
@@ -56,11 +52,10 @@ struct Connection {
     // incoming connections
     void setup_ingress()
     {
-        int ret;
         ::addrinfo* local;
-        auto hints = get_connection_hints();
-        auto thread_comm_port = std::to_string(communication_port_base + node_id * nthreads + thread_id);
-        if ((ret = ::getaddrinfo(nullptr, thread_comm_port.c_str(), &hints, &local)) != 0) {
+        const auto hints            = get_connection_hints();
+        const auto thread_comm_port = std::to_string(communication_port_base + node_id * nthreads + thread_id);
+        if (int ret; (ret = ::getaddrinfo(nullptr, thread_comm_port.c_str(), &hints, &local)) != 0) {
             throw NetworkPrepareAddressError{ret};
         }
         auto sock_fd = ::socket(local->ai_family, local->ai_socktype, local->ai_protocol);
@@ -98,8 +93,8 @@ struct Connection {
         // listen loop
         for (auto i = 0u; i < node_id; ++i) {
             ::sockaddr_storage ingress_addr{};
-            socklen_t addr_size = sizeof(ingress_addr);
-            auto ingress_fd = ::accept(sock_fd, (sockaddr*)&ingress_addr, &addr_size);
+            socklen_t addr_size   = sizeof(ingress_addr);
+            const auto ingress_fd = ::accept(sock_fd, (sockaddr*)&ingress_addr, &addr_size);
             if (ingress_fd < 0) {
                 throw NetworkSocketAcceptError{};
             }
@@ -107,7 +102,7 @@ struct Connection {
             ::recv(ingress_fd, &incoming_node_id, sizeof(incoming_node_id), MSG_WAITALL);
             DEBUGGING(print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")"));
             socket_fds[incoming_node_id] = ingress_fd;
-            ::inet_ntop(ingress_addr.ss_family, (sockaddr*)&ingress_addr, ip_buffer, sizeof(ip_buffer));
+            ::inet_ntop(ingress_addr.ss_family, &ingress_addr, ip_buffer, sizeof(ip_buffer));
         }
         ::freeaddrinfo(local);
         ::close(sock_fd);
@@ -120,7 +115,7 @@ struct Connection {
             return;
         }
         int ret;
-        auto hints = get_connection_hints();
+        auto hints            = get_connection_hints();
         auto thread_comm_port = std::to_string(communication_port_base + outgoing_node_id * nthreads + thread_id);
         DEBUGGING(print("opening"s, num_connections, "connections to:"s, connection_ip, "..."s));
         for (auto i = 0u; i < num_connections; ++i) {
@@ -147,13 +142,13 @@ struct Connection {
                 ::getsockopt(socket_fds[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
 
                 ::linger sl{};
-                sl.l_onoff = 1; /* non-zero value enables linger option in kernel */
+                sl.l_onoff  = 1; /* non-zero value enables linger option in kernel */
                 sl.l_linger = 2;
                 setsockopt(socket_fds[i], SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
 
                 break;
             }
-            auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
+            const auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
             ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
 
             // connect to peer
@@ -174,7 +169,7 @@ struct Connection {
 
     void close_connections()
     {
-        for (auto i : socket_fds) {
+        for (const auto i : socket_fds) {
             //            ::close(i);
             ::shutdown(i, SHUT_RDWR);
         }

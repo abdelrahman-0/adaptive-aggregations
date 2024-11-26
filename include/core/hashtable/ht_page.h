@@ -73,6 +73,8 @@ struct EntryAggregation : BaseEntryAggregation<GroupAttributes, AggregateAttribu
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool use_ptr, bool next_first>
 requires(type_traits::is_tuple_v<GroupAttributes> and type_traits::is_tuple_v<AggregateAttributes>)
 struct PageAggregation : public PageCommunication<defaults::hashtable_page_size, EntryAggregation<GroupAttributes, AggregateAttributes, mode, next_first>, use_ptr> {
+    using key_t = GroupAttributes;
+    using value_t = AggregateAttributes;
     using entry_t = EntryAggregation<GroupAttributes, AggregateAttributes, mode, next_first>;
     using base_t = PageCommunication<defaults::hashtable_page_size, entry_t, use_ptr>;
     using base_t::columns;

@@ -33,8 +33,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     using typename base_t::slot_idx_t;
     using block_alloc_t = std::conditional_t<is_heterogeneous, mem::BlockAllocatorConcurrent<page_t, Alloc>, mem::BlockAllocatorNonConcurrent<page_t, Alloc>>;
     using part_buf_t = buf::EvictionBuffer<page_t, block_alloc_t>;
-    using inserter_t = buf::PartitionedAggregationInserter<key_t, value_t, entry_mode, part_buf_t, sketch_t, is_grouped, slots_mode == DIRECT>;
-    static_assert(std::is_same_v<page_t, typename inserter_t::page_t>);
+    using inserter_t = buf::PartitionedAggregationInserter<page_t, entry_mode, part_buf_t, sketch_t, is_grouped>;
 
   protected:
     // global hashtables are non-inserters
