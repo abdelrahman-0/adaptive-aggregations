@@ -54,18 +54,18 @@ static constexpr bool is_ht_glob_salted        = true;
 using MemAlloc                                 = mem::JEMALLOCator<true>;
 using Sketch                                   = ht::HLLSketch<true>;
 using PageTable                                = PageLocal<TABLE_SCHEMA>;
-using PageHashtable                            = ht::PageAggregation<Groups, Aggregates, idx_mode_entries, idx_mode_slots == ht::DIRECT, true>;
-using BlockAlloc                               = mem::BlockAllocatorNonConcurrent<PageHashtable, MemAlloc>;
-using BufferLocal                              = buf::EvictionBuffer<PageHashtable, BlockAlloc>;
-using StorageGlobal                            = buf::PartitionBuffer<PageHashtable, true>;
-using InserterLocal                            = buf::PartitionedAggregationInserter<PageHashtable, idx_mode_entries, BufferLocal, Sketch, true>;
-using EgressManager                            = network::HomogeneousEgressNetworkManager<PageHashtable, Sketch>;
-using IngressManager                           = network::HomogeneousIngressNetworkManager<PageHashtable, Sketch>;
+using PageResult                               = ht::PageAggregation<Groups, Aggregates, idx_mode_entries, idx_mode_slots == ht::DIRECT, true>;
+using BlockAlloc                               = mem::BlockAllocatorNonConcurrent<PageResult, MemAlloc>;
+using BufferLocal                              = buf::EvictionBuffer<PageResult, BlockAlloc>;
+using StorageGlobal                            = buf::PartitionBuffer<PageResult, true>;
+using InserterLocal                            = buf::PartitionedAggregationInserter<PageResult, idx_mode_entries, BufferLocal, Sketch, true>;
+using EgressManager                            = network::HomogeneousEgressNetworkManager<PageResult, Sketch>;
+using IngressManager                           = network::HomogeneousIngressNetworkManager<PageResult, Sketch>;
 /* --------------------------------------- */
 #if defined(LOCAL_OPEN_HT)
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, true, is_ht_loc_salted>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, is_ht_loc_salted, true, false>;
 #else
-using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true, false>;
 #endif
 /* --------------------------------------- */
 #if defined(GLOBAL_OPEN_HT)

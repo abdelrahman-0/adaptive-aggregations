@@ -80,7 +80,7 @@ int main(int argc, char* argv[])
             auto remote_sketches            = std::vector<Sketch>(npeers);
             u32 peers_done                  = 0;
             /* --------------------------------------- */
-            auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageHashtable* page, u32 dst) {
+            auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageResult* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
                     manager_recv.post_recvs(dst, remote_sketches.data() + dst);
@@ -116,7 +116,7 @@ int main(int argc, char* argv[])
                 part_offset              += final_dst_partition ? parts_per_dst : 0;
                 auto final_part_no        = FLAGS_consumepart ? part_no - (dst * parts_per_dst) : 0;
                 if (dst == node_id) {
-                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageHashtable* page, bool) {
+                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, final_part_no);
@@ -125,7 +125,7 @@ int main(int argc, char* argv[])
                 }
                 else {
                     auto actual_dst       = dst - (dst > node_id);
-                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageHashtable* page, bool is_last = false) {
+                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageResult* page, bool is_last = false) {
                         if (not page->empty() or final_dst_partition) {
                             page->retire();
                             page->set_part_no(final_part_no);
@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
             auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer, partition_groups};
             auto ht_loc                           = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
             /* --------------------------------------- */
-            std::function egress_page_consumer_fn = [&block_alloc](PageHashtable* pg) -> void { block_alloc.return_page(pg); };
+            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_page(pg); };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
             /* --------------------------------------- */
             auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
@@ -165,7 +165,7 @@ int main(int argc, char* argv[])
             };
             std::function process_local_page = insert_into_ht;
             /* --------------------------------------- */
-            auto process_page_glob           = [&ht_glob](PageHashtable& page) {
+            auto process_page_glob           = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.get_num_tuples(); ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -307,7 +307,7 @@ int main(int argc, char* argv[])
         .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
+        .log("max tuples per page (hashtable)", PageResult::max_tuples_per_page)
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch (local)", Sketch::get_type())

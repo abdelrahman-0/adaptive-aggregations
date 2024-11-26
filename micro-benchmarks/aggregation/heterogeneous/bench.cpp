@@ -1,26 +1,12 @@
 #include "config.h"
 
-// balanced qthread-to-nthread mapping
-auto find_dedicated_nthread(std::integral auto qthread_id)
-{
-    u16 qthreads_per_nthread = FLAGS_qthreads / FLAGS_nthreads;
-    auto num_fat_nthreads = FLAGS_qthreads % FLAGS_nthreads;
-    auto num_fat_qthreads = (qthreads_per_nthread + 1) * num_fat_nthreads;
-    bool fat_nthread = qthread_id < num_fat_qthreads;
-    qthreads_per_nthread += fat_nthread;
-    auto dedicated_nthread = fat_nthread ? (qthread_id / qthreads_per_nthread) : num_fat_nthreads + ((qthread_id - num_fat_qthreads) / qthreads_per_nthread);
-    auto qthread_local_id =
-        fat_nthread ? (qthread_id - dedicated_nthread * qthreads_per_nthread) : (qthread_id - num_fat_nthreads - dedicated_nthread * qthreads_per_nthread);
-    return std::make_tuple(dedicated_nthread, qthreads_per_nthread, qthread_local_id);
-}
-
 /* ----------- MAIN ----------- */
 
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    auto subnet = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
+    auto subnet    = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
 
     if (FLAGS_nthreads > FLAGS_qthreads) {
@@ -33,7 +19,7 @@ int main(int argc, char* argv[])
 
     u16 node_id = local_node.get_id();
     Table table{node_id};
-    auto& swips = table.get_swips();
+    auto& swips         = table.get_swips();
 
     // prepare cache
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
@@ -42,9 +28,9 @@ int main(int argc, char* argv[])
 
     /* ----------- THREAD SETUP ----------- */
 
-    auto npeers = FLAGS_nodes - 1;
+    auto npeers      = FLAGS_nodes - 1;
     FLAGS_partitions = next_power_2(FLAGS_partitions);
-    FLAGS_slots = next_power_2(FLAGS_slots);
+    FLAGS_slots      = next_power_2(FLAGS_slots);
 
     DEBUGGING(std::atomic<u64> pages_recv{0});
     // barriers
@@ -58,7 +44,7 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_nthreads + FLAGS_qthreads + 1);
     std::atomic<bool> global_ht_construction_complete{false};
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
-    SketchGlobal sketch_glob;
+    Sketch sketch_glob;
     HashtableGlobal ht_glob;
 
     tbb::concurrent_vector<u64> times_preagg(FLAGS_qthreads);
@@ -99,14 +85,13 @@ int main(int argc, char* argv[])
             IngressManager manager_recv{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             BlockAllocIngress alloc_ingress{npeers * 10, FLAGS_maxalloc * qthreads_per_nthread};
             BlockAllocEgress alloc_egress{npeers * 10, FLAGS_maxalloc * qthreads_per_nthread};
-            thread_grps[nthread_id].egress_mgr = &manager_send;
-            thread_grps[nthread_id].ingress_mgr = &manager_recv;
-            thread_grps[nthread_id].alloc_ingress = &alloc_ingress;
-            thread_grps[nthread_id].alloc_egress = &alloc_egress;
+            thread_grps[nthread_id].egress_mgr                             = &manager_send;
+            thread_grps[nthread_id].ingress_mgr                            = &manager_recv;
+            thread_grps[nthread_id].alloc_ingress                          = &alloc_ingress;
+            thread_grps[nthread_id].alloc_egress                           = &alloc_egress;
 
-            const auto& sketches_ingress = thread_grps[nthread_id].sketches_ingress;
-            std::function<void(PageHashtable*, u32)> ingress_page_consumer_fn = [&alloc_ingress, &storage_glob, &sketches_ingress, &manager_recv](PageHashtable* page,
-                                                                                                                                               u32 dst) {
+            const auto& sketches_ingress                                   = thread_grps[nthread_id].sketches_ingress;
+            std::function<void(PageResult*, u32)> ingress_page_consumer_fn = [&alloc_ingress, &storage_glob, &sketches_ingress, &manager_recv](PageResult* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
                     manager_recv.post_recvs(dst, sketches_ingress.data() + dst);
@@ -120,17 +105,15 @@ int main(int argc, char* argv[])
                 storage_glob.add_page(page, page->get_part_no());
             };
 
-            auto& peers_done = thread_grps[nthread_id].peers_done;
-            std::function<void(Sketch*, u32)> ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](Sketch* sketch, u32) {
+            auto& peers_done                         = thread_grps[nthread_id].peers_done;
+            std::function ingress_sketch_consumer_fn = [&sketch_glob, &peers_done](const Sketch* sketch, u32) {
                 sketch_glob.merge_concurrent(*sketch);
-                peers_done++;
+                ++peers_done;
             };
             manager_recv.register_consumer_fn(ingress_page_consumer_fn);
             manager_recv.register_consumer_fn(ingress_sketch_consumer_fn);
 
-            std::function<void(PageHashtable*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageHashtable* page) {
-                thread_grps[nthread_id].alloc_egress->return_page(page);
-            };
+            std::function<void(PageResult*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageResult* page) { thread_grps[nthread_id].alloc_egress->return_page(page); };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
 
             // barrier
@@ -164,9 +147,8 @@ int main(int argc, char* argv[])
 
     std::vector<std::jthread> threads_query;
     for (u16 qthread_id : range(FLAGS_qthreads)) {
-        threads_query.emplace_back([=, &local_node, &barrier_preaggregation, &current_swip, &swips, &table, &barrier_start, &barrier_end, &times_preagg, &thread_grps,
-                                    &storage_glob, &sketch_glob, &pages_pre_agg, &global_ht_construction_complete, &ht_glob DEBUGGING(, &tuples_local, &tuples_sent,
-                                                                                                                             &tuples_received, &pages_recv)]() {
+        threads_query.emplace_back([=, &local_node, &barrier_preaggregation, &current_swip, &swips, &table, &barrier_start, &barrier_end, &times_preagg, &thread_grps, &storage_glob,
+                                    &sketch_glob, &pages_pre_agg, &global_ht_construction_complete, &ht_glob DEBUGGING(, &tuples_local, &tuples_sent, &tuples_received, &pages_recv)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(qthread_id + FLAGS_nthreads);
             }
@@ -174,8 +156,8 @@ int main(int argc, char* argv[])
             /* -------- THREAD MAPPING -------- */
 
             auto [dedicated_network_thread, qthreads_per_nthread, qthread_local_id] = find_dedicated_nthread(qthread_id);
-            IngressManager& manager_recv = *thread_grps[dedicated_network_thread].ingress_mgr;
-            EgressManager& manager_send = *thread_grps[dedicated_network_thread].egress_mgr;
+            IngressManager& manager_recv                                            = *thread_grps[dedicated_network_thread].ingress_mgr;
+            EgressManager& manager_send                                             = *thread_grps[dedicated_network_thread].egress_mgr;
             DEBUGGING(print("assigning qthread", qthread_id, "to nthread", dedicated_network_thread));
 
             /* ----------- BUFFERS ----------- */
@@ -198,14 +180,14 @@ int main(int argc, char* argv[])
             u32 part_offset{0};
             std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
             for (u64 part_no : range(FLAGS_partitions)) {
-                u16 dst = (part_no * FLAGS_nodes) / FLAGS_partitions;
-                auto parts_per_dst = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
-                bool final_dst_partition = ((part_no - part_offset + 1) % parts_per_dst) == 0;
-                part_offset += final_dst_partition ? parts_per_dst : 0;
+                u16 dst                   = (part_no * FLAGS_nodes) / FLAGS_partitions;
+                auto parts_per_dst        = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
+                bool final_dst_partition  = ((part_no - part_offset + 1) % parts_per_dst) == 0;
+                part_offset              += final_dst_partition ? parts_per_dst : 0;
                 // partition number is local to the recipient node
-                auto final_part_no = FLAGS_consumepart ? part_no - (dst * parts_per_dst) : 0;
+                auto final_part_no        = FLAGS_consumepart ? part_no - (dst * parts_per_dst) : 0;
                 if (dst == node_id) {
-                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageHashtable* page, bool) {
+                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
                         if (not page->empty()) {
                             page->retire();
                             storage_glob.add_page(page, final_part_no);
@@ -213,8 +195,8 @@ int main(int argc, char* argv[])
                     };
                 }
                 else {
-                    auto actual_dst = dst - (dst > node_id);
-                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageHashtable* page, bool is_last = false) {
+                    auto actual_dst       = dst - (dst > node_id);
+                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageResult* page, bool is_last = false) {
                         if (not page->empty() or final_dst_partition) {
                             page->set_part_no(final_part_no);
                             page->retire();
@@ -237,7 +219,7 @@ int main(int argc, char* argv[])
             auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
-                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     ht_loc.insert(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
@@ -246,7 +228,7 @@ int main(int argc, char* argv[])
             auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
-                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     inserter_loc.insert(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
@@ -254,7 +236,7 @@ int main(int argc, char* argv[])
 
             std::function<void(const PageTable&)> process_local_page = insert_into_ht;
 
-            auto process_page_glob = [&ht_glob](PageHashtable& page) {
+            auto process_page_glob                                   = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.get_num_tuples(); ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -269,14 +251,13 @@ int main(int argc, char* argv[])
 
             // morsel loop
             u64 morsel_begin, morsel_end;
-            const u64 nswips = swips.size();
+            const u64 nswips  = swips.size();
             auto* swips_begin = swips.data();
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
+                morsel_end        = std::min(morsel_begin + FLAGS_morselsz, nswips);
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx =
-                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
+                auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
                 // submit I/O requests before processing in-memory pages to overlap I/O with computation
                 thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
@@ -288,9 +269,9 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
 
-                if (do_adaptive_preagg and FLAGS_adapre and ht_loc.is_useless()) {
+                if (FLAGS_adapre and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    FLAGS_adapre = false;
+                    FLAGS_adapre       = false;
                     process_local_page = insert_into_buffer;
                 }
             }
@@ -318,7 +299,7 @@ int main(int argc, char* argv[])
             }
             else {
                 partition_buffer.finalize(false);
-                thread_grps[dedicated_network_thread].qthreads_added_last_page++;
+                ++thread_grps[dedicated_network_thread].qthreads_added_last_page;
                 if (++thread_grps[dedicated_network_thread].qthreads_added_last_page != qthreads_per_nthread - 1) {
                     thread_grps[dedicated_network_thread].all_qthreads_added_last_page = true;
                     thread_grps[dedicated_network_thread].all_qthreads_added_last_page.notify_one();
@@ -336,7 +317,7 @@ int main(int argc, char* argv[])
                 // thread 0 initializes global ht
                 ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
                 // reset morsel
-                current_swip = 0;
+                current_swip                    = 0;
                 global_ht_construction_complete = true;
                 global_ht_construction_complete.notify_all();
             }
@@ -371,8 +352,7 @@ int main(int argc, char* argv[])
 
             if (qthread_id == 0) {
                 if (FLAGS_consumepart) {
-                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(),
-                                  [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
                 }
                 else {
                     pages_pre_agg = storage_glob.partition_pages[0].size();
@@ -403,19 +383,19 @@ int main(int argc, char* argv[])
         .log("operator", "aggregation"s)
         .log("implementation", "homogeneous"s)
         .log("allocator", MemAlloc::get_type())
-        .log("schema", get_schema_str<SCHEMA>())
-        .log("group keys", get_schema_str<GRP_KEYS>())
+        .log("schema", get_schema_str<TABLE_SCHEMA>())
+        .log("group keys", GPR_KEYS_IDX)
         .log("aggregation keys", get_schema_str<AGG_KEYS>())
         .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("max tuples per page (hashtable)", PageHashtable::max_tuples_per_page)
+        .log("max tuples per page (hashtable)", PageResult::max_tuples_per_page)
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch (local)", Sketch::get_type())
-        .log("sketch (global)", SketchGlobal::get_type())
+        .log("sketch (global)", Sketch::get_type())
         .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", do_adaptive_preagg)
+        .log("adaptive pre-aggregation", FLAGS_adapre)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
@@ -439,11 +419,10 @@ int main(int argc, char* argv[])
     u64 count{0};
     u64 inserts{0};
     for (u64 i : range(ht_glob.size_mask + 1)) {
-        auto slot = ht_glob.slots[i].load();
-        if (slot) {
-            auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-            count += slot_count;
-            inserts++;
+        if (auto slot = ht_glob.slots[i].load()) {
+            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+            count           += slot_count;
+            ++inserts;
         }
     }
     print("INSERTS:", inserts);
