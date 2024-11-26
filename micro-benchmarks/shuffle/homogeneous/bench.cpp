@@ -22,10 +22,10 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     /* --------------------------------------- */
-    auto current_swip                    = std::atomic{0ul};
+    auto current_swip = std::atomic{0ul};
     /* --------------------------------------- */
-    FLAGS_partitions                     = next_power_2(FLAGS_partitions) * FLAGS_nodes;
-    auto npeers                          = u32{FLAGS_nodes - 1};
+    FLAGS_partitions  = next_power_2(FLAGS_partitions) * FLAGS_nodes;
+    auto npeers       = u32{FLAGS_nodes - 1};
     DEBUGGING(auto tuples_processed = std::atomic{0ul});
     DEBUGGING(auto tuples_sent = std::atomic{0ul});
     DEBUGGING(auto tuples_received = std::atomic{0ul});
@@ -112,7 +112,6 @@ int main(int argc, char* argv[])
             /* --------------------------------------- */
             auto block_alloc                      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
             auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
-            auto partition_groups                 = u32{FLAGS_nodes};
             auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer};
             /* --------------------------------------- */
             std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_page(pg); };
