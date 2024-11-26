@@ -11,7 +11,7 @@ int main(int argc, char* argv[])
 
     u16 node_id = local_node.get_id();
     Table table{node_id};
-    auto& swips = table.get_swips();
+    auto& swips         = table.get_swips();
 
     // prepare cache
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
@@ -21,7 +21,7 @@ int main(int argc, char* argv[])
     /* ----------- SETUP ----------- */
 
     FLAGS_partitions = next_power_2(FLAGS_partitions);
-    FLAGS_slots = next_power_2(FLAGS_slots);
+    FLAGS_slots      = next_power_2(FLAGS_slots);
 
     // control atomics
     ::pthread_barrier_t barrier_start{};
@@ -34,7 +34,7 @@ int main(int argc, char* argv[])
     std::atomic<bool> global_ht_construction_complete{false};
     std::atomic<u64> pages_pre_agg{0};
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
-    SketchGlobal sketch_glob;
+    Sketch sketch_glob;
     HashtableGlobal ht_glob;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
 
@@ -70,8 +70,8 @@ int main(int argc, char* argv[])
 
             std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
-                auto final_part_no = FLAGS_consumepart ? part_no : 0;
-                eviction_fns[part_no] = [final_part_no, &storage_glob](PageBuffer* page, bool) {
+                auto final_part_no    = FLAGS_consumepart ? part_no : 0;
+                eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
                     if (not page->empty()) {
                         page->retire();
                         storage_glob.add_page(page, final_part_no);
@@ -89,7 +89,7 @@ int main(int argc, char* argv[])
             auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
-                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     ht_loc.insert(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
@@ -97,7 +97,7 @@ int main(int argc, char* argv[])
             auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
-                    auto agg = std::make_tuple<AGG_KEYS>(AGG_VALS);
+                    auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     inserter_loc.insert(group, agg);
                 }
                 DEBUGGING(local_tuples_processed += page.num_tuples);
@@ -105,7 +105,7 @@ int main(int argc, char* argv[])
 
             std::function<void(const PageTable&)> process_local_page = insert_into_ht;
 
-            auto process_page_glob = [&ht_glob](PageBuffer& page) {
+            auto process_page_glob                                   = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -121,14 +121,13 @@ int main(int argc, char* argv[])
 
             // morsel loop
             u64 morsel_begin, morsel_end;
-            const u64 nswips = swips.size();
+            const u64 nswips  = swips.size();
             auto* swips_begin = swips.data();
             while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < nswips) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
+                morsel_end        = std::min(morsel_begin + FLAGS_morselsz, nswips);
 
                 // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx =
-                    std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
+                auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
                 // submit io requests before processing in-memory pages to overlap I/O with computation
                 thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
@@ -143,9 +142,9 @@ int main(int argc, char* argv[])
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
 
-                if (do_adaptive_preagg and FLAGS_adapre and ht_loc.is_useless()) {
+                if (FLAGS_adapre and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    FLAGS_adapre = false;
+                    FLAGS_adapre       = false;
                     process_local_page = insert_into_buffer;
                 }
             }
@@ -161,7 +160,7 @@ int main(int argc, char* argv[])
                 // thread 0 initializes global ht
                 ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
                 // reset morsel
-                current_swip = 0;
+                current_swip                    = 0;
                 global_ht_construction_complete = true;
                 global_ht_construction_complete.notify_all();
             }
@@ -195,8 +194,7 @@ int main(int argc, char* argv[])
             /* ----------- END ----------- */
             if (thread_id == 0) {
                 if (FLAGS_consumepart) {
-                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(),
-                                  [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
                 }
                 else {
                     pages_pre_agg = storage_glob.partition_pages[0].size();
@@ -224,19 +222,18 @@ int main(int argc, char* argv[])
         .log("operator", "aggregation"s)
         .log("implementation", "local"s)
         .log("allocator", MemAlloc::get_type())
-        .log("schema", get_schema_str<SCHEMA>())
+        .log("schema", get_schema_str<TABLE_SCHEMA>())
         .log("group keys", get_schema_str<GRP_KEYS>())
         .log("aggregation keys", get_schema_str<AGG_KEYS>())
         .log("page size (local)", defaults::local_page_size)
         .log("max tuples per page (local)", PageTable::max_tuples_per_page)
         .log("page size (hashtable)", defaults::hashtable_page_size)
-        .log("max tuples per page (hashtable)", PageBuffer::max_tuples_per_page)
+        .log("max tuples per page (hashtable)", PageResult::max_tuples_per_page)
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
-        .log("sketch (local)", SketchLocal::get_type())
-        .log("sketch (global)", SketchGlobal::get_type())
+        .log("sketch", Sketch::get_type())
         .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", do_adaptive_preagg)
+        .log("adaptive pre-aggregation", FLAGS_adapre)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
@@ -252,6 +249,19 @@ int main(int argc, char* argv[])
         .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
         .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
+
+    print("global ht size", ht_glob.size_mask + 1);
+    u64 count{0};
+    u64 inserts{0};
+    for (u64 i : range(ht_glob.size_mask + 1)) {
+        if (auto slot = ht_glob.slots[i].load()) {
+            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+            count           += slot_count;
+            ++inserts;
+        }
+    }
+    print("INSERTS:", inserts);
+    print("COUNT:", count);
 
     LIKWID_MARKER_CLOSE;
 }

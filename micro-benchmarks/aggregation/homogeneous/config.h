@@ -20,14 +20,6 @@
 
 using namespace std::chrono_literals;
 /* --------------------------------------- */
-DEFINE_uint32(threads, 1, "number of threads to use");
-DEFINE_uint32(slots, 8192, "number of slots to use per partition");
-DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
-DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
-DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
-DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
-DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
-/* --------------------------------------- */
 #define AGG_VALS 1
 #define AGG_KEYS u64
 #define GPR_KEYS_IDX 0
@@ -75,3 +67,11 @@ using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggreg
 #endif
 /* --------------------------------------- */
 static_assert(idx_mode_slots != ht::NO_IDX);
+/* --------------------------------------- */
+DEFINE_uint32(threads, 1, "number of threads to use");
+DEFINE_uint32(slots, PageResult::max_tuples_per_page * 2, "number of slots to use per partition");
+DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
+DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
+DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
+DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
+DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
