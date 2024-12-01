@@ -1,6 +1,6 @@
 // Abdelrahman Adel (2024)
-
 #pragma once
+
 #include <atomic>
 #include <cmath>
 #include <cstdint>
@@ -25,15 +25,15 @@
 namespace ht {
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t, bool is_grouped, bool is_heterogeneous>
-struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc> {
-    using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc>;
+struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, false, true> {
+    using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, false, true>;
     using base_t::slots;
     using typename base_t::idx_t;
     using typename base_t::page_t;
     using typename base_t::slot_idx_t;
     using block_alloc_t = std::conditional_t<is_heterogeneous, mem::BlockAllocatorConcurrent<page_t, Alloc>, mem::BlockAllocatorNonConcurrent<page_t, Alloc>>;
-    using part_buf_t = buf::EvictionBuffer<page_t, block_alloc_t>;
-    using inserter_t = buf::PartitionedAggregationInserter<page_t, entry_mode, part_buf_t, sketch_t, is_grouped>;
+    using part_buf_t    = buf::EvictionBuffer<page_t, block_alloc_t>;
+    using inserter_t    = buf::PartitionedAggregationInserter<page_t, entry_mode, part_buf_t, sketch_t, is_grouped>;
 
   protected:
     // global hashtables are non-inserters
@@ -70,9 +70,9 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
 };
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t,
-          bool is_grouped, bool is_heterogeneous = false>
+          bool is_grouped, bool is_heterogeneous>
 requires(entry_mode != NO_IDX and slots_mode != NO_IDX)
-struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
+struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous>;
     using base_t::clear_slots;
     using base_t::group_found;
@@ -98,12 +98,12 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
     requires(slots_mode == DIRECT)
     {
         // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
-        u64 part_no = mod >> partition_shift;
-        auto* part_page = part_buffer.get_partition_page(part_no);
+        u64 mod          = key_hash & ht_mask;
+        u64 part_no      = mod >> partition_shift;
+        auto* part_page  = part_buffer.get_partition_page(part_no);
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
-        auto offset = next_offset;
+        auto offset      = next_offset;
         while (next_offset) {
             // walk chain of slots
             if (next_offset->get_group() == key) {
@@ -125,12 +125,12 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
     requires(slots_mode != DIRECT and slots_mode == entry_mode)
     {
         // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
-        u64 part_no = mod >> partition_shift;
-        auto* part_page = part_buffer.get_partition_page(part_no);
+        u64 mod          = key_hash & ht_mask;
+        u64 part_no      = mod >> partition_shift;
+        auto* part_page  = part_buffer.get_partition_page(part_no);
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
-        auto offset = next_offset;
+        auto offset      = next_offset;
         while (next_offset) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
@@ -152,12 +152,12 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
     requires(slots_mode != DIRECT and entry_mode == DIRECT)
     {
         // extract lower bits from hash
-        u64 mod = key_hash & ht_mask;
-        u64 part_no = mod >> partition_shift;
-        auto* part_page = part_buffer.get_partition_page(part_no);
+        u64 mod          = key_hash & ht_mask;
+        u64 part_no      = mod >> partition_shift;
+        auto* part_page  = part_buffer.get_partition_page(part_no);
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
-        auto offset = next_offset;
+        auto offset      = next_offset;
         while (next_offset) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
@@ -188,7 +188,7 @@ struct PartitionedChainedAggregationHashtable : public PartitionedAggregationHas
 };
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t,
-          bool is_grouped, bool is_salted = true, bool is_heterogeneous = false>
+          bool is_salted, bool is_grouped, bool is_heterogeneous>
 requires(not is_salted or entry_mode != INDIRECT_16) // need at least 32 bits for 16-bit salt
 struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous>;
@@ -224,14 +224,14 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     requires(slots_mode == DIRECT)
     {
         // extract top bits from hash
-        u64 mod = key_hash >> mod_shift;
-        u64 part_no = mod >> partition_shift;
+        u64 mod            = key_hash >> mod_shift;
+        u64 part_no        = mod >> partition_shift;
         u64 partition_mask = part_no << partition_shift;
-        auto* part_page = part_buffer.get_partition_page(part_no);
-        slot_idx_t slot = slots[mod];
+        auto* part_page    = part_buffer.get_partition_page(part_no);
+        slot_idx_t slot    = slots[mod];
 
         // use bottom bits for salt
-        u16 hash_prefix = static_cast<u16>(key_hash);
+        u16 hash_prefix    = static_cast<u16>(key_hash);
 
         // walk sequence of slots
         while (slot) {
@@ -249,7 +249,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
                 }
             }
 
-            mod = (mod + 1) & slots_mask;
+            mod  = (mod + 1) & slots_mask;
             slot = slots[partition_mask | mod];
         }
         auto [ht_entry_raw, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
@@ -274,14 +274,14 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     {
         static constexpr slot_idx_t slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
         // extract top bits from hash
-        u64 mod = key_hash >> mod_shift;
-        u64 part_no = mod >> partition_shift;
-        u64 partition_mask = part_no << partition_shift;
-        auto* part_page = part_buffer.get_partition_page(part_no);
-        slot_idx_t slot = slots[mod];
+        u64 mod                                   = key_hash >> mod_shift;
+        u64 part_no                               = mod >> partition_shift;
+        u64 partition_mask                        = part_no << partition_shift;
+        auto* part_page                           = part_buffer.get_partition_page(part_no);
+        slot_idx_t slot                           = slots[mod];
 
         // use bottom bits for salt
-        u16 hash_prefix = static_cast<u16>(key_hash);
+        u16 hash_prefix                           = static_cast<u16>(key_hash);
 
         // walk sequence of slots
         while (slot) {
@@ -299,7 +299,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
                 }
             }
 
-            mod = (mod + 1) & slots_mask;
+            mod  = (mod + 1) & slots_mask;
             slot = slots[partition_mask | mod];
         }
         auto [ht_entry, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);

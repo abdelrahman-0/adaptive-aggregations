@@ -74,7 +74,7 @@ class BlockAllocator {
         auto* block = Alloc::template alloc<page_t>(block_sz * sizeof(page_t));
         auto muster = BlockAllocation{block_sz, (consume ? 1u : 0u), block};
         allocations.push_back(muster);
-        allocation_budget--;
+        --allocation_budget;
         return block;
     }
 
@@ -117,7 +117,7 @@ class BlockAllocatorNonConcurrent : public BlockAllocator<page_t, Alloc, false> 
     }
 };
 
-template <typename page_t, concepts::is_mem_allocator Alloc = mem::MMapAllocator<true>>
+template <typename page_t, concepts::is_mem_allocator Alloc = MMapAllocator<true>>
 class BlockAllocatorConcurrent : public BlockAllocator<page_t, Alloc, true> {
     using base_t = BlockAllocator<page_t, Alloc, true>;
     using base_t::allocate;
@@ -125,7 +125,9 @@ class BlockAllocatorConcurrent : public BlockAllocator<page_t, Alloc, true> {
     using base_t::free_pages;
     using base_t::try_bump_pointer;
 
-    std::atomic<bool> allocation_lock;
+    // need version to avoid ABA-problem
+    std::atomic<u64> version{0};
+    std::atomic<bool> allocation_lock{false};
 
   public:
     BlockAllocatorConcurrent(u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
@@ -135,15 +137,22 @@ class BlockAllocatorConcurrent : public BlockAllocator<page_t, Alloc, true> {
     page_t* get_page()
     {
     retry:;
+        const u64 old_version = version.load();
         page_t* page;
-        if ((page = try_bump_pointer()) or free_pages.try_pop(page)) {
+        if (((page = try_bump_pointer())) or free_pages.try_pop(page)) {
             return page;
         }
-        else if (allocation_budget) {
+        if (allocation_budget) {
             // allocate new block
-            bool expected{false};
-            if (allocation_lock.compare_exchange_strong(expected, true)) {
-                auto* result = allocate();
+            if (bool expected{false}; allocation_lock.compare_exchange_strong(expected, true)) {
+                // verify version
+                if (old_version != version.load()) {
+                    allocation_lock = false;
+                    allocation_lock.notify_all();
+                    goto retry;
+                }
+                ++version;
+                auto* result    = allocate();
                 allocation_lock = false;
                 allocation_lock.notify_all();
                 return result;

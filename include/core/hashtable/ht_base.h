@@ -7,14 +7,14 @@ namespace ht {
 
 using namespace std::string_literals;
 
-template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool is_concurrent = false, bool next_first = true>
+template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, concepts::is_mem_allocator Alloc, bool is_concurrent, bool next_first>
 struct BaseAggregationHashtable {
-    using page_t = PageAggregation<key_t, value_t, entry_mode, slots_mode == DIRECT, true>;
-    using entry_t = page_t::entry_t;
-    using idx_t = page_t::idx_t;
-    // need to distinguish index type of slots from index type of entries on page
+    using page_t         = PageAggregation<key_t, value_t, entry_mode, slots_mode == DIRECT, true>;
+    using entry_t        = typename page_t::entry_t;
+    using idx_t          = typename page_t::idx_t;
+    // need to distinguish index mode of slots from index mode of entries on page
     using slot_idx_raw_t = agg_slot_idx_t<key_t, value_t, entry_mode, slots_mode, next_first>;
-    using slot_idx_t = std::conditional_t<is_concurrent, std::atomic<slot_idx_raw_t>, slot_idx_raw_t>;
+    using slot_idx_t     = std::conditional_t<is_concurrent, std::atomic<slot_idx_raw_t>, slot_idx_raw_t>;
 
     slot_idx_t* slots{nullptr};
     u8 mod_shift{0};
@@ -38,7 +38,7 @@ struct BaseAggregationHashtable {
         ASSERT(size == next_power_2(size));
         mod_shift = 64 - __builtin_ctz(size);
         // alloc ht
-        slots = Alloc::template alloc<slot_idx_t>(sizeof(slot_idx_t) * size);
+        slots     = Alloc::template alloc<slot_idx_t>(sizeof(slot_idx_t) * size);
     }
 };
 

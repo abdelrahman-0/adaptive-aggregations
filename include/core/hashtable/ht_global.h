@@ -5,7 +5,7 @@
 namespace ht {
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, concepts::is_mem_allocator Alloc, bool is_multinode>
-struct ConcurrentAggregationHashtable : public BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true> {
+struct ConcurrentAggregationHashtable : BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true> {
     using base_t = BaseAggregationHashtable<key_t, value_t, entry_mode, DIRECT, Alloc, true, true>;
     using base_t::mod_shift;
 
@@ -47,7 +47,7 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
     u64 size_mask{0};
     u8 group_shift;
 
-    void aggregate(key_t& key, value_t& value, idx_t& next, u64 key_hash, entry_t* addr)
+    void aggregate(const key_t& key, const value_t& value, idx_t& next, u64 key_hash, entry_t* addr)
     {
         u64 mod = get_pos(key_hash);
         slot_idx_raw_t head = slots[mod].load();
@@ -105,7 +105,7 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
     {
     }
 
-    void aggregate(key_t& key, value_t& value, u64 key_hash, entry_t* addr)
+    void aggregate(const key_t& key, const value_t& value, u64 key_hash, entry_t* addr)
     {
         u64 mod = get_pos(key_hash);
         slot_idx_raw_t slot = slots[mod].load();
