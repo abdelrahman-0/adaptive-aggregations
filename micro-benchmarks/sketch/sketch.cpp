@@ -21,7 +21,7 @@ void test_sketch(u64 total_grps)
         threads.emplace_back([=, &barrier_start, &barrier_end, &sketch_glob]() {
             std::vector<entry_t> values(FLAGS_n / FLAGS_threads);
             // populate vector with random values
-            librand::random_iterable(values, thread_id * step, (thread_id + 1) * step - 1);
+            librand::random_iterable<true>(values);
 
             sketch_t sketch_loc{};
             ::pthread_barrier_wait(&barrier_start);
@@ -49,7 +49,7 @@ void test_sketch(u64 total_grps)
 
     auto error_percentage = (100.0 * std::abs(static_cast<s64>(total_grps) - static_cast<s64>(estimate))) / total_grps;
 
-    Logger{FLAGS_print_header}
+    Logger{FLAGS_print_header, FLAGS_csv}
         .log("type", sketch_t::get_type())
         .log("num entries", FLAGS_n)
         .log("num groups", total_grps)
