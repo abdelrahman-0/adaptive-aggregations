@@ -3,6 +3,8 @@
 #include <ranges>
 
 #define ALWAYS_INLINE __attribute__((always_inline)) inline
+#define HOT_FUNC __attribute__((hot))
+#define COLD_FUNC __attribute__((hot))
 #define DEFAULTS_AUTO static constexpr auto
 #define CACHELINE_SZ 64
 
