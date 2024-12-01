@@ -1,23 +1,33 @@
 #pragma once
-
+/* --------------------------------------- */
 #include <mutex>
 #include <string>
 #include <utility>
 #include <vector>
-
+/* --------------------------------------- */
 #include "utils/utils.h"
-
+/* --------------------------------------- */
 class Logger {
-  private:
     std::vector<std::string> header{};
     std::vector<std::string> row{};
     std::mutex mutex{};
     bool print_header{};
     bool csv_output{};
+    /* --------------------------------------- */
+    template <typename T>
+    static std::string normalize(const T& val)
+    {
+        if constexpr (std::is_same_v<std::string, T>) {
+            return val;
+        }
+        else {
+            return std::to_string(val);
+        }
+    }
 
   public:
     explicit Logger(bool print_header, bool csv_output) : print_header(print_header), csv_output(csv_output) {};
-
+    /* --------------------------------------- */
     ~Logger()
     {
         if (csv_output) {
@@ -34,24 +44,18 @@ class Logger {
             }
         }
     }
-
+    /* --------------------------------------- */
     template <typename... T>
     requires(std::is_same_v<std::string, T> and ...) or ((requires(T... t) { (std::to_string(t), ...); }))
-    auto& log(const std::string& param, T&&... val)
+    auto& log(const std::string& param, T&&... vals)
     {
-        auto _   = std::unique_lock{mutex};
+        auto _ = std::unique_lock{mutex};
         using namespace std::string_literals;
-        auto str = ""s;
         header.push_back(param);
-        if constexpr ((std::is_same_v<std::string, T>, ...)) {
-            str = (... + (val + ','));
-        }
-        else {
-            str = (... + (std::to_string(val) + ','));
-        }
+        auto str = (... + (normalize(vals) + ','));
         // remove trailing comma
         str.pop_back();
-        if constexpr (sizeof...(val) > 1) {
+        if constexpr (sizeof...(vals) > 1) {
             str = "\""s + str + "\""s;
         }
         row.push_back(str);
