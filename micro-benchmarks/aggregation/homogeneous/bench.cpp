@@ -83,13 +83,13 @@ int main(int argc, char* argv[])
             auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageResult* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
-                    manager_recv.post_recvs(dst, remote_sketches.data() + dst);
+                    manager_recv.recv(dst, remote_sketches.data() + dst);
                     if (page->empty()) {
                         return;
                     }
                 }
                 else {
-                    manager_recv.post_recvs(dst, recv_alloc.get_page());
+                    manager_recv.recv(dst, recv_alloc.get_object());
                 }
                 storage_glob.add_page(page, page->get_part_no());
             }};
@@ -144,7 +144,7 @@ int main(int argc, char* argv[])
             auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer, partition_groups};
             auto ht_loc                           = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
             /* --------------------------------------- */
-            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_page(pg); };
+            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_object(pg); };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
             /* --------------------------------------- */
             auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
@@ -176,7 +176,7 @@ int main(int argc, char* argv[])
             Stopwatch swatch_preagg{};
             swatch_preagg.start();
             for (u16 dst : range(npeers)) {
-                manager_recv.post_recvs(dst, recv_alloc.get_page());
+                manager_recv.recv(dst, recv_alloc.get_object());
             }
             /* --------------------------------------- */
             u64 morsel_begin, morsel_end;

@@ -50,10 +50,10 @@ int main(int argc, char* argv[])
     tbb::concurrent_vector<u64> times_preagg(FLAGS_qthreads);
 
     // networking
-    std::vector<QueryThreadGroup> thread_grps(FLAGS_nthreads, QueryThreadGroup{npeers});
+    std::vector thread_grps(FLAGS_nthreads, QueryThreadGroup{npeers});
     std::vector<std::jthread> threads_network{};
     for (u16 nthread_id : range(FLAGS_nthreads)) {
-        threads_network.emplace_back([=, &local_node, &thread_grps, &storage_glob, &sketch_glob, &barrier_network_setup, &barrier_end DEBUGGING(, &pages_recv)]() {
+        threads_network.emplace_back([=, &local_node, &thread_grps, &storage_glob, &sketch_glob, &barrier_network_setup, &barrier_end DEBUGGING(, &pages_recv)] {
             if (FLAGS_pin) {
                 local_node.pin_thread(nthread_id);
             }
@@ -94,13 +94,13 @@ int main(int argc, char* argv[])
             std::function<void(PageResult*, u32)> ingress_page_consumer_fn = [&alloc_ingress, &storage_glob, &sketches_ingress, &manager_recv](PageResult* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
-                    manager_recv.post_recvs(dst, sketches_ingress.data() + dst);
+                    manager_recv.recv(dst, sketches_ingress.data() + dst);
                     if (page->empty()) {
                         return;
                     }
                 }
                 else {
-                    manager_recv.post_recvs(dst, alloc_ingress.get_page());
+                    manager_recv.recv(dst, alloc_ingress.get_object());
                 }
                 storage_glob.add_page(page, page->get_part_no());
             };
@@ -113,14 +113,14 @@ int main(int argc, char* argv[])
             manager_recv.register_consumer_fn(ingress_page_consumer_fn);
             manager_recv.register_consumer_fn(ingress_sketch_consumer_fn);
 
-            std::function<void(PageResult*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageResult* page) { thread_grps[nthread_id].alloc_egress->return_page(page); };
+            std::function<void(PageResult*)> egress_page_consumer_fn = [nthread_id, &thread_grps](PageResult* page) { thread_grps[nthread_id].alloc_egress->return_object(page); };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
 
             // barrier
             ::pthread_barrier_wait(&barrier_network_setup);
 
             for (u16 dst : range(npeers)) {
-                manager_recv.post_recvs(dst, alloc_ingress.get_page());
+                manager_recv.recv(dst, alloc_ingress.get_object());
             }
 
             // network loop
@@ -156,7 +156,6 @@ int main(int argc, char* argv[])
             /* -------- THREAD MAPPING -------- */
 
             auto [dedicated_network_thread, qthreads_per_nthread, qthread_local_id] = find_dedicated_nthread(qthread_id);
-            IngressManager& manager_recv                                            = *thread_grps[dedicated_network_thread].ingress_mgr;
             EgressManager& manager_send                                             = *thread_grps[dedicated_network_thread].egress_mgr;
             DEBUGGING(print("assigning qthread", qthread_id, "to nthread", dedicated_network_thread));
 
@@ -352,7 +351,7 @@ int main(int argc, char* argv[])
 
             if (qthread_id == 0) {
                 if (FLAGS_consumepart) {
-                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+                    std::ranges::for_each(storage_glob.partition_pages, [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
                 }
                 else {
                     pages_pre_agg = storage_glob.partition_pages[0].size();

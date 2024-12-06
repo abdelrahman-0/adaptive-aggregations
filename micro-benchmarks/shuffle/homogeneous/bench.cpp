@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
                     peers_done++;
                 }
                 else {
-                    manager_recv.post_recvs(dst, recv_alloc.get_page());
+                    manager_recv.recv(dst, recv_alloc.get_object());
                 }
             }};
             manager_recv.register_consumer_fn(ingress_page_consumer_fn);
@@ -114,7 +114,7 @@ int main(int argc, char* argv[])
             auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
             auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer};
             /* --------------------------------------- */
-            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_page(pg); };
+            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_object(pg); };
             manager_send.register_consumer_fn(egress_page_consumer_fn);
             /* --------------------------------------- */
             auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
@@ -128,7 +128,7 @@ int main(int argc, char* argv[])
             // barrier
             ::pthread_barrier_wait(&barrier_start);
             for (u16 dst : range(npeers)) {
-                manager_recv.post_recvs(dst, recv_alloc.get_page());
+                manager_recv.recv(dst, recv_alloc.get_object());
             }
             /* --------------------------------------- */
             u64 morsel_begin, morsel_end;

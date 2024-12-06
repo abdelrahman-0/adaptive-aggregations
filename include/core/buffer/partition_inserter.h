@@ -27,7 +27,7 @@ struct PartitionedTupleInserter {
   public:
     PartitionedTupleInserter(u32 _npartitions, part_buf_t& _part_buffer) : part_buffer(_part_buffer), partition_shift(64 - __builtin_ctz(_npartitions))
     {
-        ASSERT(_npartitions == next_power_2(_npartitions));
+        ENSURE(_npartitions == next_power_2(_npartitions));
     }
 
     [[maybe_unused]]
@@ -76,8 +76,8 @@ struct PartitionedAggregationInserter {
     requires(is_grouped)
         : group_data(_npartgroups), part_buffer(_part_buffer), group_shift(__builtin_ctz(_npartitions / _npartgroups)), partition_shift(64 - __builtin_ctz(_npartitions))
     {
-        ASSERT(_npartitions == next_power_2(_npartitions));
-        ASSERT(_npartgroups == next_power_2(_npartgroups));
+        ENSURE(_npartitions == next_power_2(_npartitions));
+        ENSURE(_npartgroups == next_power_2(_npartgroups));
         for (auto& grp : group_data) {
             grp = PartitionGroup{sketch_t{_npartgroups}};
         }
@@ -87,7 +87,7 @@ struct PartitionedAggregationInserter {
     requires(not is_grouped)
         : part_buffer(_part_buffer), partition_shift(64 - __builtin_ctz(_npartitions))
     {
-        ASSERT(_npartitions == next_power_2(_npartitions));
+        ENSURE(_npartitions == next_power_2(_npartitions));
     }
 
     [[maybe_unused]]

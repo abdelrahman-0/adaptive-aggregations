@@ -30,7 +30,4 @@ add_compile_definitions(LOCAL_OPEN_HT)
 add_compile_definitions(GLOBAL_OPEN_HT)
 
 add_subdirectory(micro-benchmarks)
-add_executable(grasshopper_db
-        include/misc/concepts_traits/concepts_common.h
-        include/core/network/connection.h
-        micro-benchmarks/shuffle_old/shuffle.cpp)
+add_subdirectory(adaptive-aggregation)

@@ -35,7 +35,7 @@ struct BaseAggregationHashtable {
   public:
     void initialize(u64 size)
     {
-        ASSERT(size == next_power_2(size));
+        ENSURE(size == next_power_2(size));
         mod_shift = 64 - __builtin_ctz(size);
         // alloc ht
         slots     = Alloc::template alloc<slot_idx_t>(sizeof(slot_idx_t) * size);

@@ -14,7 +14,7 @@ struct ConcurrentAggregationHashtable : BaseAggregationHashtable<key_t, value_t,
 
     void initialize(u64 size, u8 npartgroups = 0)
     {
-        ASSERT(npartgroups == 0 or npartgroups == next_power_2(npartgroups));
+        ENSURE(npartgroups == 0 or npartgroups == next_power_2(npartgroups));
         group_shift = __builtin_ctz(npartgroups);
         base_t::initialize(size);
         size_mask = size - 1;

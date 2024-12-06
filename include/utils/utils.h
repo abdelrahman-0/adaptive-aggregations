@@ -21,6 +21,11 @@ auto range(std::unsigned_integral auto end)
     return std::ranges::iota_view{static_cast<decltype(end)>(0), end};
 }
 
+auto drop(auto&& val)
+{
+    return std::views::drop(val);
+}
+
 // need 64-bit system for pointer tagging
 static_assert(sizeof(void*) == 8);
 

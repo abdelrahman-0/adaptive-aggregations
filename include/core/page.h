@@ -34,7 +34,7 @@ struct Page {
 
     void clear()
     {
-        memset(this, 0, page_size);
+        ::memset(this, 0, page_size);
     }
 
     void clear_tuples()
@@ -43,13 +43,13 @@ struct Page {
     }
 
     template <u16 col_idx>
-    auto& get_attribute_ref(std::unsigned_integral auto row_idx)
+    decltype(auto) get_attribute_ref(std::unsigned_integral auto row_idx)
     {
         return std::get<col_idx>(columns)[row_idx];
     }
 
     template <u16... col_idxs>
-    auto get_tuple(std::unsigned_integral auto row_idx) const
+    decltype(auto) get_tuple(std::unsigned_integral auto row_idx) const
     {
         return std::make_tuple(std::get<col_idxs>(columns)[row_idx]...);
     }
@@ -209,7 +209,7 @@ struct PageRowStore : public Page<page_size, Attribute> {
         num_tuples = ptr - std::get<0>(columns).data();
     }
 
-    auto get_tuple_ref(std::unsigned_integral auto row_idx) -> decltype(auto)
+    decltype(auto) get_tuple_ref(std::unsigned_integral auto row_idx)
     {
         return std::get<0>(columns)[row_idx];
     }

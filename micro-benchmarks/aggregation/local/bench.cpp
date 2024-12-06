@@ -103,9 +103,9 @@ int main(int argc, char* argv[])
                 DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
-            std::function<void(const PageTable&)> process_local_page = insert_into_ht;
+            std::function process_local_page = insert_into_ht;
 
-            auto process_page_glob                                   = [&ht_glob](PageResult& page) {
+            auto process_page_glob           = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }

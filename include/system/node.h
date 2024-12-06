@@ -9,7 +9,6 @@ DECLARE_uint32(nodes);
 namespace sys {
 
 class Node {
-  private:
     NodeTopology topology;
     u32 node_id;
 
@@ -17,7 +16,7 @@ class Node {
     explicit Node(u32 threads) : topology(threads)
     {
         auto env_var = std::getenv("NODE_ID");
-        node_id = env_var ? std::stoul(env_var) : 0;
+        node_id      = env_var ? std::stoul(env_var) : 0;
         print("NODE", node_id, "of", FLAGS_nodes - 1, ":");
         print("--------------");
         topology.init();
@@ -35,7 +34,10 @@ class Node {
         return FLAGS_nodes - 1;
     }
 
-    void pin_thread(int tid) { topology.pin_thread(tid); }
+    void pin_thread(int tid)
+    {
+        topology.pin_thread(tid);
+    }
 };
 
 } // namespace sys

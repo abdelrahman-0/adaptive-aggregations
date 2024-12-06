@@ -2,6 +2,7 @@ add_subdirectory(aggregation)
 add_subdirectory(connection-model)
 add_subdirectory(send-recv)
 add_subdirectory(shuffle_old)
+add_subdirectory(shuffle)
 add_subdirectory(sketch)
 add_subdirectory(thread-model)
 

@@ -49,8 +49,8 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
         : base_t(_npartitions * _nslots), threshold_preagg(_threshold_preagg), part_buffer(_part_buffer), inserter(_inserter), npartitions(_npartitions),
           partition_shift(__builtin_ctz(_nslots))
     {
-        ASSERT(_npartitions == next_power_2(_npartitions));
-        ASSERT(_nslots == next_power_2(_nslots));
+        ENSURE(_npartitions == next_power_2(_npartitions));
+        ENSURE(_nslots == next_power_2(_nslots));
     }
 
     void clear_slots(u64 part_no)
@@ -108,7 +108,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             // walk chain of slots
             if (next_offset->get_group() == key) {
                 fn_agg(next_offset->get_aggregates(), value);
-                group_found++;
+                ++group_found;
                 return;
             }
             next_offset = reinterpret_cast<slot_idx_t>(part_page->get_next(next_offset));
@@ -118,7 +118,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         if (evicted) {
             clear_slots(part_no);
         }
-        group_not_found++;
+        ++group_not_found;
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -135,7 +135,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
-                group_found++;
+                ++group_found;
                 return;
             }
             next_offset = part_page->get_next(next_offset);
@@ -145,7 +145,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         if (evicted) {
             clear_slots(part_no);
         }
-        group_not_found++;
+        ++group_not_found;
     }
 
     void aggregate(key_t& key, value_t& value, u64 key_hash)
@@ -162,7 +162,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
-                group_found++;
+                ++group_found;
                 return;
             }
             next_offset = reinterpret_cast<u64>(part_page->get_next(next_offset));
@@ -172,7 +172,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         if (evicted) {
             clear_slots(part_no);
         }
-        group_not_found++;
+        ++group_not_found;
     }
 
     void insert(key_t& key, value_t& value)
@@ -215,9 +215,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     PartitionedOpenAggregationHashtable(u32 _npartitions, u32 _nslots, double _threshold_preagg, part_buf_t& _part_buffer, inserter_t& _inserter)
         : base_t(_npartitions, _nslots, _threshold_preagg, _part_buffer, _inserter), slots_mask(_nslots - 1)
     {
-        if (_nslots <= page_t::max_tuples_per_page) {
-            throw InvalidOptionError{"Open-addressing hashtable needs more slots"};
-        }
+        ENSURE(_nslots >= page_t::max_tuples_per_page);
     }
 
     void aggregate(const key_t& key, const value_t& value, u64 key_hash)

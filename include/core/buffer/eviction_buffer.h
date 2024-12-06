@@ -24,7 +24,7 @@ class EvictionBuffer {
     {
         // alloc partitions
         for (auto& part : partitions) {
-            part = block_alloc.get_page();
+            part = block_alloc.get_object();
             part->clear_tuples();
         }
     }
@@ -47,7 +47,7 @@ class EvictionBuffer {
         if (final_eviction) {
             return nullptr;
         }
-        part_page = block_alloc.get_page();
+        part_page = block_alloc.get_object();
         partitions[part_no] = part_page;
         return part_page;
     }

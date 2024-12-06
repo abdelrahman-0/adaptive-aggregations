@@ -1,5 +1,5 @@
 #pragma once
-
+/* --------------------------------------- */
 #include <gflags/gflags.h>
 #include <thread>
 
@@ -16,7 +16,7 @@
 #include "core/storage/table.h"
 #include "defaults.h"
 #include "system/node.h"
-
+/* --------------------------------------- */
 using namespace std::chrono_literals;
 /* --------------------------------------- */
 DEFINE_uint32(threads, 1, "number of threads to use");
@@ -24,7 +24,7 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 /* --------------------------------------- */
 #define TABLE_SCHEMA u64, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 #define KEY_IDXS 0
-#define TUPLE_IDXS 0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15
+#define TUPLE_IDXS 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 /* --------------------------------------- */
 using MemAlloc       = mem::JEMALLOCator<true>;
 using PageTable      = PageLocal<TABLE_SCHEMA>;
@@ -35,4 +35,3 @@ using BufferLocal    = buf::EvictionBuffer<PageResult, BlockAlloc>;
 using InserterLocal  = buf::PartitionedTupleInserter<PageResult, BufferLocal>;
 using EgressManager  = network::HomogeneousEgressNetworkManager<PageResult>;
 using IngressManager = network::HomogeneousIngressNetworkManager<PageResult>;
-/* --------------------------------------- */

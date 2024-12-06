@@ -46,19 +46,19 @@ class Logger {
     }
     /* --------------------------------------- */
     template <typename... T>
-    requires(std::is_same_v<std::string, T> and ...) or ((requires(T... t) { (std::to_string(t), ...); }))
-    auto& log(const std::string& param, T&&... vals)
+    requires(std::is_same_v<std::string, std::remove_cvref_t<T>> and ...) or ((requires(T... t) { (std::to_string(t), ...); }))
+    decltype(auto) log(std::string&& param, T&&... vals)
     {
         auto _ = std::unique_lock{mutex};
         using namespace std::string_literals;
-        header.push_back(param);
+        header.push_back(std::move(param));
         auto str = (... + (normalize(vals) + ','));
         // remove trailing comma
         str.pop_back();
-        if constexpr (sizeof...(vals) > 1) {
+        if constexpr (sizeof...(vals)) {
             str = "\""s + str + "\""s;
         }
         row.push_back(str);
-        return *this;
+        return (*this);
     }
 };

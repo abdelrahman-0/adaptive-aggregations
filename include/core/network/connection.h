@@ -10,6 +10,7 @@
 #include <utility>
 #include <vector>
 
+#include "bench/bench.h"
 #include "defaults.h"
 #include "misc/exceptions/exceptions_network.h"
 
@@ -26,6 +27,7 @@ static auto get_connection_hints(bool use_ipv6 = false)
     return hints;
 }
 
+// TODO rewrite
 // open multiple TCP connections to a particular destination
 struct Connection {
     std::string connection_ip{};
