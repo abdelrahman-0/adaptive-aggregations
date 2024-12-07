@@ -73,8 +73,7 @@ class BlockAllocator {
     object_t* allocate(bool consume = true)
     {
         auto* block = Alloc::template alloc<object_t>(block_sz * sizeof(object_t));
-        auto muster = BlockAllocation{block_sz, (consume ? 1u : 0u), block};
-        allocations.push_back(muster);
+        allocations.push_back(BlockAllocation{block_sz, (consume ? 1u : 0u), block});
         --allocation_budget;
         return block;
     }

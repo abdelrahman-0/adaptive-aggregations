@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 20)
 
 find_package(gflags REQUIRED)
 find_package(TBB REQUIRED)
+include(FetchContent)
+FetchContent_Declare(json URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz)
+FetchContent_MakeAvailable(json)
 
 #set(CMAKE_CXX_COMPILER "/usr/bin/clang++")
 #add_compile_options(-stdlib=libc++)

@@ -19,14 +19,18 @@ class EvictionBuffer {
   public:
     using EvictionFn = Fn;
 
-    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& eviction_fns)
-        : partitions(npartitions), block_alloc(block_alloc), eviction_fns(std::move(eviction_fns))
+    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& _eviction_fns) : partitions(npartitions), block_alloc(block_alloc), eviction_fns(_eviction_fns)
     {
         // alloc partitions
         for (auto& part : partitions) {
             part = block_alloc.get_object();
             part->clear_tuples();
         }
+    }
+
+    void replace_eviction_fns(const std::vector<Fn>& _eviction_fns)
+    {
+        eviction_fns = _eviction_fns;
     }
 
     ALWAYS_INLINE page_t* get_partition_page(u32 part) const
@@ -47,7 +51,7 @@ class EvictionBuffer {
         if (final_eviction) {
             return nullptr;
         }
-        part_page = block_alloc.get_object();
+        part_page           = block_alloc.get_object();
         partitions[part_no] = part_page;
         return part_page;
     }

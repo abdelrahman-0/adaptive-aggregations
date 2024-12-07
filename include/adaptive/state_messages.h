@@ -3,7 +3,7 @@
 #include "core/memory/block_allocator.h"
 #include "defaults.h"
 
-namespace adapt {
+namespace adapre {
 
 // a task offer is simply a page interval [start, end) to process
 struct TaskOffer {

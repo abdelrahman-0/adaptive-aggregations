@@ -6,7 +6,6 @@ DEFINE_bool(local, true, "run benchmark using loop-back interface");
 DEFINE_uint32(nodes, 1, "total number of num_nodes to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
-DEFINE_uint32(bufs_per_peer, 4, "number of egress buffers to use per peer");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");

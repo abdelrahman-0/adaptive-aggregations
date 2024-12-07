@@ -32,7 +32,8 @@ DEFAULTS_AUTO AWS_subnet              = "10.0.0.";
 DEFAULTS_AUTO AWS_host_base           = 4u;
 DEFAULTS_AUTO LOCAL_subnet            = "192.168.0.";
 DEFAULTS_AUTO LOCAL_host_base         = 30u;
-DEFAULTS_AUTO port                    = 3500;
+DEFAULTS_AUTO port_base_worker        = 3500;
+DEFAULTS_AUTO port_base_coordinator   = 6000;
 DEFAULTS_AUTO listen_queue_depth      = 100;
 
 } // namespace defaults

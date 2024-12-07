@@ -1,4 +1,4 @@
-#include "config.h"
+#include "types.h"
 
 /* ----------- MAIN ----------- */
 
@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
     auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
 
     if (FLAGS_nthreads > FLAGS_qthreads) {
-        throw InvalidOptionError{"Number of query threads must not be less than number of network threads"};
+        throw except::InvalidOptionError{"Number of query threads must not be less than number of network threads"};
     }
 
     sys::Node local_node{FLAGS_nthreads + FLAGS_qthreads};
@@ -62,13 +62,11 @@ int main(int argc, char* argv[])
 
             // setup connections to each node, forming a logical clique topology
             // note that connections need to be setup in a particular order to avoid deadlocks!
-            std::vector<int> socket_fds{};
+            std::vector<int> socket_fds;
 
             // accept from [0, node_id)
             if (node_id) {
-                Connection conn{node_id, FLAGS_nthreads, nthread_id, node_id};
-                conn.setup_ingress();
-                socket_fds = std::move(conn.socket_fds);
+                socket_fds = Connection::setup_ingress(std::to_string(communication_port_base + node_id * FLAGS_nthreads + nthread_id), node_id);
             }
 
             // connect to [node_id + 1, FLAGS_nodes)
@@ -76,7 +74,7 @@ int main(int argc, char* argv[])
                 auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
                 Connection conn{node_id, FLAGS_nthreads, nthread_id, destination_ip, 1};
                 conn.setup_egress(i);
-                socket_fds.emplace_back(conn.socket_fds[0]);
+                socket_fds.emplace_back(conn.socket_file_descriptors[0]);
             }
 
             auto qthreads_per_nthread = (FLAGS_qthreads / FLAGS_nthreads) + (nthread_id < (FLAGS_qthreads % FLAGS_nthreads));

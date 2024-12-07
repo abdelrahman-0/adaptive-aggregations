@@ -16,7 +16,6 @@
 #include "utils/utils.h"
 
 DECLARE_bool(random);
-DECLARE_uint32(npages);
 DECLARE_uint32(nodes);
 DECLARE_string(path);
 
@@ -30,22 +29,23 @@ class Table {
   public:
     int segment_id;
 
-    explicit Table(uint16_t node_id)
+    explicit Table(u32 npages)
     {
         segment_id = global_segment_id.fetch_add(1);
         if (FLAGS_random) {
-            prepare_random_swips(FLAGS_npages / FLAGS_nodes);
+            prepare_random_swips(npages);
         }
         else {
             // prepare local IO at node offset (adjusted for page boundaries)
-            file = File{FLAGS_path, FileMode::READ};
-            auto offset_begin = (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
-            auto offset_end = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) * defaults::local_page_size;
-            if (node_id == FLAGS_nodes - 1) {
-                offset_end = file.get_total_size();
-            }
-            file.set_offset(offset_begin, offset_end);
-            prepare_file_swips();
+            // TODO improve this -> separate into data generator and table
+            // file              = File{FLAGS_path, FileMode::READ};
+            // auto offset_begin = (((file.get_total_size() / FLAGS_nodes) * node_id) / defaults::local_page_size) * defaults::local_page_size;
+            // auto offset_end   = (((file.get_total_size() / FLAGS_nodes) * (node_id + 1)) / defaults::local_page_size) * defaults::local_page_size;
+            // if (node_id == FLAGS_nodes - 1) {
+            //     offset_end = file.get_total_size();
+            // }
+            // file.set_offset(offset_begin, offset_end);
+            // prepare_file_swips();
             DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
         }
     };
@@ -64,9 +64,9 @@ class Table {
         swips.resize(npages);
     }
 
-    auto& get_swips()
+    decltype(auto) get_swips()
     {
-        return swips;
+        return (swips);
     }
 
     template <concepts::is_page CachePage>
@@ -76,7 +76,7 @@ class Table {
         if (FLAGS_random) {
             // populate cache using 1 thread
             for (u64 idx{0}; idx < num_pages_cache; ++idx) {
-                auto& page = cache.get_page(idx);
+                auto& page      = cache.get_page(idx);
                 page.num_tuples = CachePage::max_tuples_per_page;
                 page.fill_random();
                 swips[idx].set_pointer(&page);

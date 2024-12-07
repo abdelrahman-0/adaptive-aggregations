@@ -1,6 +1,7 @@
 #pragma once
 
 #include <fstream>
+#include <mutex>
 #include <thread>
 
 #include "bench/bench.h"
@@ -74,12 +75,12 @@ struct NodeTopology {
         }
         else {
             // first determine physical core
-            auto num_siblings = (requested_threads > nphysical_cores) ? requested_threads - nphysical_cores : 0;
-            bool has_sibling = (tid / threads_per_core) < num_siblings;
+            auto num_siblings  = (requested_threads > nphysical_cores) ? requested_threads - nphysical_cores : 0;
+            bool has_sibling   = (tid / threads_per_core) < num_siblings;
             auto physical_core = has_sibling ? (tid / threads_per_core) : tid - num_siblings;
 
             // then determine the logical CPU (pin to both hyper-threads)
-            cpu = compact_assignment ? physical_core * threads_per_core : physical_core;
+            cpu                = compact_assignment ? physical_core * threads_per_core : physical_core;
             CPU_SET(cpu, &mask);
             DEBUGGING(log_thread_pinned(tid, cpu));
 

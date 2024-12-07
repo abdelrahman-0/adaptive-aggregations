@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
             if (node_id) {
                 auto conn = Connection{node_id, FLAGS_threads, thread_id, node_id};
                 conn.setup_ingress();
-                socket_fds = std::move(conn.socket_fds);
+                socket_fds = std::move(conn.socket_file_descriptors);
             }
             /* --------------------------------------- */
             // connect to [node_id + 1, FLAGS_nodes)
@@ -55,7 +55,7 @@ int main(int argc, char* argv[])
                 auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : peer));
                 auto conn           = Connection{node_id, FLAGS_threads, thread_id, destination_ip, 1};
                 conn.setup_egress(peer);
-                socket_fds.emplace_back(conn.socket_fds[0]);
+                socket_fds.emplace_back(conn.socket_file_descriptors[0]);
             }
             /* --------------------------------------- */
             auto io_buffers = std::vector<PageTable>(defaults::local_io_depth);
