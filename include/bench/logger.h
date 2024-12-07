@@ -55,7 +55,7 @@ class Logger {
         auto str = (... + (normalize(vals) + ','));
         // remove trailing comma
         str.pop_back();
-        if constexpr (sizeof...(vals)) {
+        if constexpr (sizeof...(vals) > 1) {
             str = "\""s + str + "\""s;
         }
         row.push_back(str);

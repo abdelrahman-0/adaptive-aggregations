@@ -46,7 +46,7 @@ class Table {
             // }
             // file.set_offset(offset_begin, offset_end);
             // prepare_file_swips();
-            DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
+            // DEBUGGING(print("reading bytes:", offset_begin, "→", offset_end, (offset_end - offset_begin) / defaults::local_page_size, "pages"));
         }
     };
 

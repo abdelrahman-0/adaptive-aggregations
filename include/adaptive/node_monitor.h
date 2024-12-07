@@ -7,6 +7,11 @@
 
 namespace adapre {
 
+struct AdaptiveState {
+    std::atomic<u16> nworkers{1};
+    std::atomic<bool> finalized_nworkers{false};
+};
+
 template <typename EgressMgr, typename IngressMgr>
 class NodeMonitor {
   protected:
@@ -122,8 +127,7 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     using base_t::ingress_mgr;
     using base_t::msg_buffer;
     tbb::concurrent_vector<TaskOffer> work;
-    std::atomic<u16> active_workers{0};
-    std::atomic<bool> num_workers_finalized{false};
+    AdaptiveState& adaptive_state;
 
     void initialize_query()
     {
@@ -132,14 +136,14 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void monitor_query_state() const
     {
-        while (not num_workers_finalized) {
+        while (not adaptive_state.finalized_nworkers) {
             ingress_mgr.consume_done();
             egress_mgr.try_drain_pending();
         }
     }
 
   public:
-    explicit WorkerMonitor(EgressMgr& _egress_mgr, IngressMgr& _ingress_mgr) : base_t(_egress_mgr, _ingress_mgr)
+    explicit WorkerMonitor(EgressMgr& _egress_mgr, IngressMgr& _ingress_mgr, AdaptiveState& _adaptive_state) : base_t(_egress_mgr, _ingress_mgr), adaptive_state(_adaptive_state)
     {
         work.reserve(128);
         std::function message_fn_ingress = [this](StateMessage* msg, u32) {
@@ -147,13 +151,14 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
             case TASK_OFFER:
                 ingress_mgr.recv(0, msg_buffer.get_message_storage());
                 work.push_back(msg->offer);
+                adaptive_state.nworkers = msg->nworkers;
                 break;
             case NUM_WORKERS_UPDATE:
                 ingress_mgr.recv(0, msg_buffer.get_message_storage());
-                active_workers = msg->nworkers;
+                adaptive_state.nworkers = msg->nworkers;
                 break;
             case QUERY_END:
-                num_workers_finalized = true;
+                adaptive_state.finalized_nworkers = true;
                 break;
             default:
                 __builtin_unreachable();

@@ -1,4 +1,4 @@
-#include "types.h"
+#include "type_aliases.h"
 /* --------------------------------------- */
 int main(int argc, char* argv[])
 {
@@ -9,8 +9,7 @@ int main(int argc, char* argv[])
     auto local_node     = sys::Node{FLAGS_threads};
     u16 node_id         = local_node.get_id();
     /* --------------------------------------- */
-    FLAGS_npages        = std::max(1u, FLAGS_npages);
-    auto table          = Table{node_id};
+    auto table          = Table{FLAGS_npages / FLAGS_nodes};
     auto& swips         = table.get_swips();
     /* --------------------------------------- */
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
@@ -24,18 +23,17 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_preaggregation, nullptr, FLAGS_threads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     /* --------------------------------------- */
-    auto current_swip                     = std::atomic{0ul};
-    auto pages_pre_agg                    = std::atomic{0ul};
-    auto global_ht_construction_complete  = std::atomic{false};
-    auto times_preagg                     = tbb::concurrent_vector<u64>(FLAGS_threads);
+    auto current_swip                    = std::atomic{0ul};
+    auto pages_pre_agg                   = std::atomic{0ul};
+    auto global_ht_construction_complete = std::atomic{false};
+    auto times_preagg                    = tbb::concurrent_vector<u64>(FLAGS_threads);
     /* --------------------------------------- */
-    FLAGS_slots                           = next_power_2(FLAGS_slots);
-    FLAGS_partitions                      = next_power_2(FLAGS_partitions);
-    auto storage_glob                     = StorageGlobal{FLAGS_consumepart ? FLAGS_partitions : 1};
-    FLAGS_partitions                     *= FLAGS_nodes;
-    auto sketch_glob                      = Sketch{};
-    auto ht_glob                          = HashtableGlobal{};
-    auto npeers                           = u32{FLAGS_nodes - 1};
+    FLAGS_slots                          = next_power_2(FLAGS_slots);
+    FLAGS_partitions                     = next_power_2(FLAGS_partitions * FLAGS_nodes);
+    auto storage_glob                    = StorageGlobal{FLAGS_consumepart ? ((FLAGS_partitions / FLAGS_nodes) + (node_id < (FLAGS_partitions % FLAGS_nodes))) : 1};
+    auto sketch_glob                     = Sketch{};
+    auto ht_glob                         = HashtableGlobal{};
+    auto npeers                          = u32{FLAGS_nodes - 1};
     DEBUGGING(auto tuples_processed = std::atomic{0ul});
     DEBUGGING(auto tuples_sent = std::atomic{0ul});
     DEBUGGING(auto tuples_received = std::atomic{0ul});
@@ -105,29 +103,32 @@ int main(int argc, char* argv[])
             }
             /* --------------------------------------- */
             // dependency injection
-            u32 part_offset   = 0;
+            // u32 part_offset   = 0;
             auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
             for (u64 part_no : range(FLAGS_partitions)) {
-                u16 dst                   = (part_no * FLAGS_nodes) / FLAGS_partitions;
-                auto parts_per_dst        = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
-                bool final_dst_partition  = ((part_no - part_offset + 1) % parts_per_dst) == 0;
-                part_offset              += final_dst_partition ? parts_per_dst : 0;
-                auto final_part_no        = FLAGS_consumepart ? part_no - (dst * parts_per_dst) : 0;
+                // calculate destination per partition
+                u16 dst                          = (part_no * FLAGS_nodes) / FLAGS_partitions;
+                auto num_workers_with_extra_part = FLAGS_partitions % FLAGS_nodes;
+                bool has_extra_part              = dst < num_workers_with_extra_part;
+                auto parts_per_dst               = (FLAGS_partitions / FLAGS_nodes) + has_extra_part;
+                auto part_offset                 = (parts_per_dst * dst) + (not has_extra_part) * num_workers_with_extra_part;
+                bool is_final_partition         = ((part_no - part_offset + 1) % parts_per_dst) == 0;
+                auto part_no_local               = FLAGS_consumepart ? part_no - part_offset : 0;
                 if (dst == node_id) {
-                    eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
+                    eviction_fns[part_no] = [part_no_local, &storage_glob](PageResult* page, bool) {
                         if (not page->empty()) {
                             page->retire();
-                            storage_glob.add_page(page, final_part_no);
+                            storage_glob.add_page(page, part_no_local);
                         }
                     };
                 }
                 else {
                     auto actual_dst       = dst - (dst > node_id);
-                    eviction_fns[part_no] = [final_part_no, actual_dst, final_dst_partition, &manager_send](PageResult* page, bool is_last = false) {
-                        if (not page->empty() or final_dst_partition) {
+                    eviction_fns[part_no] = [part_no_local, actual_dst, is_final_partition, &manager_send](PageResult* page, bool is_last = false) {
+                        if (not page->empty() or is_final_partition) {
                             page->retire();
-                            page->set_part_no(final_part_no);
-                            if (is_last and final_dst_partition) {
+                            page->set_part_no(part_no_local);
+                            if (is_last and is_final_partition) {
                                 page->set_last_page();
                             }
                             manager_send.send(actual_dst, page);
