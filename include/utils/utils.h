@@ -106,6 +106,11 @@ requires(sizeof(val) <= sizeof(unsigned long long) and std::is_unsigned_v<declty
                                                (std::popcount(val) == 1));
 }
 
+constexpr auto is_power_of_2(std::unsigned_integral auto n)
+{
+    return ((n & (n - 1)) == 0) and (n > 0);
+}
+
 template <typename T>
 requires(sizeof(T) == 8)
 static void bin_print(T val)

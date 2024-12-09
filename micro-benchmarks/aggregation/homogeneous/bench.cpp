@@ -1,13 +1,12 @@
-#include "type_aliases.h"
+#include "definitions.h"
 /* --------------------------------------- */
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     /* --------------------------------------- */
-    auto subnet         = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
-    auto host_base      = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
+    auto config         = adapre::Configuration{FLAGS_config};
     auto local_node     = sys::Node{FLAGS_threads};
-    u16 node_id         = local_node.get_id();
+    node_id_t node_id   = local_node.get_id();
     /* --------------------------------------- */
     auto table          = Table{FLAGS_npages / FLAGS_nodes};
     auto& swips         = table.get_swips();
@@ -23,17 +22,23 @@ int main(int argc, char* argv[])
     ::pthread_barrier_init(&barrier_preaggregation, nullptr, FLAGS_threads);
     ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     /* --------------------------------------- */
-    auto current_swip                    = std::atomic{0ul};
-    auto pages_pre_agg                   = std::atomic{0ul};
-    auto global_ht_construction_complete = std::atomic{false};
-    auto times_preagg                    = tbb::concurrent_vector<u64>(FLAGS_threads);
+    auto current_swip                                   = std::atomic{0ul};
+    auto pages_pre_agg                                  = std::atomic{0ul};
+    auto global_ht_construction_complete                = std::atomic{false};
+    auto times_preagg                                   = tbb::concurrent_vector<u64>(FLAGS_threads);
     /* --------------------------------------- */
-    FLAGS_slots                          = next_power_2(FLAGS_slots);
-    FLAGS_partitions                     = next_power_2(FLAGS_partitions * FLAGS_nodes);
-    auto storage_glob                    = StorageGlobal{FLAGS_consumepart ? ((FLAGS_partitions / FLAGS_nodes) + (node_id < (FLAGS_partitions % FLAGS_nodes))) : 1};
-    auto sketch_glob                     = Sketch{};
-    auto ht_glob                         = HashtableGlobal{};
-    auto npeers                          = u32{FLAGS_nodes - 1};
+    FLAGS_slots                                         = next_power_2(FLAGS_slots);
+    FLAGS_partitions                                    = next_power_2(FLAGS_partitions);
+    FLAGS_partgrpsz                                     = next_power_2(FLAGS_partgrpsz);
+    auto partgrpsz_shift                                = __builtin_ctz(FLAGS_partgrpsz);
+    auto npartgrps                                      = FLAGS_partitions / FLAGS_partgrpsz;
+    auto npartgrps_shift                                = __builtin_ctz(npartgrps);
+    auto [min_grps_per_dst, num_workers_with_extra_grp] = std::ldiv(npartgrps, FLAGS_nodes);
+    /* --------------------------------------- */
+    auto storage_glob                                   = StorageGlobal{FLAGS_consumepart ? (((npartgrps / FLAGS_nodes) + (node_id < (npartgrps % FLAGS_nodes))) * FLAGS_partgrpsz) : 1};
+    auto sketch_glob                                    = Sketch{};
+    auto ht_glob                                        = HashtableGlobal{};
+    auto npeers                                         = u32{FLAGS_nodes - 1};
     DEBUGGING(auto tuples_processed = std::atomic{0ul});
     DEBUGGING(auto tuples_sent = std::atomic{0ul});
     DEBUGGING(auto tuples_received = std::atomic{0ul});
@@ -54,15 +59,15 @@ int main(int argc, char* argv[])
             /* --------------------------------------- */
             // accept from [0, node_id)
             if (node_id) {
-                socket_fds = Connection::setup_ingress(std::to_string(communication_port_base + node_id * FLAGS_threads + thread_id), node_id);
+                auto port  = std::to_string(std::stoi(config.get_worker_info(node_id).port) + node_id * FLAGS_threads + thread_id);
+                socket_fds = Connection::setup_ingress(port , node_id);
             }
             /* --------------------------------------- */
             // connect to [node_id + 1, FLAGS_nodes)
-            for (u16 peer : range(node_id + 1u, FLAGS_nodes)) {
-                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : peer));
-                auto conn           = Connection{node_id, FLAGS_threads, thread_id, destination_ip, 1};
-                conn.setup_egress(peer);
-                socket_fds.emplace_back(conn.socket_file_descriptors[0]);
+            for (node_id_t peer_id : range(node_id + 1u, FLAGS_nodes)) {
+                auto worker_info = config.get_worker_info(peer_id);
+                auto port        = std::to_string(std::stoi(worker_info.port) + peer_id * FLAGS_threads + thread_id);
+                socket_fds.emplace_back(Connection::setup_egress(node_id, worker_info.ip, port));
             }
             /* --------------------------------------- */
             auto io_buffers = std::vector<PageTable>(defaults::local_io_depth);
@@ -73,13 +78,14 @@ int main(int argc, char* argv[])
             auto recv_alloc                 = BlockAlloc{npeers * 10, FLAGS_maxalloc};
             auto manager_recv               = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             auto manager_send               = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto remote_sketches            = std::vector<Sketch>(npeers);
+            auto remote_sketches_ingress    = std::vector<Sketch>(npeers);
+            auto remote_sketches_egress     = std::vector<Sketch>(npeers);
             u32 peers_done                  = 0;
             /* --------------------------------------- */
-            auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches, &manager_recv](PageResult* page, u32 dst) {
+            auto ingress_page_consumer_fn   = std::function{[&recv_alloc, &storage_glob, &remote_sketches_ingress, &manager_recv](PageResult* page, u32 dst) {
                 if (page->is_last_page()) {
                     // recv sketch after last page
-                    manager_recv.recv(dst, remote_sketches.data() + dst);
+                    manager_recv.recv(dst, remote_sketches_ingress.data() + dst);
                     if (page->empty()) {
                         return;
                     }
@@ -103,44 +109,45 @@ int main(int argc, char* argv[])
             }
             /* --------------------------------------- */
             // dependency injection
-            // u32 part_offset   = 0;
             auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
-            for (u64 part_no : range(FLAGS_partitions)) {
-                // calculate destination per partition
-                u16 dst                          = (part_no * FLAGS_nodes) / FLAGS_partitions;
-                auto num_workers_with_extra_part = FLAGS_partitions % FLAGS_nodes;
-                bool has_extra_part              = dst < num_workers_with_extra_part;
-                auto parts_per_dst               = (FLAGS_partitions / FLAGS_nodes) + has_extra_part;
-                auto part_offset                 = (parts_per_dst * dst) + (not has_extra_part) * num_workers_with_extra_part;
-                bool is_final_partition         = ((part_no - part_offset + 1) % parts_per_dst) == 0;
-                auto part_no_local               = FLAGS_consumepart ? part_no - part_offset : 0;
-                if (dst == node_id) {
-                    eviction_fns[part_no] = [part_no_local, &storage_glob](PageResult* page, bool) {
-                        if (not page->empty()) {
-                            page->retire();
-                            storage_glob.add_page(page, part_no_local);
-                        }
-                    };
-                }
-                else {
-                    auto actual_dst       = dst - (dst > node_id);
-                    eviction_fns[part_no] = [part_no_local, actual_dst, is_final_partition, &manager_send](PageResult* page, bool is_last = false) {
-                        if (not page->empty() or is_final_partition) {
-                            page->retire();
-                            page->set_part_no(part_no_local);
-                            if (is_last and is_final_partition) {
-                                page->set_last_page();
+            for (u64 grp_no : range(npartgrps)) {
+                node_id_t dst           = (grp_no * FLAGS_nodes) >> npartgrps_shift;
+                bool has_extra_grp      = dst < num_workers_with_extra_grp;
+                auto grps_per_dst       = min_grps_per_dst + has_extra_grp;
+                auto grp_offset         = (grps_per_dst * dst) + (has_extra_grp ? 0 : num_workers_with_extra_grp);
+                bool is_final_grp       = (grp_no - grp_offset) == (grps_per_dst - 1);
+                auto part_no_grp_offset = grp_no << partgrpsz_shift;
+                for (u64 part_no : range(FLAGS_partgrpsz)) {
+                    auto part_no_local  = FLAGS_consumepart ? (grp_no - grp_offset) * FLAGS_partgrpsz + part_no : 0;
+                    auto part_no_global = part_no_grp_offset + part_no;
+                    if (dst == node_id) {
+                        eviction_fns[part_no_global] = [=, &storage_glob](PageResult* page, bool) {
+                            if (not page->empty()) {
+                                page->retire();
+                                storage_glob.add_page(page, part_no_local);
                             }
-                            manager_send.send(actual_dst, page);
-                        }
-                    };
+                        };
+                    }
+                    else {
+                        bool is_final_partition      = is_final_grp and (part_no == FLAGS_partgrpsz - 1);
+                        auto actual_dst              = dst - (dst > node_id);
+                        eviction_fns[part_no_global] = [=, &manager_send](PageResult* page, bool is_last = false) {
+                            if (not page->empty() or is_final_partition) {
+                                page->retire();
+                                page->set_part_no(part_no_local);
+                                if (is_last and is_final_partition) {
+                                    page->set_last_page();
+                                }
+                                manager_send.send(actual_dst, page);
+                            }
+                        };
+                    }
                 }
             }
             /* --------------------------------------- */
             auto block_alloc                      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
             auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
-            auto partition_groups                 = u32{FLAGS_nodes};
-            auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer, partition_groups};
+            auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer, npartgrps};
             auto ht_loc                           = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
             /* --------------------------------------- */
             std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_object(pg); };
@@ -174,7 +181,7 @@ int main(int argc, char* argv[])
             ::pthread_barrier_wait(&barrier_start);
             Stopwatch swatch_preagg{};
             swatch_preagg.start();
-            for (u16 dst : range(npeers)) {
+            for (node_id_t dst : range(npeers)) {
                 manager_recv.recv(dst, recv_alloc.get_object());
             }
             /* --------------------------------------- */
@@ -206,16 +213,20 @@ int main(int argc, char* argv[])
             }
             /* --------------------------------------- */
             partition_buffer.finalize();
-            for (u32 part_grp : range(partition_groups)) {
-                if (part_grp == node_id) {
+            for (u32 grp_no : range(npartgrps)) {
+                node_id_t dst = (grp_no * FLAGS_nodes) / npartgrps;
+                if (dst == node_id) {
                     // merge local sketch
-                    sketch_glob.merge_concurrent(inserter_loc.get_sketch(part_grp));
+                    sketch_glob.merge_concurrent(inserter_loc.get_sketch(grp_no));
                 }
                 else {
                     // send remote sketches
-                    auto actual_dst = part_grp - (part_grp > node_id);
-                    manager_send.send(actual_dst, &inserter_loc.get_sketch(part_grp));
+                    auto actual_dst = dst - (dst > node_id);
+                    remote_sketches_egress[actual_dst].merge(inserter_loc.get_sketch(grp_no));
                 }
+            }
+            for (node_id_t peer_id : range(npeers)) {
+                manager_send.send(peer_id, &inserter_loc.get_sketch(peer_id));
             }
             while (peers_done < npeers) {
                 manager_recv.consume_done();
@@ -319,6 +330,7 @@ int main(int argc, char* argv[])
         .log("total pages", FLAGS_npages)
         .log("ht factor", FLAGS_htfactor)
         .log("partitions", FLAGS_partitions)
+        .log("partition group size", FLAGS_partgrpsz)
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
         .log("groups seed", FLAGS_seed)

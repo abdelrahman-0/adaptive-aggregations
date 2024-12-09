@@ -6,18 +6,16 @@ int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
-    auto subnet    = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
-    auto host_base = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
-
     if (FLAGS_nthreads > FLAGS_qthreads) {
         throw except::InvalidOptionError{"Number of query threads must not be less than number of network threads"};
     }
 
-    sys::Node local_node{FLAGS_nthreads + FLAGS_qthreads};
-
     /* ----------- DATA LOAD ----------- */
 
-    u16 node_id = local_node.get_id();
+    auto config       = adapre::Configuration{FLAGS_config};
+    auto local_node   = sys::Node{FLAGS_nthreads + FLAGS_qthreads};
+    node_id_t node_id = local_node.get_id();
+
     Table table{node_id};
     auto& swips         = table.get_swips();
 
@@ -66,15 +64,15 @@ int main(int argc, char* argv[])
 
             // accept from [0, node_id)
             if (node_id) {
-                socket_fds = Connection::setup_ingress(std::to_string(communication_port_base + node_id * FLAGS_nthreads + nthread_id), node_id);
+                auto port  = std::to_string(std::stoi(config.get_worker_info(node_id).port) + node_id * FLAGS_nthreads + nthread_id);
+                socket_fds = Connection::setup_ingress(port, node_id);
             }
 
             // connect to [node_id + 1, FLAGS_nodes)
-            for (auto i{node_id + 1u}; i < FLAGS_nodes; ++i) {
-                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : i));
-                Connection conn{node_id, FLAGS_nthreads, nthread_id, destination_ip, 1};
-                conn.setup_egress(i);
-                socket_fds.emplace_back(conn.socket_file_descriptors[0]);
+            for (node_id_t peer_id : range(node_id + 1u, FLAGS_nodes)) {
+                auto worker_info = config.get_worker_info(peer_id);
+                auto port        = std::to_string(std::stoi(worker_info.port) + peer_id * FLAGS_nthreads + nthread_id);
+                socket_fds.emplace_back(Connection::setup_egress(node_id, worker_info.ip, port));
             }
 
             auto qthreads_per_nthread = (FLAGS_qthreads / FLAGS_nthreads) + (nthread_id < (FLAGS_qthreads % FLAGS_nthreads));
@@ -399,6 +397,7 @@ int main(int argc, char* argv[])
         .log("total pages", FLAGS_npages)
         .log("ht factor", FLAGS_htfactor)
         .log("partitions", FLAGS_partitions)
+        .log("partition group size", FLAGS_partgrpsz)
         .log("slots", FLAGS_slots)
         .log("nthreads", FLAGS_nthreads)
         .log("qthreads", FLAGS_qthreads)

@@ -31,6 +31,7 @@ int main(int argc, char* argv[])
     }};
     coordinator_barrier.arrive_and_wait();
 
+    FLAGS_partgrpsz   = next_power_2(FLAGS_partgrpsz);
     FLAGS_slots       = next_power_2(FLAGS_slots);
     FLAGS_partitions  = next_power_2(FLAGS_partitions) * FLAGS_nodes;
     auto storage_glob = StorageGlobal{FLAGS_partitions};
@@ -94,25 +95,25 @@ int main(int argc, char* argv[])
                 // calculate once per eviction
                 eviction_fns[part_no] = [node_id, part_no, &storage_glob, &adaptive_state, &manager_send](PageResult* page, bool is_last) {
                     // calculate destination on each eviction
-                    auto current_workers             = adaptive_state.nworkers.load();
-                    u16 dst                          = (part_no * current_workers) / FLAGS_partitions;
-                    auto num_workers_with_extra_part = FLAGS_partitions % current_workers;
-                    bool has_extra_part              = dst < num_workers_with_extra_part;
-                    auto parts_per_dst               = (FLAGS_partitions / current_workers) + has_extra_part;
-                    auto part_offset                 = (parts_per_dst * dst) + (not has_extra_part) * num_workers_with_extra_part;
-                    bool is_final_partition         = ((part_no - part_offset + 1) % parts_per_dst) == 0;
-                    auto part_no_local               = FLAGS_consumepart ? part_no - part_offset : 0;
+                    // TODO dst
+                    auto current_workers                               = adaptive_state.nworkers.load();
+                    u16 dst                                            = (part_no * current_workers) / FLAGS_partitions;
+                    auto [parts_per_dst, num_workers_with_extra_part]  = std::ldiv(FLAGS_partitions, current_workers);
+                    bool has_extra_part                                = dst < num_workers_with_extra_part;
+                    parts_per_dst                                     += has_extra_part;
+                    auto part_offset                                   = (parts_per_dst * dst) + (has_extra_part ? 0 : num_workers_with_extra_part);
+                    bool is_final_partition                            = (part_no - part_offset) == (parts_per_dst - 1);
                     if (dst == node_id) {
                         if (not page->empty()) {
                             page->retire();
-                            storage_glob.add_page(page, part_no_local);
+                            storage_glob.add_page(page, part_no);
                         }
                     }
                     else {
                         auto actual_dst = dst - (dst > node_id);
                         if (not page->empty() or is_final_partition) {
                             page->retire();
-                            page->set_part_no(part_no_local);
+                            page->set_part_no(part_no);
                             if (is_last and is_final_partition) {
                                 page->set_last_page();
                             }
@@ -121,6 +122,12 @@ int main(int argc, char* argv[])
                     }
                 };
             }
+            /* --------------------------------------- */
+            auto block_alloc      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
+            auto partition_buffer = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
+            auto partition_groups = u32{FLAGS_partitions / FLAGS_partgrpsz};
+            auto inserter_loc     = InserterLocal{FLAGS_partitions, partition_buffer, partition_groups};
+            auto ht_loc           = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
 
             // prepare hashtables
 

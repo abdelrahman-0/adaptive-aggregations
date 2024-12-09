@@ -9,9 +9,9 @@ target_compile_options(aggregation_local_LIKWID PRIVATE -DLIKWID_PERFMON)
 
 # homogeneous micro-benchmark
 add_executable(aggregation_homogeneous homogeneous/bench.cpp)
-target_link_libraries(aggregation_homogeneous TBB::tbb TBB::tbbmalloc gflags -luring -ljemalloc)
+target_link_libraries(aggregation_homogeneous TBB::tbb TBB::tbbmalloc nlohmann_json::nlohmann_json gflags -luring -ljemalloc)
 
 
 # heterogeneous micro-benchmark
 add_executable(aggregation_heterogeneous heterogeneous/bench.cpp)
-target_link_libraries(aggregation_heterogeneous TBB::tbb TBB::tbbmalloc gflags -luring -ljemalloc)
+target_link_libraries(aggregation_heterogeneous TBB::tbb TBB::tbbmalloc nlohmann_json::nlohmann_json gflags -luring -ljemalloc)

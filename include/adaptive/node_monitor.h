@@ -101,7 +101,7 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
                     else if (increased_workers) {
                         // send update
                         auto* msg_response = new (msg_buffer.get_message_storage()) StateMessage{.nworkers = active_workers, .type = NUM_WORKERS_UPDATE};
-                        _egress_mgr.send(worker_id, msg_response);
+                        egress_mgr.send(worker_id, msg_response);
                     }
                 }
             }

@@ -27,25 +27,8 @@ static auto get_connection_hints(bool use_ipv6 = false)
     return hints;
 }
 
-// TODO rewrite
 // open multiple TCP connections to a particular destination
 struct Connection {
-    std::string connection_ip{};
-    std::vector<int> socket_file_descriptors{};
-    u32 num_conxns{};
-    u32 node_id{};
-    u32 nthreads{};
-    u32 thread_id{};
-
-    explicit Connection(const u32 node_id, const u32 nthreads, const u32 thread_id, const u32 num_connections = 1)
-        : socket_file_descriptors(num_connections, -1), num_conxns(num_connections), node_id(node_id), nthreads(nthreads), thread_id(thread_id)
-    {
-    }
-
-    explicit Connection(const u32 node_id, const u32 nthreads, const u32 thread_id, std::string connection_ip, const u32 num_connections = 1)
-        : connection_ip(std::move(connection_ip)), socket_file_descriptors(num_connections, -1), num_conxns(num_connections), node_id(node_id), nthreads(nthreads), thread_id(thread_id)
-    {
-    }
 
     // incoming connections
     static decltype(auto) setup_ingress(const std::string& port, std::integral auto num_connections = 1)
@@ -94,8 +77,8 @@ struct Connection {
             if (ingress_fd < 0) {
                 throw NetworkSocketAcceptError{};
             }
-            u32 incoming_node_id;
-            ::recv(ingress_fd, &incoming_node_id, sizeof(incoming_node_id), MSG_WAITALL);
+            node_id_t incoming_node_id;
+            ::recv(ingress_fd, &incoming_node_id, sizeof(node_id_t), MSG_WAITALL);
             DEBUGGING(print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")"));
             socket_fds[incoming_node_id] = ingress_fd;
             ::inet_ntop(ingress_addr.ss_family, &ingress_addr, ip_buffer, sizeof(ip_buffer));
@@ -105,64 +88,7 @@ struct Connection {
         return socket_fds;
     }
 
-    // TODO remove
-    // outgoing connections
-    void setup_egress(u32 outgoing_node_id)
-    {
-        int ret;
-        auto hints            = get_connection_hints();
-        auto thread_comm_port = std::to_string(communication_port_base + outgoing_node_id * nthreads + thread_id);
-        // DEBUGGING(print("opening"s, num_connections, "connections to:"s, connection_ip, "..."s));
-        for (auto i = 0u; i < num_conxns; ++i) {
-            // setup connection structs
-            addrinfo* peer;
-            if ((ret = ::getaddrinfo(connection_ip.c_str(), thread_comm_port.c_str(), &hints, &peer)) != 0) {
-                throw NetworkPrepareAddressError{ret};
-            }
-
-            // find first valid peer address
-            for (auto rp = peer; rp != nullptr; rp = rp->ai_next) {
-                socket_file_descriptors[i] = ::socket(peer->ai_family, peer->ai_socktype, peer->ai_protocol);
-                if (socket_file_descriptors[i] == -1) {
-                    ::close(socket_file_descriptors[i]);
-                    continue;
-                }
-
-                socklen_t size = sizeof(defaults::kernel_send_buffer_size);
-                if (::setsockopt(socket_file_descriptors[i], SOL_SOCKET, SO_SNDBUF, &defaults::kernel_send_buffer_size, size) == -1) {
-                    throw NetworkSocketOptError{};
-                }
-
-                auto double_kernel_send_buffer_size{0u};
-                ::getsockopt(socket_file_descriptors[i], SOL_SOCKET, SO_SNDBUF, &double_kernel_send_buffer_size, &size);
-
-                ::linger sl{};
-                sl.l_onoff  = 1; /* non-zero value enables linger option in kernel */
-                sl.l_linger = 2;
-                setsockopt(socket_file_descriptors[i], SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
-
-                break;
-            }
-            const auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
-            ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
-
-            // connect to peer
-            if (::connect(socket_file_descriptors[i], peer->ai_addr, peer->ai_addrlen) == -1) {
-                throw NetworkConnectionError(ip_buffer);
-            }
-
-            ::send(socket_file_descriptors[i], &node_id, sizeof(node_id), MSG_WAITALL);
-
-            sockaddr_in sin{};
-            socklen_t len = sizeof(sin);
-            ::getsockname(socket_file_descriptors[i], reinterpret_cast<sockaddr*>(&sin), &len);
-
-            // free addrinfo linked list
-            ::freeaddrinfo(peer);
-        }
-    }
-
-    static int setup_egress(u16 node_id, const std::string& ip_str, const std::string& port)
+    static int setup_egress(node_id_t node_id, const std::string& ip_str, const std::string& port)
     {
         // setup connection structs
         auto hints = get_connection_hints();
@@ -174,7 +100,8 @@ struct Connection {
         // find first valid peer address
         int socket_fd{-1};
         for (auto rp = peer; rp != nullptr; rp = rp->ai_next) {
-            if ((socket_fd = ::socket(peer->ai_family, peer->ai_socktype, peer->ai_protocol)) == -1) {
+            socket_fd = ::socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+            if (socket_fd == -1) {
                 ::close(socket_fd);
                 continue;
             }
@@ -190,27 +117,21 @@ struct Connection {
             setsockopt(socket_fd, SOL_SOCKET, SO_LINGER, &sl, sizeof(sl));
             break;
         }
-
         ENSURE(socket_fd != -1);
+
         // connect to peer
         if (::connect(socket_fd, peer->ai_addr, peer->ai_addrlen) == -1) {
             const auto* ip = reinterpret_cast<sockaddr_in*>(peer->ai_addr);
             ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
             throw NetworkConnectionError(ip_buffer);
         }
-
-        ::send(socket_fd, &node_id, sizeof(node_id), MSG_WAITALL);
-
-        sockaddr_in sin{};
-        socklen_t len = sizeof(sin);
-        ::getsockname(socket_fd, reinterpret_cast<sockaddr*>(&sin), &len);
-
+        ::send(socket_fd, &node_id, sizeof(node_id_t), 0);
         // free addrinfo linked list
         ::freeaddrinfo(peer);
         return socket_fd;
     }
 
-    static decltype(auto) setup_egress(u16 node_id, const std::string& ip_str, const std::string& port, std::integral auto num_connections)
+    static decltype(auto) setup_egress(node_id_t node_id, const std::string& ip_str, const std::string& port, std::integral auto num_connections)
     {
         DEBUGGING(print("opening"s, num_connections, "connections to:"s, ip_str, "..."s));
         auto socket_fds = std::vector<int>(num_connections);
@@ -218,14 +139,6 @@ struct Connection {
             socket_fds[i] = setup_egress(node_id, ip_str, port);
         }
         return socket_fds;
-    }
-
-    // TODO remove
-    void close_connections()
-    {
-        for (const auto i : socket_file_descriptors) {
-            ::shutdown(i, SHUT_RDWR);
-        }
     }
 
     static void close_connections(std::vector<int>& socket_fds)

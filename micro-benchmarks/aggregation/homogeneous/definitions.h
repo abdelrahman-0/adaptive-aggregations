@@ -17,6 +17,7 @@
 #include "core/storage/table.h"
 #include "defaults.h"
 #include "system/node.h"
+#include "utils/configuration.h"
 
 using namespace std::chrono_literals;
 /* --------------------------------------- */

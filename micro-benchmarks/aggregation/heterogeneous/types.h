@@ -20,6 +20,7 @@
 #include "defaults.h"
 #include "system/node.h"
 #include "system/topology.h"
+#include "utils/configuration.h"
 #include "utils/hash.h"
 #include "utils/utils.h"
 /* --------------------------------------- */

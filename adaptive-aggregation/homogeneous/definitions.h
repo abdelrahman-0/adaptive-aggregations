@@ -80,4 +80,5 @@ DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashta
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
 DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
-DEFINE_string(config, "../../adaptive-aggregation/config_local.json", "path to config file");
+DEFINE_string(config, "../../configs/config_local.json", "path to config file");
+DEFINE_uint32(partgrpsz, 4, "number of partitions per partition group");
