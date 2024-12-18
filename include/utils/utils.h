@@ -29,7 +29,7 @@ auto drop(auto&& val)
 // need 64-bit system for pointer tagging
 static_assert(sizeof(void*) == 8);
 
-static constexpr u64 pointer_tag_mask = (~static_cast<u64>(0)) >> 16;
+static constexpr u64 pointer_tag_mask = (static_cast<u64>(~0)) >> 16;
 
 template <typename T>
 static inline auto get_pointer(void* tagged_ptr)

@@ -8,29 +8,24 @@
 
 namespace buf {
 
-template <typename page_t, concepts::is_block_allocator<page_t> BlockAlloc, typename Fn = std::function<void(page_t*, bool /* final eviction? */)>>
+template <typename page_t, concepts::is_block_allocator<page_t> BlockAlloc>
 class EvictionBuffer {
+  public:
+    using EvictionFn = std::function<void(page_t*, bool /* final eviction? */)>;
 
   private:
     std::vector<page_t*> partitions;
-    std::vector<Fn> eviction_fns;
+    std::vector<EvictionFn> eviction_fns;
     BlockAlloc& block_alloc;
 
   public:
-    using EvictionFn = Fn;
-
-    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<Fn>& _eviction_fns) : partitions(npartitions), block_alloc(block_alloc), eviction_fns(_eviction_fns)
+    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<EvictionFn>& _eviction_fns) : partitions(npartitions), block_alloc(block_alloc), eviction_fns(_eviction_fns)
     {
         // alloc partitions
         for (auto& part : partitions) {
             part = block_alloc.get_object();
             part->clear_tuples();
         }
-    }
-
-    void replace_eviction_fns(const std::vector<Fn>& _eviction_fns)
-    {
-        eviction_fns = _eviction_fns;
     }
 
     ALWAYS_INLINE page_t* get_partition_page(u32 part) const

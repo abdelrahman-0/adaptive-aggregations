@@ -47,7 +47,7 @@ class Logger {
     /* --------------------------------------- */
     template <typename... T>
     requires(std::is_same_v<std::string, std::remove_cvref_t<T>> and ...) or ((requires(T... t) { (std::to_string(t), ...); }))
-    decltype(auto) log(std::string&& param, T&&... vals)
+    decltype(auto) log(const std::string& param, T&&... vals)
     {
         auto _ = std::unique_lock{mutex};
         using namespace std::string_literals;

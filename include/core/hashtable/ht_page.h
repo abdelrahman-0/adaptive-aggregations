@@ -84,8 +84,8 @@ struct PageAggregation : PageCommunication<defaults::hashtable_page_size, EntryA
     using base_t::num_tuples;
     using idx_t                          = agg_entry_idx_t<GroupAttributes, AggregateAttributes, mode, next_first>;
     static constexpr u8 part_no_shift    = 32;
-    // highest bit is used by communication page (see base class)
-    static constexpr u64 num_tuples_mask = 0x80000000FFFFFFFF;
+    // two highest bits are used by communication page (see base class)
+    static constexpr u64 num_tuples_mask = 0xC0000000FFFFFFFF;
 
     ALWAYS_INLINE decltype(auto) get_group(std::unsigned_integral auto idx)
     {

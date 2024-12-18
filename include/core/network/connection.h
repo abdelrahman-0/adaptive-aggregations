@@ -14,7 +14,6 @@
 #include "defaults.h"
 #include "misc/exceptions/exceptions_network.h"
 
-static constexpr auto communication_port_base = defaults::port_base_worker;
 static char ip_buffer[INET_ADDRSTRLEN];
 
 static auto get_connection_hints(bool use_ipv6 = false)
@@ -73,12 +72,12 @@ struct Connection {
         while (num_connections--) {
             ::sockaddr_storage ingress_addr{};
             socklen_t addr_size   = sizeof(ingress_addr);
-            const auto ingress_fd = ::accept(sock_fd, reinterpret_cast<sockaddr*>(&ingress_addr), &addr_size);
+            auto ingress_fd = ::accept(sock_fd, reinterpret_cast<sockaddr*>(&ingress_addr), &addr_size);
             if (ingress_fd < 0) {
                 throw NetworkSocketAcceptError{};
             }
-            node_id_t incoming_node_id;
-            ::recv(ingress_fd, &incoming_node_id, sizeof(node_id_t), MSG_WAITALL);
+            node_t incoming_node_id;
+            ::recv(ingress_fd, &incoming_node_id, sizeof(node_t), MSG_WAITALL);
             DEBUGGING(print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")"));
             socket_fds[incoming_node_id] = ingress_fd;
             ::inet_ntop(ingress_addr.ss_family, &ingress_addr, ip_buffer, sizeof(ip_buffer));
@@ -88,7 +87,7 @@ struct Connection {
         return socket_fds;
     }
 
-    static int setup_egress(node_id_t node_id, const std::string& ip_str, const std::string& port)
+    static int setup_egress(node_t node_id, const std::string& ip_str, const std::string& port)
     {
         // setup connection structs
         auto hints = get_connection_hints();
@@ -125,13 +124,13 @@ struct Connection {
             ::inet_ntop(peer->ai_family, &(ip->sin_addr), ip_buffer, sizeof(ip_buffer));
             throw NetworkConnectionError(ip_buffer);
         }
-        ::send(socket_fd, &node_id, sizeof(node_id_t), 0);
+        ::send(socket_fd, &node_id, sizeof(node_t), 0);
         // free addrinfo linked list
         ::freeaddrinfo(peer);
         return socket_fd;
     }
 
-    static decltype(auto) setup_egress(node_id_t node_id, const std::string& ip_str, const std::string& port, std::integral auto num_connections)
+    static decltype(auto) setup_egress(node_t node_id, const std::string& ip_str, const std::string& port, std::integral auto num_connections)
     {
         DEBUGGING(print("opening"s, num_connections, "connections to:"s, ip_str, "..."s));
         auto socket_fds = std::vector<int>(num_connections);

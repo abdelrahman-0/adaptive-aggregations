@@ -42,7 +42,7 @@ u32 consume_ingress(IngressManager &manager_recv) {
     u32 peers_done{0};
     auto [network_page, peer] = manager_recv.get_page();
     while (network_page) {
-        bool last_page = network_page->is_last_page();
+        bool last_page = network_page->is_primary_bit_set();
         peers_done += last_page;
         manager_recv.done_page(network_page);
         if (!last_page) {
@@ -181,7 +181,7 @@ int main(int argc, char *argv[]) {
                             if (not page->empty() or final_dst_partition) {
                                 page->retire();
                                 if (is_last and final_dst_partition) {
-                                    page->set_last_page();
+                                    page->set_primary_bit();
                                 }
                                 manager_send.try_flush(actual_dst, page);
                             }

@@ -1,16 +1,23 @@
 #pragma once
 
+#include "bench/bench.h"
 #include "core/memory/block_allocator.h"
 #include "defaults.h"
 
-namespace adapre {
+namespace adapt {
 
-// a task offer is simply a page interval [start, end) to process
-struct TaskOffer {
+// a task is simply a page interval [start, end) to process
+struct Task {
     u32 start;
     u32 end;
 
-    auto operator<=>(const TaskOffer&) const = default;
+    Task() = default;
+
+    Task(std::unsigned_integral auto start, std::unsigned_integral auto end) : start(start), end(end)
+    {
+    }
+
+    auto operator<=>(const Task&) const = default;
 
     explicit operator bool() const
     {
@@ -18,26 +25,38 @@ struct TaskOffer {
         return start < end;
     }
 
-    auto operator-(const TaskOffer& other) const
+    auto operator-(const Task& other) const
     {
         // a response-offer is always a subset of the original offer
         // so the difference [60, 100) - [60, 80) is equal to [80, 100)
         ENSURE(other <= *this);
-        return TaskOffer{other.end, end};
+        return Task{other.end, end};
     };
 };
 
 enum MSG_TYPE : s8 {
-    TASK_OFFER           = 0,
+    TASK_OFFER          = 0,
     TASK_OFFER_RESPONSE = 1,
-    NUM_WORKERS_UPDATE   = 2,
-    QUERY_END            = 3,
+    NUM_WORKERS_UPDATE  = 2,
+    QUERY_END           = 3,
 };
 
 struct StateMessage {
-    TaskOffer offer;
+    Task task;
     u16 nworkers;
     MSG_TYPE type;
+
+    StateMessage(MSG_TYPE _type) : type(_type)
+    {
+    }
+
+    StateMessage(std::unsigned_integral auto _nworkers, MSG_TYPE _type) : nworkers(_nworkers), type(_type)
+    {
+    }
+
+    StateMessage(Task _task, std::unsigned_integral auto _nworkers, MSG_TYPE _type) : task(_task), nworkers(_nworkers), type(_type)
+    {
+    }
 
     [[nodiscard]]
     bool requires_more_workers() const

@@ -4,30 +4,48 @@
 #include "defaults.h"
 
 template <u64 page_size, typename Attribute, bool use_ptr = true>
-struct PageCommunication : public PageRowStore<page_size, Attribute, use_ptr> {
+struct PageCommunication : PageRowStore<page_size, Attribute, use_ptr> {
     using PageBase = PageRowStore<page_size, Attribute, use_ptr>;
     using PageBase::num_tuples;
-    static constexpr u64 highest_bit_mask_64 = 0x8000000000000000;
+    static constexpr u64 bit_mask_64_primary_bit   = 0x8000000000000000;
+    static constexpr u64 bit_mask_64_secondary_bit = 0x4000000000000000;
+    static constexpr u64 bit_mask_64_clear_tuples  = ~(bit_mask_64_primary_bit | bit_mask_64_secondary_bit);
 
-    void set_last_page()
+    // TODO generalize to n bits?
+    void set_primary_bit()
     {
-        num_tuples |= highest_bit_mask_64;
+        num_tuples |= bit_mask_64_primary_bit;
     }
 
-    void clear_last_page()
+    void clear_primary_bit()
     {
-        num_tuples &= ~highest_bit_mask_64;
+        num_tuples &= ~bit_mask_64_primary_bit;
+    }
+    [[nodiscard]]
+    bool is_primary_bit_set() const
+    {
+        return num_tuples & bit_mask_64_primary_bit;
+    }
+
+    void set_secondary_bit()
+    {
+        num_tuples |= bit_mask_64_secondary_bit;
+    }
+
+    void clear_secondary_bit()
+    {
+        num_tuples &= ~bit_mask_64_secondary_bit;
     }
 
     [[nodiscard]]
-    bool is_last_page() const
+    bool is_secondary_bit_set() const
     {
-        return num_tuples & highest_bit_mask_64;
+        return num_tuples & bit_mask_64_secondary_bit;
     }
 
     [[nodiscard]]
     u64 get_num_tuples() const
     {
-        return num_tuples & ~highest_bit_mask_64;
+        return num_tuples & bit_mask_64_clear_tuples;
     }
 };

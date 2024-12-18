@@ -71,14 +71,14 @@ struct Swip {
 
     template <typename T>
     [[nodiscard]]
-    ALWAYS_INLINE auto get_pointer() const
+    ALWAYS_INLINE auto* get_pointer() const
     {
         return reinterpret_cast<T*>(val);
     }
 
     std::ostream& operator<<(std::ostream& out) const
     {
-        out << reinterpret_cast<uint64_t>(val);
+        out << val;
         return out;
     }
 

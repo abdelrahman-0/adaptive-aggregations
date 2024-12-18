@@ -151,8 +151,8 @@ class BlockAllocatorConcurrent : public BlockAllocator<object_t, Alloc, true> {
                     allocation_lock.notify_all();
                     goto retry;
                 }
+                auto* result = allocate();
                 ++version;
-                auto* result    = allocate();
                 allocation_lock = false;
                 allocation_lock.notify_all();
                 return result;

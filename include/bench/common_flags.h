@@ -8,7 +8,7 @@ DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");
 DEFINE_bool(sqpoll, false, "whether to use kernel-sided submission queue polling");
 
-DEFINE_string(config, "../../../configs/config_local.json", "path to config file");
+DEFINE_string(config, "../../configs/config_local.json", "path to config file");
 
 DEFINE_bool(random, true, "whether to use randomly generated data instead of reading in a file");
 DEFINE_uint32(npages, 2, "number of random pages to generate (only applicable if 'random' flag is set)");

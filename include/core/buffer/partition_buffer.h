@@ -12,8 +12,15 @@ template <typename BufferPage, bool is_concurrent>
 struct PartitionBuffer {
     std::conditional_t<is_concurrent, std::vector<tbb::concurrent_vector<BufferPage*>>, std::vector<std::vector<BufferPage*>>> partition_pages;
 
+    PartitionBuffer() = default;
+
     explicit PartitionBuffer(u32 npartitions) : partition_pages(npartitions)
     {
+    }
+
+    void resize(u32 npartitions)
+    {
+        partition_pages.resize(npartitions);
     }
 
     void add_page(BufferPage* page, u32 part_no)

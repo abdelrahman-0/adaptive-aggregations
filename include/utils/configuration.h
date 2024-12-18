@@ -6,7 +6,7 @@
 
 #include "bench/bench.h"
 
-namespace adapre {
+namespace adapt {
 
 struct NodeInfo {
     std::string ip;
@@ -40,6 +40,12 @@ class Configuration {
         auto info_json = config["workers"][worker_id];
         return NodeInfo{info_json["ip"], info_json["port"]};
     }
+
+    [[nodiscard]]
+    auto get_num_workers() const
+    {
+        return config["workers"].size();
+    }
 };
 
-} // namespace adapre
+} // namespace adapt

@@ -242,7 +242,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
                 slot = reinterpret_cast<slot_idx_t>(reinterpret_cast<uintptr_t>(slot) >> (is_salted * BITS_SALT));
                 if (slot->get_group() == key) {
                     fn_agg(slot->get_aggregates(), value);
-                    ++group_found;
+                    ++group_found; // TODO remove
                     return;
                 }
             }
@@ -270,7 +270,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     void aggregate(const key_t& key, const value_t& value, u64 key_hash)
     requires(slots_mode != DIRECT and ((1ul << ((sizeof(slot_idx_t) * 8) - (16 * is_salted))) > page_t::max_tuples_per_page))
     {
-        static constexpr slot_idx_t slot_idx_mask = (~static_cast<slot_idx_t>(0)) >> 1;
+        static constexpr slot_idx_t slot_idx_mask = static_cast<slot_idx_t>(~0) >> 1;
         // extract top bits from hash
         u64 mod                                   = key_hash >> mod_shift;
         u64 part_no                               = mod >> partition_shift;
@@ -281,6 +281,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
         // use bottom bits for salt
         u16 hash_prefix                           = static_cast<u16>(key_hash);
 
+        DEBUGGING(static u64 adding{0});
         // walk sequence of slots
         while (slot) {
             bool condition{true};
@@ -302,6 +303,8 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
         }
         auto [ht_entry, evicted] = inserter.insert(key, value, key_hash, part_no, part_page);
         if (evicted) {
+            // eviction took place
+
             // reset mod
             mod = key_hash >> mod_shift;
             clear_slots(part_no);

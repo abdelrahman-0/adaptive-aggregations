@@ -69,7 +69,7 @@ int main(int argc, char* argv[])
             u32 peers_done                = 0;
             /* --------------------------------------- */
             auto ingress_page_consumer_fn = std::function{[&peers_done, &recv_alloc, &manager_recv](const PageResult* page, u32 dst) {
-                if (page->is_last_page()) {
+                if (page->is_primary_bit_set()) {
                     // recv sketch after last page
                     peers_done++;
                 }
@@ -102,7 +102,7 @@ int main(int argc, char* argv[])
                         if (not page->empty() or final_dst_partition) {
                             page->retire();
                             if (is_last and final_dst_partition) {
-                                page->set_last_page();
+                                page->set_primary_bit();
                             }
                             manager_send.send(actual_dst, page);
                         }

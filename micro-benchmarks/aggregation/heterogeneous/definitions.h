@@ -85,6 +85,7 @@ using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggreg
 static_assert(idx_mode_slots != ht::NO_IDX);
 /* --------------------------------------- */
 struct QueryThreadGroup {
+    // TODO add base and inherit for Heterogeneous and move structs to includes
     std::vector<Sketch> sketches_ingress{};
     std::vector<Sketch> sketches_egress{};
     BlockAllocEgress* alloc_egress{nullptr};
@@ -114,9 +115,9 @@ auto find_dedicated_nthread(std::integral auto qthread_id)
     u16 qthreads_per_nthread  = FLAGS_qthreads / FLAGS_nthreads;
     auto num_fat_nthreads     = FLAGS_qthreads % FLAGS_nthreads;
     auto num_fat_qthreads     = (qthreads_per_nthread + 1) * num_fat_nthreads;
-    bool fat_nthread          = qthread_id < num_fat_qthreads;
-    qthreads_per_nthread     += fat_nthread;
-    auto dedicated_nthread    = fat_nthread ? (qthread_id / qthreads_per_nthread) : num_fat_nthreads + ((qthread_id - num_fat_qthreads) / qthreads_per_nthread);
-    auto qthread_local_id     = fat_nthread ? (qthread_id - dedicated_nthread * qthreads_per_nthread) : (qthread_id - num_fat_nthreads - dedicated_nthread * qthreads_per_nthread);
+    bool has_extra_qthread    = qthread_id < num_fat_qthreads;
+    qthreads_per_nthread     += has_extra_qthread;
+    auto dedicated_nthread    = has_extra_qthread ? (qthread_id / qthreads_per_nthread) : num_fat_nthreads + ((qthread_id - num_fat_qthreads) / qthreads_per_nthread);
+    auto qthread_local_id     = has_extra_qthread ? (qthread_id - dedicated_nthread * qthreads_per_nthread) : (qthread_id - num_fat_nthreads - dedicated_nthread * qthreads_per_nthread);
     return std::make_tuple(dedicated_nthread, qthreads_per_nthread, qthread_local_id);
 }

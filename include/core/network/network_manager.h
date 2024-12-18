@@ -120,7 +120,9 @@ class BaseNetworkManager {
     explicit BaseNetworkManager(u32 nwdepth, bool sqpoll, const std::vector<int>& sockets) : cqes(nwdepth * 2), nwdepth(nwdepth)
     {
         init_ring(sqpoll);
-        register_sockets(sockets);
+        if (not sockets.empty()) {
+            register_sockets(sockets);
+        }
     }
 };
 
@@ -390,6 +392,7 @@ class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
         inflight_ingress -= cqes_peeked;
     }
 
+    [[nodiscard]]
     bool has_inflight() const
     {
         return inflight_ingress;

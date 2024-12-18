@@ -49,7 +49,7 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
 
     void aggregate(const key_t& key, const value_t& value, idx_t& next, u64 key_hash, entry_t* addr)
     {
-        u64 mod = get_pos(key_hash);
+        u64 mod             = get_pos(key_hash);
         slot_idx_raw_t head = slots[mod].load();
         while (true) {
             auto slot = head;
@@ -74,8 +74,8 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
 
     void insert(entry_t& entry)
     {
-        auto& key = entry.get_group();
-        auto& agg = entry.get_aggregates();
+        auto& key  = entry.get_group();
+        auto& agg  = entry.get_aggregates();
         auto& next = entry.get_next();
         aggregate(key, agg, next, hash_tuple(key), &entry);
     }
@@ -87,8 +87,7 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
     }
 };
 
-template <typename key_t, typename value_t, IDX_MODE entry_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, bool is_multinode,
-          bool is_salted>
+template <typename key_t, typename value_t, IDX_MODE entry_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, bool is_multinode, bool is_salted>
 struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtable<key_t, value_t, entry_mode, Alloc, is_multinode> {
     using base_t = ConcurrentAggregationHashtable<key_t, value_t, entry_mode, Alloc, is_multinode>;
     using base_t::get_pos;
@@ -107,11 +106,11 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
 
     void aggregate(const key_t& key, const value_t& value, u64 key_hash, entry_t* addr)
     {
-        u64 mod = get_pos(key_hash);
+        u64 mod             = get_pos(key_hash);
         slot_idx_raw_t slot = slots[mod].load();
 
         // use bottom bits for salt
-        u16 salt = static_cast<u16>(key_hash);
+        u16 salt            = static_cast<u16>(key_hash);
 
         while (true) {
             // walk slots
@@ -122,7 +121,7 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
                     condition = salt == static_cast<u16>(reinterpret_cast<uintptr_t>(slot));
                 }
                 if (condition) {
-                    slot = reinterpret_cast<slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_salted * BITS_SALT));
+                    slot     = reinterpret_cast<slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_salted * BITS_SALT));
                     auto grp = slot->get_group();
                     auto agg = slot->get_aggregates();
                     if (slot->get_group() == key) {
@@ -130,7 +129,7 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
                         return;
                     }
                 }
-                mod = (mod + 1) & size_mask;
+                mod  = (mod + 1) & size_mask;
                 slot = slots[mod].load();
             }
             if constexpr (is_salted) {

@@ -1,16 +1,16 @@
 #pragma once
 
 #include "defaults.h"
-#include "state_messages.h"
+#include "common.h"
 
-namespace adapre {
+namespace adapt {
 
 struct WorkerQueryState {
-    static constexpr u16 max_outstanding{2};
+    static constexpr u16 max_outstanding{1};
     static constexpr u16 max_counter_offers{1};
-    TaskOffer last_offer{};
+    Task last_task{};
     u16 num_outstanding{0};
-    u16 num_remainder_offers{0};
+    u16 num_remainder_tasks{0};
 
     WorkerQueryState()                        = default;
 
@@ -19,10 +19,10 @@ struct WorkerQueryState {
     [[nodiscard]]
     bool can_accept_work() const
     {
-        return (num_outstanding < max_outstanding) and (num_remainder_offers < max_counter_offers);
+        return (num_outstanding < max_outstanding) and (num_remainder_tasks < max_counter_offers);
     }
 
-    void sent_offer()
+    void sent_task()
     {
         num_outstanding++;
     }
@@ -31,7 +31,7 @@ struct WorkerQueryState {
     {
         num_outstanding--;
         bool requires_workers  = msg.requires_more_workers();
-        num_remainder_offers  += requires_workers;
+        num_remainder_tasks  += requires_workers;
         return requires_workers;
     }
 };

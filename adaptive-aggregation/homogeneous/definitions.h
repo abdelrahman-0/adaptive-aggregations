@@ -2,10 +2,11 @@
 
 #include <barrier>
 #include <gflags/gflags.h>
+#include <latch>
 #include <thread>
 
+#include "adaptive/common.h"
 #include "adaptive/node_monitor.h"
-#include "adaptive/state_messages.h"
 #include "adaptive/worker_state.h"
 #include "bench/bench.h"
 #include "bench/common_flags.h"
@@ -54,6 +55,7 @@ using PageTable                                = PageLocal<TABLE_SCHEMA>;
 using PageResult                               = ht::PageAggregation<Groups, Aggregates, idx_mode_entries, idx_mode_slots == ht::DIRECT, true>;
 using BlockAlloc                               = mem::BlockAllocatorNonConcurrent<PageResult, MemAlloc>;
 using BufferLocal                              = buf::EvictionBuffer<PageResult, BlockAlloc>;
+using StorageLocal                             = buf::PartitionBuffer<PageResult, false>;
 using StorageGlobal                            = buf::PartitionBuffer<PageResult, true>;
 using InserterLocal                            = buf::PartitionedAggregationInserter<PageResult, idx_mode_entries, BufferLocal, Sketch, true>;
 using EgressManager                            = network::HomogeneousEgressNetworkManager<PageResult, Sketch>;
@@ -79,6 +81,6 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
-DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
-DEFINE_string(config, "../../configs/config_local.json", "path to config file");
-DEFINE_uint32(partgrpsz, 4, "number of partitions per partition group");
+DEFINE_double(thresh1, 0.2, "tuple ratio threshold for disabling local pre-aggregation");
+DEFINE_double(thresh2, 0.5, "tuple ratio threshold for scaling out");
+DEFINE_double(sla, 5, "total runtime SLA (in seconds)");
