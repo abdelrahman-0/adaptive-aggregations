@@ -28,12 +28,12 @@ using namespace std::chrono_literals;
 /* --------------------------------------- */
 #define AGG_VALS 1
 #define AGG_KEYS u64
-#define GPR_KEYS_IDX 0, 1, 2, 3
-#define GRP_KEYS u64, u64, u64, u64
-#define TABLE_SCHEMA GRP_KEYS, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
+#define GPR_KEYS_IDX 0
+#define GRP_KEYS u64
 /* --------------------------------------- */
 using Groups     = std::tuple<GRP_KEYS>;
 using Aggregates = std::tuple<AGG_KEYS>;
+#define TABLE_SCHEMA GRP_KEYS, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 /* --------------------------------------- */
 static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
