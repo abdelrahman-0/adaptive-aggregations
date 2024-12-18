@@ -107,7 +107,7 @@ struct TaskScheduler {
     double estimate_glob_ht_build_s(u64 nunique_grps)
     {
         // TODO GLM? (output tuple sz + estimated grps)
-        return nunique_grps / 10'000'000.0;
+        return nunique_grps / 1'000'000.0;
     }
 
     u16 estimate_nworkers()
@@ -124,12 +124,12 @@ struct TaskScheduler {
         double estimated_transfer_time_s      = remainder_factor * task_metrics.get_output_size_B() / defaults::node_bandwidth_GB_per_s;
         double cpu_bound_estimate             = (elapsed_time_s * remainder_factor + estimated_glob_ht_built_time_s) / SLA_adjusted_s;
         double network_bound_estimate         = math::find_max_quadratic_root(SLA_adjusted_s, -estimated_transfer_time_s - estimated_glob_ht_built_time_s, estimated_transfer_time_s);
-        // static u64 printed                    = 0;
-        // if (printed++ % 1000 == 0) {
-        //     print("remainder factor", remainder_factor, "nunique_grps", nunique_grps, "estimated glob ht time", estimated_glob_ht_built_time_s, "estimated transfer time",
-        //           estimated_transfer_time_s);
-        //     print("cpu bound estimate:", cpu_bound_estimate, "network bound estimate:", network_bound_estimate);
-        // }
+        static u64 printed                    = 0;
+        if (printed++ % 1000 == 0) {
+            print("remainder factor", remainder_factor, "nunique_grps", nunique_grps, "estimated glob ht time", estimated_glob_ht_built_time_s, "estimated transfer time",
+                  estimated_transfer_time_s);
+            print("cpu bound estimate:", cpu_bound_estimate, "network bound estimate:", network_bound_estimate);
+        }
         node_t nworkers_estimated = std::ceil(std::max(cpu_bound_estimate, network_bound_estimate));
         return nworkers_estimated;
     }
