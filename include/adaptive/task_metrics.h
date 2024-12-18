@@ -41,7 +41,7 @@ struct TaskMetrics {
     }
 
     [[nodiscard]]
-    double estimate_unique_groups(u16 nworkers, double remainder_factor) const
+    u64 estimate_unique_groups(u16 nworkers) const
     {
         sketch_t combined_sketch;
         auto [sketches_per_worker, extra_sketches] = std::ldiv(sketches.size(), nworkers);
@@ -51,8 +51,9 @@ struct TaskMetrics {
         for (u16 i{lower_limit}; i < upper_limit; ++i) {
             combined_sketch.merge_concurrent(sketches[i]);
         }
-        // TODO exp weighted? check second and first order grad? f' & f''
-        return combined_sketch.get_estimate() * remainder_factor;
+        // TODO exp weighted? check second and first order grad? f' & f'' (store in state struct)
+        auto unique_grps = combined_sketch.get_estimate();
+        return unique_grps;
     }
 
     [[nodiscard]]

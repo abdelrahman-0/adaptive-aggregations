@@ -105,7 +105,8 @@ class BaseNetworkManager {
 
     void init_ring(bool sqpoll)
     {
-        if (int ret; (ret = io_uring_queue_init(next_power_2(nwdepth), &ring, IORING_SETUP_SINGLE_ISSUER | (sqpoll ? IORING_SETUP_SQPOLL : 0))) < 0) {
+        int ret;
+        if ((ret = io_uring_queue_init(next_power_2(nwdepth), &ring, IORING_SETUP_SINGLE_ISSUER | (sqpoll ? IORING_SETUP_SQPOLL : 0))) < 0) {
             throw IOUringInitError{ret};
         }
     }
@@ -202,10 +203,10 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
     {
         auto peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
         for (u32 i{0}; i < peeked; ++i) {
-            if (cqes[i]->res <= 0) {
+            UserData user_data{io_uring_cqe_get_data(cqes[i])};
+            if (cqes[i]->res != 0 and cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) {
                 throw IOUringSendError{cqes[i]->res};
             }
-            UserData user_data{io_uring_cqe_get_data(cqes[i])};
             u16 peeked_dst           = user_data.get_top_tag();
             has_inflight[peeked_dst] = flush_dst(peeked_dst);
             consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer());
@@ -224,7 +225,7 @@ class EgressNetworkManager : public BaseNetworkManager<object_ts...> {
             }
             UserData user_data{io_uring_cqe_get_data(cqes[0])};
             auto obj_idx = user_data.get_bottom_tag();
-            if (cqes[0]->res != object_sizes[obj_idx]) {
+            if (cqes[0]->res != 0 and cqes[0]->res != object_sizes[user_data.get_bottom_tag()]) {
                 throw IOUringSendError{cqes[0]->res};
             }
             io_uring_cq_advance(&ring, 1);
@@ -382,7 +383,7 @@ class IngressNetworkManager : public BaseNetworkManager<object_ts...> {
         auto cqes_peeked = io_uring_peek_batch_cqe(&ring, cqes.data(), cqes.size());
         for (auto i{0u}; i < cqes_peeked; ++i) {
             UserData user_data{io_uring_cqe_get_data(cqes[i])};
-            if (cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) {
+            if (cqes[i]->res != 0 and cqes[i]->res != object_sizes[user_data.get_bottom_tag()]) {
                 throw IOUringRecvError(cqes[i]->res);
             }
             consumer_fns[user_data.get_bottom_tag()](user_data.get_pointer(), user_data.get_top_tag());

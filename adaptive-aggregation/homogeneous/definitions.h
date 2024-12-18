@@ -28,12 +28,12 @@ using namespace std::chrono_literals;
 /* --------------------------------------- */
 #define AGG_VALS 1
 #define AGG_KEYS u64
-#define GPR_KEYS_IDX 0
-#define GRP_KEYS u64
+#define GPR_KEYS_IDX 0, 1, 2, 3
+#define GRP_KEYS u64, u64, u64, u64
+#define TABLE_SCHEMA GRP_KEYS, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 /* --------------------------------------- */
 using Groups     = std::tuple<GRP_KEYS>;
 using Aggregates = std::tuple<AGG_KEYS>;
-#define TABLE_SCHEMA GRP_KEYS, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 /* --------------------------------------- */
 static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
@@ -81,6 +81,5 @@ DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partiti
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
-DEFINE_double(thresh1, 0.2, "tuple ratio threshold for disabling local pre-aggregation");
-DEFINE_double(thresh2, 0.5, "tuple ratio threshold for scaling out");
-DEFINE_double(sla, 5, "total runtime SLA (in seconds)");
+DEFINE_double(thresh, 0.2, "tuple ratio threshold for disabling local pre-aggregation");
+DEFINE_double(sla, 1.5, "total runtime SLA (in seconds)");

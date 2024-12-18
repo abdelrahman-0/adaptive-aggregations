@@ -104,11 +104,10 @@ struct HLLSketch {
     void merge_concurrent(const HLLSketch& other)
     {
         for (u64 i{0}; i < registers.size(); ++i) {
-            std::atomic_ref current_value{registers[i]};
-            u8 prev_value  = current_value;
-            u8 other_value = other.registers[i];
-            while (prev_value < other_value && !current_value.compare_exchange_weak(prev_value, other_value)) {
-            }
+            u8& current_value = registers[i];
+            const u8& other_value   = other.registers[i];
+            while ((current_value < other_value) && !__sync_bool_compare_and_swap(&current_value, current_value, other_value))
+                ;
         }
     }
 

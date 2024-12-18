@@ -22,6 +22,7 @@ int main(int argc, char* argv[])
     auto npartgrps_shift = __builtin_ctz(npartgrps);
     /* --------------------------------------- */
     auto current_swip    = std::atomic{0ul};
+    auto times_preagg    = tbb::concurrent_vector<u64>(FLAGS_threads);
     auto storage_glob    = StorageGlobal{FLAGS_partitions};
     auto sketch_glob     = Sketch{};
     auto ht_glob         = HashtableGlobal{};
@@ -43,19 +44,22 @@ int main(int argc, char* argv[])
     }};
     coordinator_latch.wait();
     /* --------------------------------------- */
-    auto barrier_query  = std::barrier{FLAGS_threads + 1};
-    auto barrier_task   = std::barrier{FLAGS_threads, [&task_scheduler, &current_swip] {
-                                         task_scheduler.dequeue_task();
-                                         current_swip = 0;
+    // track if worker received any tasks
+    bool is_active_worker = false;
+    auto barrier_query    = std::barrier{FLAGS_threads + 1};
+    auto barrier_task     = std::barrier{FLAGS_threads, [&is_active_worker, &task_scheduler, &current_swip] {
+                                         is_active_worker |= task_scheduler.dequeue_task();
+                                         current_swip      = 0;
                                      }};
-    auto barrier_preagg = std::barrier{FLAGS_threads, [&ht_glob, &sketch_glob, &current_swip] {
+    auto barrier_preagg   = std::barrier{FLAGS_threads, [&ht_glob, &sketch_glob, &current_swip] {
                                            ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
                                            current_swip = 0;
                                        }};
     // instantiate query threads
     std::vector<std::jthread> threads;
     for (u16 thread_id : range(FLAGS_threads)) {
-        threads.emplace_back([=, &node, &config, &storage_glob, &sketch_glob, &ht_glob, &task_metrics, &task_scheduler, &barrier_query, &barrier_preagg, &barrier_task, &current_swip]() {
+        threads.emplace_back([=, &is_active_worker, &node, &config, &storage_glob, &sketch_glob, &ht_glob, &times_preagg, &task_metrics, &task_scheduler, &barrier_query, &barrier_preagg,
+                              &barrier_task, &current_swip]() {
             // open max nodes connections, use config for ips and ports
             if (FLAGS_pin) {
                 node.pin_thread(thread_id);
@@ -84,8 +88,8 @@ int main(int argc, char* argv[])
             auto remote_sketches_ingress = std::vector<Sketch>(npeers_max);
             auto remote_sketches_egress  = std::vector<Sketch>(npeers_max);
             auto storage_loc             = StorageLocal{FLAGS_partitions};
-            node_t sketches_seen      = 0;
-            node_t peers_ready        = 0;
+            node_t sketches_seen         = 0;
+            node_t peers_ready           = 0;
             /* --------------------------------------- */
             auto ingress_page_consumer_fn =
                 std::function{[&page_alloc_ingress, &storage_loc, &storage_glob, &remote_sketches_ingress, &manager_recv, &peers_ready](PageResult* page, u32 dst) {
@@ -105,7 +109,6 @@ int main(int argc, char* argv[])
                     else {
                         // phase 0
                         manager_recv.recv(dst, page_alloc_ingress.get_object());
-                        // print("received page from dst: ", dst, "with primary bit set to: ", page->is_primary_bit_set());
                         peers_ready += page->is_primary_bit_set();
                         if (not page->empty()) {
                             // contains global part_no
@@ -130,7 +133,7 @@ int main(int argc, char* argv[])
                 eviction_fns[part_no_glob] = [=, &task_scheduler, &storage_loc, &manager_send, &partitions_end, &task_metrics](PageResult* page, bool is_last) {
                     // defer last_page
                     auto current_workers = task_scheduler.nworkers.load();
-                    node_t dst        = (grp_no * current_workers) >> npartgrps_shift;
+                    node_t dst           = (grp_no * current_workers) >> npartgrps_shift;
                     page->retire();
                     page->set_part_no(part_no_glob);
                     auto actual_dst        = dst - (dst > node_id);
@@ -155,7 +158,7 @@ int main(int argc, char* argv[])
             auto page_alloc_egress = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
             auto partition_buffer  = BufferLocal{FLAGS_partitions, page_alloc_egress, eviction_fns};
             auto inserter_loc      = InserterLocal{FLAGS_partitions, partition_buffer, npartgrps};
-            auto ht_loc            = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh1, partition_buffer, inserter_loc};
+            auto ht_loc            = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
             /* --------------------------------------- */
             auto insert_into_ht    = [&ht_loc](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
@@ -179,7 +182,8 @@ int main(int argc, char* argv[])
                 }
             };
             barrier_query.arrive_and_wait();
-
+            Stopwatch swatch_preagg{};
+            swatch_preagg.start();
             for (node_t dst : range(npeers_max)) {
                 manager_recv.recv(dst, page_alloc_ingress.get_object());
             }
@@ -188,7 +192,6 @@ int main(int argc, char* argv[])
                 // one task per iteration
                 barrier_task.arrive_and_wait();
                 while (adapt::Task morsel = task_scheduler.get_next_morsel()) {
-                    // task_metrics.tuples_consumed += (morsel.end - morsel.start) * PageTable::max_tuples_per_page;
                     while (morsel.start < morsel.end) {
                         process_local_page(*swips[morsel.start++].get_pointer<PageTable>());
                     }
@@ -205,14 +208,22 @@ int main(int argc, char* argv[])
                 manager_send.try_drain_pending();
             }
 
+            node_t nworkers_final, npeers_final;
+            u64 first_partition, npartitions_node, groups_per_worker, extra_groups;
+            ldiv_t div_result;
+            if (not is_active_worker) {
+                goto finished_query_processing;
+            }
             // finalize buffer
-            node_t nworkers_final = task_scheduler.nworkers.load();
-            node_t npeers_final   = nworkers_final - 1;
+            nworkers_final = task_scheduler.nworkers.load();
+            npeers_final   = nworkers_final - 1;
 
             // compute last partitions
             partitions_begin.reserve(nworkers_final);
             partitions_end.reserve(nworkers_final);
-            auto [groups_per_worker, extra_groups] = std::ldiv(npartgrps, nworkers_final);
+            div_result        = std::ldiv(npartgrps, nworkers_final);
+            groups_per_worker = div_result.quot;
+            extra_groups      = div_result.rem;
             for (node_t worker_no : range(nworkers_final)) {
                 bool has_extra_grp = worker_no < extra_groups;
                 u16 first_group    = worker_no * groups_per_worker + (has_extra_grp ? worker_no : extra_groups);
@@ -223,25 +234,13 @@ int main(int argc, char* argv[])
             }
 
             partition_buffer.finalize(true);
-            print("finalized buffers");
-            print("starting ping-pong");
             while (peers_ready < npeers_final) {
                 // ping pong
                 manager_recv.consume_done();
                 manager_send.try_drain_pending();
             }
-            print("finished ping-pong");
+
             // loop through partitions and send out what not mine (and set secondary bit and primary bit), and add to storage_glob what is mine
-            u64 tuple_count = 0;
-            for (node_t part_no_glob : range(FLAGS_partitions)) {
-                // TODO remove this loop and remove prints in this file and worker_state.hpp
-                for (auto& part_page : storage_loc.partition_pages[part_no_glob]) {
-                    for (u64 j : range(part_page->get_num_tuples())) {
-                        tuple_count += std::get<0>(part_page->get_aggregates(j));
-                    }
-                }
-            }
-            print("tuple count loc:", tuple_count);
             for (node_t part_no_glob : range(FLAGS_partitions)) {
                 auto grp_no         = part_no_glob >> partgrpsz_shift;
                 auto dst            = (grp_no * nworkers_final) >> npartgrps_shift;
@@ -253,7 +252,6 @@ int main(int argc, char* argv[])
                         storage_glob.add_page(part_page, part_no_glob);
                     }
                     else {
-                        print("found crazy pages");
                         part_page->set_secondary_bit();
                         if (is_last_part) {
                             part_page->set_primary_bit();
@@ -287,7 +285,6 @@ int main(int argc, char* argv[])
             }
             for (node_t peer_id : range(npeers_final)) {
                 manager_send.send(peer_id, &remote_sketches_egress[peer_id]);
-                print("sent sketches to dst", peer_id);
             }
             // send and recv sketch
             while (sketches_seen < npeers_final) {
@@ -299,50 +296,77 @@ int main(int argc, char* argv[])
             // wait all
             manager_send.wait_all();
 
+            swatch_preagg.stop();
             barrier_preagg.arrive_and_wait();
 
-            tuple_count = 0;
-            for (node_t part_no_glob : range(FLAGS_partitions)) {
-                // TODO remove this loop
-                for (auto& part_page : storage_glob.partition_pages[part_no_glob]) {
-                    for (u64 j : range(part_page->get_num_tuples())) {
-                        tuple_count += std::get<0>(part_page->get_aggregates(j));
-                    }
-                }
-            }
-            print("tuple count glob:", tuple_count);
-
             // build global ht
-            u64 first_partition  = partitions_begin[node_id];
-            u64 npartitions_node = partitions_end[node_id] - first_partition + 1;
+            first_partition  = partitions_begin[node_id];
+            npartitions_node = partitions_end[node_id] - first_partition + 1;
             u64 swip_offset;
-            print("worker: building global HT using partitions:", first_partition, "-", partitions_end[node_id]);
             while ((swip_offset = current_swip.fetch_add(1)) < npartitions_node) {
                 for (auto* page : storage_glob.partition_pages[first_partition + swip_offset]) {
                     process_page_glob(*page);
                 }
             }
+        finished_query_processing:;
+            times_preagg[thread_id] = swatch_preagg.time_ms;
             barrier_query.arrive_and_wait();
         });
     }
 
+    Stopwatch swatch{};
     barrier_query.arrive_and_wait();
-    Stopwatch stopwatch{};
-    stopwatch.start();
+    swatch.start();
     barrier_query.arrive_and_wait();
-    stopwatch.stop();
+    swatch.stop();
 
-    // TODO log and time and start and end unix times
+    Logger{FLAGS_print_header, FLAGS_csv}
+        .log("node id", node_id)
+        .log("nodes", FLAGS_nodes)
+        .log("traffic", "both"s)
+        .log("operator", "aggregation"s)
+        .log("implementation", "adaptive homogeneous"s)
+        .log("allocator", MemAlloc::get_type())
+        .log("schema", get_schema_str<TABLE_SCHEMA>())
+        .log("group keys", get_schema_str<GRP_KEYS>())
+        .log("aggregation keys", get_schema_str<AGG_KEYS>())
+        .log("page size (local)", defaults::local_page_size)
+        .log("max tuples per page (local)", PageTable::max_tuples_per_page)
+        .log("page size (hashtable)", defaults::hashtable_page_size)
+        .log("max tuples per page (hashtable)", PageResult::max_tuples_per_page)
+        .log("hashtable (local)", HashtableLocal::get_type())
+        .log("hashtable (global)", HashtableGlobal::get_type())
+        .log("sketch", Sketch::get_type())
+        .log("consume partitions", FLAGS_consumepart)
+        .log("adaptive pre-aggregation", FLAGS_adapre)
+        .log("threshold pre-aggregation", FLAGS_thresh)
+        .log("cache (%)", FLAGS_cache)
+        .log("pin", FLAGS_pin)
+        .log("morsel size", FLAGS_morselsz)
+        .log("total pages", FLAGS_npages)
+        .log("ht factor", FLAGS_htfactor)
+        .log("partitions", FLAGS_partitions)
+        .log("partition group size", FLAGS_partgrpsz)
+        .log("slots", FLAGS_slots)
+        .log("threads", FLAGS_threads)
+        .log("SLA", FLAGS_sla)
+        .log("groups seed", FLAGS_seed)
+        .log("groups total (actual)", FLAGS_groups)
+        .log("groups node (estimate)", sketch_glob.get_estimate())
+        .log("mean pre-agg time (ms)", static_cast<u64>(std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size()))
+        .log("time (ms)", swatch.time_ms);
 
-    u64 count{0};
-    u64 inserts{0};
-    for (u64 i : range(ht_glob.size_mask + 1)) {
-        if (auto slot = ht_glob.slots[i].load()) {
-            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-            count           += slot_count;
-            inserts++;
+    if (is_active_worker) {
+        u64 count{0};
+        u64 inserts{0};
+        for (u64 i : range(ht_glob.size_mask + 1)) {
+            if (auto slot = ht_glob.slots[i].load()) {
+                auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+                count           += slot_count;
+                inserts++;
+            }
         }
+        print("INSERTS:", inserts);
+        print("COUNT:", count);
     }
-    print("INSERTS:", inserts);
-    print("COUNT:", count);
 }

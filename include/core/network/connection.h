@@ -78,7 +78,7 @@ struct Connection {
             }
             node_t incoming_node_id;
             ::recv(ingress_fd, &incoming_node_id, sizeof(node_t), MSG_WAITALL);
-            DEBUGGING(print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")"));
+            print("accepted connection from node", incoming_node_id, "( ip:", std::string(ip_buffer), ")");
             socket_fds[incoming_node_id] = ingress_fd;
             ::inet_ntop(ingress_addr.ss_family, &ingress_addr, ip_buffer, sizeof(ip_buffer));
         }
@@ -142,6 +142,7 @@ struct Connection {
 
     static void close_connections(std::vector<int>& socket_fds)
     {
+        print("closing connections");
         for (auto fd : socket_fds) {
             ::shutdown(fd, SHUT_RDWR);
         }

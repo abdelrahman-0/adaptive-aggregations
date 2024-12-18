@@ -242,7 +242,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
                 slot = reinterpret_cast<slot_idx_t>(reinterpret_cast<uintptr_t>(slot) >> (is_salted * BITS_SALT));
                 if (slot->get_group() == key) {
                     fn_agg(slot->get_aggregates(), value);
-                    ++group_found; // TODO remove
+                    ++group_found;
                     return;
                 }
             }

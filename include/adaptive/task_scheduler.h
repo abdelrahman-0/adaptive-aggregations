@@ -59,9 +59,9 @@ struct TaskScheduler {
 
     void reset()
     {
-        task_metrics.reset();
-        SLA_s                     -= task_metrics.get_elapsed_time_ms();
+        SLA_s                     -= task_metrics.get_elapsed_time_ms() / 1000.0;
         responded_to_current_task  = false;
+        task_metrics.reset();
     }
 
     [[nodiscard]]
@@ -76,7 +76,8 @@ struct TaskScheduler {
     }
 
     // guaranteed to happen strongly-before any threads are unblocked at the barrier since it is called in std::barrier's callback
-    void dequeue_task()
+    [[nodiscard]]
+    bool dequeue_task()
     {
         responded_to_current_task.wait(false);
         Task next_task;
@@ -85,7 +86,9 @@ struct TaskScheduler {
             morsel_begin   = next_task.start;
             morsel_current = next_task.start;
             morsel_end     = next_task.end;
+            return true;
         }
+        return false;
     }
 
     Task get_next_morsel()
@@ -115,12 +118,19 @@ struct TaskScheduler {
         u32 pages_done                        = morsel_now - morsel_begin;
         u32 pages_left                        = morsel_end - morsel_now;
         double remainder_factor               = (1.0 * pages_left) / pages_done;
-        u64 nunique_grps                      = task_metrics.estimate_unique_groups(nworkers, remainder_factor);
+        u64 nunique_grps                      = task_metrics.estimate_unique_groups(nworkers) * (remainder_factor + 1);
         double estimated_glob_ht_built_time_s = estimate_glob_ht_build_s(nunique_grps);
+        // TODO also initial pages need to be transferred
         double estimated_transfer_time_s      = remainder_factor * task_metrics.get_output_size_B() / defaults::node_bandwidth_GB_per_s;
         double cpu_bound_estimate             = (elapsed_time_s * remainder_factor + estimated_glob_ht_built_time_s) / SLA_adjusted_s;
         double network_bound_estimate         = math::find_max_quadratic_root(SLA_adjusted_s, -estimated_transfer_time_s - estimated_glob_ht_built_time_s, estimated_transfer_time_s);
-        node_t nworkers_estimated          = std::ceil(std::max(cpu_bound_estimate, network_bound_estimate));
+        // static u64 printed                    = 0;
+        // if (printed++ % 1000 == 0) {
+        //     print("remainder factor", remainder_factor, "nunique_grps", nunique_grps, "estimated glob ht time", estimated_glob_ht_built_time_s, "estimated transfer time",
+        //           estimated_transfer_time_s);
+        //     print("cpu bound estimate:", cpu_bound_estimate, "network bound estimate:", network_bound_estimate);
+        // }
+        node_t nworkers_estimated = std::ceil(std::max(cpu_bound_estimate, network_bound_estimate));
         return nworkers_estimated;
     }
 };

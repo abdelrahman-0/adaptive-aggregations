@@ -136,7 +136,9 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     {
         StateMessage message{QUERY_END};
         egress_mgr.broadcast(&message);
+        print("waiting for all");
         egress_mgr.wait_all();
+        print("finished waiting");
     }
 
   public:

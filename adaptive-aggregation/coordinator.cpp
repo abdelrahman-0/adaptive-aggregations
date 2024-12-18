@@ -20,7 +20,6 @@ int main(int argc, char* argv[])
     auto ingress_network_manager = network::HomogeneousIngressNetworkManager<adapt::StateMessage>{FLAGS_nodes, FLAGS_depthnw, FLAGS_sqpoll, conn_fds};
     auto available_workers       = std::vector<node_t>(FLAGS_nodes);
     std::iota(available_workers.begin(), available_workers.end(), 0);
-    // TODO investigate 10'001
     ENSURE(FLAGS_nodes <= config.get_num_workers());
     ENSURE(FLAGS_initworkers <= FLAGS_nodes);
     auto monitor = adapt::CoordinatorMonitor{FLAGS_initworkers, available_workers, egress_network_manager, ingress_network_manager};
