@@ -1,5 +1,6 @@
 #pragma once
 
+#include <barrier>
 #include <gflags/gflags.h>
 #include <thread>
 

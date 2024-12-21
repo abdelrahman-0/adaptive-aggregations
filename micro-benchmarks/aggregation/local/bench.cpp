@@ -1,4 +1,4 @@
-#include "types.h"
+#include "definitions.h"
 
 int main(int argc, char* argv[])
 {
@@ -17,19 +17,9 @@ int main(int argc, char* argv[])
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
     Cache<PageTable> cache{num_pages_cache};
     table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
-
-    /* ----------- SETUP ----------- */
-
+    /* --------------------------------------- */
     FLAGS_partitions = next_power_2(FLAGS_partitions);
     FLAGS_slots      = next_power_2(FLAGS_slots);
-
-    // control atomics
-    ::pthread_barrier_t barrier_start{};
-    ::pthread_barrier_t barrier_preagg{};
-    ::pthread_barrier_t barrier_end{};
-    ::pthread_barrier_init(&barrier_start, nullptr, FLAGS_threads + 1);
-    ::pthread_barrier_init(&barrier_preagg, nullptr, FLAGS_threads);
-    ::pthread_barrier_init(&barrier_end, nullptr, FLAGS_threads + 1);
     std::atomic<u64> current_swip{0};
     std::atomic<bool> global_ht_construction_complete{false};
     std::atomic<u64> pages_pre_agg{0};
@@ -37,14 +27,21 @@ int main(int argc, char* argv[])
     Sketch sketch_glob;
     HashtableGlobal ht_glob;
     DEBUGGING(std::atomic<u64> tuples_processed{0});
-
+    /* --------------------------------------- */
+    // control atomics
+    auto barrier_query  = std::barrier{FLAGS_threads + 1};
+    auto barrier_preagg = std::barrier{FLAGS_threads, [&ht_glob, &sketch_glob, &current_swip] {
+                                           ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
+                                           // reset morsel
+                                           current_swip = 0;
+                                       }};
     tbb::concurrent_vector<u64> times_preagg(FLAGS_threads);
-
+    /* --------------------------------------- */
     // create threads
     std::vector<std::jthread> threads{};
     for (u32 thread_id : range(FLAGS_threads)) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_start, &barrier_preagg, &barrier_end, &ht_glob, &sketch_glob,
-                              &global_ht_construction_complete, &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)]() {
+        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_query, &barrier_preagg, &ht_glob, &sketch_glob, &global_ht_construction_complete,
+                              &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)]() {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -112,9 +109,9 @@ int main(int argc, char* argv[])
             };
 
             // barrier
-            ::pthread_barrier_wait(&barrier_start);
-            LIKWID_MARKER_START("pre-aggregation");
             Stopwatch swatch_preagg{};
+            barrier_query.arrive_and_wait();
+            LIKWID_MARKER_START("pre-aggregation");
             swatch_preagg.start();
 
             /* ----------- BEGIN ----------- */
@@ -154,7 +151,7 @@ int main(int argc, char* argv[])
             swatch_preagg.stop();
             LIKWID_MARKER_STOP("pre-aggregation");
             // barrier
-            ::pthread_barrier_wait(&barrier_preagg);
+            barrier_preagg.arrive_and_wait();
 
             if (thread_id == 0) {
                 // thread 0 initializes global ht
@@ -189,7 +186,7 @@ int main(int argc, char* argv[])
             times_preagg[thread_id] = swatch_preagg.time_ms;
             LIKWID_MARKER_STOP("concurrent aggregation");
             // barrier
-            ::pthread_barrier_wait(&barrier_end);
+            barrier_query.arrive_and_wait();
 
             /* ----------- END ----------- */
             if (thread_id == 0) {
@@ -206,16 +203,22 @@ int main(int argc, char* argv[])
     }
 
     Stopwatch swatch{};
-    {
-        ::pthread_barrier_wait(&barrier_start);
-        swatch.start();
-        ::pthread_barrier_wait(&barrier_end);
-        swatch.stop();
-    }
+    barrier_query.arrive_and_wait();
+    swatch.start();
+    barrier_query.arrive_and_wait();
+    swatch.stop();
 
-    ::pthread_barrier_destroy(&barrier_start);
-    ::pthread_barrier_destroy(&barrier_preagg);
-    ::pthread_barrier_destroy(&barrier_end);
+    u64 count{0};
+    u64 inserts{0};
+    for (u64 i : range(ht_glob.size_mask + 1)) {
+        if (auto slot = ht_glob.slots[i].load()) {
+            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+            count           += slot_count;
+            inserts++;
+        }
+    }
+    print("INSERTS:", inserts);
+    print("COUNT:", count);
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("traffic", "both"s)
@@ -243,7 +246,8 @@ int main(int argc, char* argv[])
         .log("partitions", FLAGS_partitions)
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
-        .log("groups total (actual)", FLAGS_groups)
+        .log("groups pool (actual)", FLAGS_groups)
+        .log("groups node (actual)", inserts)
         .log("groups node (estimate)", sketch_glob.get_estimate())
         .log("pages pre-agg", pages_pre_agg)
         .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
