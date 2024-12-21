@@ -4,6 +4,7 @@
 #include <gflags/gflags.h>
 #include <thread>
 
+#include "bench/PerfEvent.hpp"
 #include "bench/bench.h"
 #include "bench/common_flags.h"
 #include "bench/stopwatch.h"

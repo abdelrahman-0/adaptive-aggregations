@@ -9,8 +9,7 @@ int main(int argc, char* argv[])
 
     /* ----------- DATA LOAD ----------- */
 
-    u16 node_id = local_node.get_id();
-    Table table{node_id};
+    Table table{FLAGS_npages};
     auto& swips         = table.get_swips();
 
     // prepare cache
@@ -113,80 +112,83 @@ int main(int argc, char* argv[])
             barrier_query.arrive_and_wait();
             LIKWID_MARKER_START("pre-aggregation");
             swatch_preagg.start();
+            {
+                PerfEventBlock perf;
 
-            /* ----------- BEGIN ----------- */
+                /* ----------- BEGIN ----------- */
 
-            // morsel loop
-            u64 morsel_begin, morsel_end;
-            const u64 nswips  = swips.size();
-            auto* swips_begin = swips.data();
-            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < nswips) {
-                morsel_end        = std::min(morsel_begin + FLAGS_morselsz, nswips);
+                // morsel loop
+                u64 morsel_begin, morsel_end;
+                const u64 nswips  = swips.size();
+                auto* swips_begin = swips.data();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < nswips) {
+                    morsel_end        = std::min(morsel_begin + FLAGS_morselsz, nswips);
 
-                // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
+                    // partition swips such that unswizzled swips are at the beginning of the morsel
+                    auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
 
-                // submit io requests before processing in-memory pages to overlap I/O with computation
-                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
+                    // submit io requests before processing in-memory pages to overlap I/O with computation
+                    thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
 
-                // process swizzled pages
-                while (swizzled_idx < morsel_end) {
-                    process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
-                }
+                    // process swizzled pages
+                    while (swizzled_idx < morsel_end) {
+                        process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
+                    }
 
-                // process unswizzled pages
-                while (thread_io.has_inflight_requests()) {
-                    process_local_page(*thread_io.get_next_page<PageTable>());
-                }
+                    // process unswizzled pages
+                    while (thread_io.has_inflight_requests()) {
+                        process_local_page(*thread_io.get_next_page<PageTable>());
+                    }
 
-                if (FLAGS_adapre and ht_loc.is_useless()) {
-                    // turn off pre-aggregation
-                    FLAGS_adapre       = false;
-                    process_local_page = insert_into_buffer;
-                }
-            }
-            partition_buffer.finalize();
-            sketch_glob.merge_concurrent(inserter_loc.get_sketch());
-
-            swatch_preagg.stop();
-            LIKWID_MARKER_STOP("pre-aggregation");
-            // barrier
-            barrier_preagg.arrive_and_wait();
-
-            if (thread_id == 0) {
-                // thread 0 initializes global ht
-                ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
-                // reset morsel
-                current_swip                    = 0;
-                global_ht_construction_complete = true;
-                global_ht_construction_complete.notify_all();
-            }
-            else {
-                global_ht_construction_complete.wait(false);
-            }
-
-            LIKWID_MARKER_START("concurrent aggregation");
-            if (FLAGS_consumepart) {
-                while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
-                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
-                        process_page_glob(*page);
+                    if (FLAGS_adapre and ht_loc.is_useless()) {
+                        // turn off pre-aggregation
+                        FLAGS_adapre       = false;
+                        process_local_page = insert_into_buffer;
                     }
                 }
-            }
-            else {
-                const u64 npages = storage_glob.partition_pages[0].size();
-                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
-                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
-                    while (morsel_begin < morsel_end) {
-                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
+                partition_buffer.finalize();
+                sketch_glob.merge_concurrent(inserter_loc.get_sketch());
+
+                swatch_preagg.stop();
+                LIKWID_MARKER_STOP("pre-aggregation");
+                // barrier
+                barrier_preagg.arrive_and_wait();
+
+                if (thread_id == 0) {
+                    // thread 0 initializes global ht
+                    ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
+                    // reset morsel
+                    current_swip                    = 0;
+                    global_ht_construction_complete = true;
+                    global_ht_construction_complete.notify_all();
+                }
+                else {
+                    global_ht_construction_complete.wait(false);
+                }
+
+                LIKWID_MARKER_START("concurrent aggregation");
+                if (FLAGS_consumepart) {
+                    while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
+                        for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                            process_page_glob(*page);
+                        }
                     }
                 }
-            }
+                else {
+                    const u64 npages = storage_glob.partition_pages[0].size();
+                    while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                        morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                        while (morsel_begin < morsel_end) {
+                            process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
+                        }
+                    }
+                }
 
-            times_preagg[thread_id] = swatch_preagg.time_ms;
-            LIKWID_MARKER_STOP("concurrent aggregation");
-            // barrier
-            barrier_query.arrive_and_wait();
+                times_preagg[thread_id] = swatch_preagg.time_ms;
+                LIKWID_MARKER_STOP("concurrent aggregation");
+                // barrier
+                barrier_query.arrive_and_wait();
+            }
 
             /* ----------- END ----------- */
             if (thread_id == 0) {
