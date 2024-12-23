@@ -34,6 +34,8 @@ using Aggregates = std::tuple<AGG_KEYS>;
 static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
+    std::get<2>(aggs_grp) = std::min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
+    std::get<3>(aggs_grp) = std::max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
 }
 static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {

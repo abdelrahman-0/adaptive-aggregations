@@ -3,7 +3,7 @@
 #include <cassert>
 #include <source_location>
 
-#include "likwid-marker.h"
+// #include "likwid-marker.h"
 #include "misc/exceptions/exceptions_misc.h"
 
 #if defined(NDEBUG)

@@ -2,7 +2,7 @@
 
 int main(int argc, char* argv[])
 {
-    LIKWID_MARKER_INIT;
+    // LIKWID_MARKER_INIT;
     gflags::ParseCommandLineFlags(&argc, &argv, true);
 
     sys::Node local_node{FLAGS_threads};
@@ -45,9 +45,9 @@ int main(int argc, char* argv[])
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
-            LIKWID_MARKER_THREADINIT;
-            LIKWID_MARKER_REGISTER("pre-aggregation");
-            LIKWID_MARKER_REGISTER("concurrent aggregation");
+            // LIKWID_MARKER_THREADINIT;
+            // LIKWID_MARKER_REGISTER("pre-aggregation");
+            // LIKWID_MARKER_REGISTER("concurrent aggregation");
 
             /* ----------- BUFFERS ----------- */
 
@@ -111,7 +111,7 @@ int main(int argc, char* argv[])
             // barrier
             Stopwatch swatch_preagg{};
             barrier_query.arrive_and_wait();
-            LIKWID_MARKER_START("pre-aggregation");
+            // LIKWID_MARKER_START("pre-aggregation");
             swatch_preagg.start();
             {
                 PerfEventBlock perf;
@@ -152,11 +152,11 @@ int main(int argc, char* argv[])
                 sketch_glob.merge_concurrent(inserter_loc.get_sketch());
 
                 swatch_preagg.stop();
-                LIKWID_MARKER_STOP("pre-aggregation");
+                // LIKWID_MARKER_STOP("pre-aggregation");
                 // barrier
                 barrier_preagg.arrive_and_wait();
 
-                LIKWID_MARKER_START("concurrent aggregation");
+                // LIKWID_MARKER_START("concurrent aggregation");
                 if (FLAGS_consumepart) {
                     while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
                         for (auto* page : storage_glob.partition_pages[morsel_begin]) {
@@ -175,7 +175,7 @@ int main(int argc, char* argv[])
                 }
 
                 times_preagg[thread_id] = swatch_preagg.time_ms;
-                LIKWID_MARKER_STOP("concurrent aggregation");
+                // LIKWID_MARKER_STOP("concurrent aggregation");
                 // barrier
                 barrier_query.arrive_and_wait();
             }
@@ -263,5 +263,5 @@ int main(int argc, char* argv[])
         .log("time (ms)", swatch.time_ms)                            //
         DEBUGGING(.log("local tuples processed", tuples_processed)); //
 
-    LIKWID_MARKER_CLOSE;
+    // LIKWID_MARKER_CLOSE;
 }
