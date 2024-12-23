@@ -21,11 +21,11 @@ struct Chained {
 
 // next pointer first, then entry
 template <concepts::is_slot Next, typename... Attributes>
-struct ChainedEntry : public Chained<Next>, public Entry<Attributes...> {};
+struct ChainedEntry : Chained<Next>, Entry<Attributes...> {};
 
 // entry first, then next pointer
 template <concepts::is_slot Next, typename... Attributes>
-struct EntryChained : public Entry<Attributes...>, public Chained<Next> {};
+struct EntryChained : Entry<Attributes...>, Chained<Next> {};
 
 // forward declaration
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool next_first>
@@ -38,7 +38,7 @@ using agg_entry_idx_t = std::conditional_t<mode == DIRECT, EntryAggregation<Grou
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE entry_mode, IDX_MODE slots_mode, bool next_first>
 using agg_slot_idx_t = std::conditional_t<slots_mode == DIRECT, EntryAggregation<GroupAttributes, AggregateAttributes, entry_mode, next_first>*,
                                           std::conditional_t<entry_mode == NO_IDX, agg_entry_idx_t<GroupAttributes, AggregateAttributes, slots_mode, next_first>,
-                                                             agg_entry_idx_t<GroupAttributes, AggregateAttributes, entry_mode, next_first>>>;
+                                                             agg_entry_idx_t<GroupAttributes, AggregateAttributes, slots_mode, next_first>>>;
 
 template <typename GroupAttributes, typename AggregateAttributes, IDX_MODE mode, bool next_first>
 using BaseEntryAggregation =
@@ -53,17 +53,17 @@ struct EntryAggregation : BaseEntryAggregation<GroupAttributes, AggregateAttribu
     static constexpr bool is_chained = mode != NO_IDX;
     using base_t                     = BaseEntryAggregation<GroupAttributes, AggregateAttributes, mode, next_first>;
 
-    ALWAYS_INLINE decltype(auto) get_group()
+    ALWAYS_INLINE auto& get_group()
     {
         return std::get<0>(base_t::val);
     }
 
-    ALWAYS_INLINE decltype(auto) get_aggregates()
+    ALWAYS_INLINE auto& get_aggregates()
     {
         return std::get<1>(base_t::val);
     }
 
-    ALWAYS_INLINE decltype(auto) get_next()
+    ALWAYS_INLINE auto& get_next()
     requires(is_chained)
     {
         return base_t::next;

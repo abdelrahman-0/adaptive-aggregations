@@ -43,7 +43,13 @@ struct Page {
     }
 
     template <u16 col_idx>
-    decltype(auto) get_attribute_ref(std::unsigned_integral auto row_idx)
+    auto& get_attribute_ref(std::unsigned_integral auto row_idx)
+    {
+        return std::get<col_idx>(columns)[row_idx];
+    }
+
+    template <u16 col_idx>
+    auto get_attribute(std::unsigned_integral auto row_idx) const
     {
         return std::get<col_idx>(columns)[row_idx];
     }

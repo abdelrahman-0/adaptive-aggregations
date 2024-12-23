@@ -29,7 +29,7 @@ if (NOT DEFINED NETWORK_PAGE_SIZE_POWER)
 endif ()
 add_compile_definitions(HT_PAGE_SIZE_POWER=${HT_PAGE_SIZE_POWER})
 add_compile_definitions(NETWORK_PAGE_SIZE_POWER=${NETWORK_PAGE_SIZE_POWER})
-add_compile_definitions(LOCAL_OPEN_HT)
+#add_compile_definitions(LOCAL_OPEN_HT)
 add_compile_definitions(GLOBAL_OPEN_HT)
 
 add_subdirectory(micro-benchmarks)

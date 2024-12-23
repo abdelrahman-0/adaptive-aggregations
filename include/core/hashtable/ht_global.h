@@ -33,7 +33,7 @@ struct ConcurrentAggregationHashtable : BaseAggregationHashtable<key_t, value_t,
 };
 
 template <typename key_t, typename value_t, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, bool is_multinode>
-struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHashtable<key_t, value_t, DIRECT, Alloc, is_multinode> {
+struct ConcurrentChainedAggregationHashtable : ConcurrentAggregationHashtable<key_t, value_t, DIRECT, Alloc, is_multinode> {
     using base_t = ConcurrentAggregationHashtable<key_t, value_t, DIRECT, Alloc, is_multinode>;
     using base_t::get_pos;
     using base_t::slots;
@@ -44,8 +44,6 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
     using typename base_t::slot_idx_t;
 
     ConcurrentChainedAggregationHashtable() = default;
-    u64 size_mask{0};
-    u8 group_shift;
 
     void aggregate(const key_t& key, const value_t& value, idx_t& next, u64 key_hash, entry_t* addr)
     {
@@ -83,7 +81,7 @@ struct ConcurrentChainedAggregationHashtable : public ConcurrentAggregationHasht
     [[nodiscard]]
     static std::string get_type()
     {
-        return "concurrent-chaining";
+        return "chaining";
     }
 };
 
@@ -98,11 +96,9 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
     using typename base_t::slot_idx_raw_t;
     using typename base_t::slot_idx_t;
 
-    static constexpr u16 BITS_SALT = 16;
+    static constexpr u16 BITS_SALT       = 16;
 
-    ConcurrentOpenAggregationHashtable() : base_t()
-    {
-    }
+    ConcurrentOpenAggregationHashtable() = default;
 
     void aggregate(const key_t& key, const value_t& value, u64 key_hash, entry_t* addr)
     {
@@ -156,7 +152,7 @@ struct ConcurrentOpenAggregationHashtable : public ConcurrentAggregationHashtabl
     [[nodiscard]]
     static std::string get_type()
     {
-        return "concurrent-open"s + (is_salted ? "-salted" : "");
+        return "unchained"s + (is_salted ? "-salted" : "");
     }
 };
 } // namespace ht

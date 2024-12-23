@@ -13,6 +13,7 @@
 #include <cmath>
 
 #include "defaults.h"
+#include "utils/atomic_utils.h"
 
 namespace ht {
 
@@ -54,12 +55,7 @@ struct HLLSketch {
         group_mask = other.group_mask;
     }
 
-    HLLSketch& operator=(const HLLSketch& other)
-    {
-        registers  = other.registers;
-        group_mask = other.group_mask;
-        return *this;
-    }
+    HLLSketch& operator=(const HLLSketch& other) = default;
 
     void clear()
     {
@@ -104,10 +100,7 @@ struct HLLSketch {
     void merge_concurrent(const HLLSketch& other)
     {
         for (u64 i{0}; i < registers.size(); ++i) {
-            u8& current_value = registers[i];
-            const u8& other_value   = other.registers[i];
-            while ((current_value < other_value) && !__sync_bool_compare_and_swap(&current_value, current_value, other_value))
-                ;
+            utils::atomic_max(registers[i], other.registers[i]);
         }
     }
 

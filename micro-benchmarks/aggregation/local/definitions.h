@@ -2,6 +2,7 @@
 
 #include <barrier>
 #include <gflags/gflags.h>
+#include <limits>
 #include <thread>
 
 #include "bench/PerfEvent.hpp"
@@ -17,11 +18,12 @@
 #include "core/storage/table.h"
 #include "defaults.h"
 #include "system/node.h"
+#include "utils/atomic_utils.h"
 
 using namespace std::chrono_literals;
 /* --------------------------------------- */
-#define AGG_VALS 1
-#define AGG_KEYS u64
+#define AGG_VALS 1, page.get_attribute<1>(j), page.get_attribute<2>(j), page.get_attribute<3>(j)
+#define AGG_KEYS u64, u64, u64, u64
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
 /* --------------------------------------- */
@@ -35,11 +37,13 @@ static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 }
 static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
-    __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
+    utils::atomic_add(std::get<0>(aggs_grp), std::get<0>(aggs_tup));
+    utils::atomic_min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
+    utils::atomic_max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
 }
 /* --------------------------------------- */
 static constexpr ht::IDX_MODE idx_mode_slots   = ht::INDIRECT_16;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::INDIRECT_16;
 static constexpr bool is_ht_loc_salted         = false;
 static constexpr bool is_ht_glob_salted        = true;
 /* --------------------------------------- */
@@ -55,13 +59,13 @@ using InserterLocal                            = buf::PartitionedAggregationInse
 #if defined(LOCAL_OPEN_HT)
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, is_ht_loc_salted, false, false>;
 #else
-using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, false, false>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, false, false>;
 #endif
 /* --------------------------------------- */
 #if defined(GLOBAL_OPEN_HT)
-using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, true, is_ht_glob_salted>;
+using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, false, is_ht_glob_salted>;
 #else
-using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, true>;
+using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, false>;
 #endif
 /* --------------------------------------- */
 static_assert(idx_mode_slots != ht::NO_IDX);

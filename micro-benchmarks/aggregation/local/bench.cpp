@@ -30,7 +30,8 @@ int main(int argc, char* argv[])
     // control atomics
     auto barrier_query  = std::barrier{FLAGS_threads + 1};
     auto barrier_preagg = std::barrier{FLAGS_threads, [&ht_glob, &sketch_glob, &current_swip] {
-                                           ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
+                                           u64 ht_size = next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate()));
+                                           ht_glob.initialize(ht_size);
                                            // reset morsel
                                            current_swip = 0;
                                        }};
@@ -40,7 +41,7 @@ int main(int argc, char* argv[])
     std::vector<std::jthread> threads{};
     for (u32 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_query, &barrier_preagg, &ht_glob, &sketch_glob, &global_ht_construction_complete,
-                              &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)]() {
+                              &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)] {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -154,18 +155,6 @@ int main(int argc, char* argv[])
                 // barrier
                 barrier_preagg.arrive_and_wait();
 
-                if (thread_id == 0) {
-                    // thread 0 initializes global ht
-                    ht_glob.initialize(next_power_2(static_cast<u64>(FLAGS_htfactor * sketch_glob.get_estimate())));
-                    // reset morsel
-                    current_swip                    = 0;
-                    global_ht_construction_complete = true;
-                    global_ht_construction_complete.notify_all();
-                }
-                else {
-                    global_ht_construction_complete.wait(false);
-                }
-
                 LIKWID_MARKER_START("concurrent aggregation");
                 if (FLAGS_consumepart) {
                     while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
@@ -212,13 +201,30 @@ int main(int argc, char* argv[])
 
     u64 count{0};
     u64 inserts{0};
+#if defined(GLOBAL_OPEN_HT)
     for (u64 i : range(ht_glob.size_mask + 1)) {
         if (auto slot = ht_glob.slots[i].load()) {
-            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-            count           += slot_count;
+            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_min    = std::get<1>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_max    = std::get<2>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_anyval = std::get<3>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            // print(slot_count, attr_min, attr_max, attr_anyval);
+            count += slot_count;
             inserts++;
         }
     }
+
+#else
+    for (u64 i : range(ht_glob.size_mask + 1)) {
+        auto slot = ht_glob.slots[i].load();
+        while (slot) {
+            auto slot_count  = std::get<0>(slot->get_aggregates());
+            count           += slot_count;
+            inserts++;
+            slot = slot->get_next();
+        }
+    }
+#endif
     print("INSERTS:", inserts);
     print("COUNT:", count);
 
