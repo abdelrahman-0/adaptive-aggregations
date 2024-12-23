@@ -4,6 +4,7 @@
 #include <boost/core/demangle.hpp>
 #include <exception>
 #include <iostream>
+#include <syncstream>
 #include <tuple>
 #include <type_traits>
 
@@ -32,28 +33,28 @@ static_assert(sizeof(void*) == 8);
 static constexpr u64 pointer_tag_mask = (static_cast<u64>(~0)) >> 16;
 
 template <typename T>
-static inline auto get_pointer(void* tagged_ptr)
+static auto get_pointer(void* tagged_ptr)
 {
     return reinterpret_cast<T*>(reinterpret_cast<uintptr_t>(tagged_ptr) & pointer_tag_mask);
 }
 
 template <typename T>
-static inline auto get_pointer(uintptr_t tagged_ptr)
+static auto get_pointer(uintptr_t tagged_ptr)
 {
     return reinterpret_cast<T*>(tagged_ptr & pointer_tag_mask);
 }
 
-static inline u16 get_tag(void* tagged_ptr)
+static u16 get_tag(void* tagged_ptr)
 {
     return reinterpret_cast<uintptr_t>(tagged_ptr) >> 48;
 }
 
-static inline u16 get_tag(uintptr_t tagged_ptr)
+static u16 get_tag(uintptr_t tagged_ptr)
 {
     return tagged_ptr >> 48;
 }
 
-static inline auto tag_pointer(concepts::is_pointer auto ptr, std::integral auto tag)
+static auto tag_pointer(concepts::is_pointer auto ptr, std::integral auto tag)
 {
     return reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(ptr) | (static_cast<uintptr_t>(tag) << 48));
 }
@@ -92,7 +93,8 @@ void print(Ts... args)
 template <char delimiter = ' ', typename... Ts>
 void logln(Ts... args)
 {
-    __print<delimiter>(std::cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
+    std::osyncstream synced_cerr(std::cerr);
+    __print<delimiter>(synced_cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
     std::cerr << '\n';
 }
 

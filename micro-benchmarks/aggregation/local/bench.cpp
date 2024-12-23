@@ -140,12 +140,13 @@ int main(int argc, char* argv[])
                     while (thread_io.has_inflight_requests()) {
                         process_local_page(*thread_io.get_next_page<PageTable>());
                     }
-
+#if defined(ADAPRE)
                     if (FLAGS_adapre and ht_loc.is_useless()) {
                         // turn off pre-aggregation
                         FLAGS_adapre       = false;
                         process_local_page = insert_into_buffer;
                     }
+#endif
                 }
                 partition_buffer.finalize();
                 sketch_glob.merge_concurrent(inserter_loc.get_sketch());
@@ -204,12 +205,12 @@ int main(int argc, char* argv[])
 #if defined(GLOBAL_OPEN_HT)
     for (u64 i : range(ht_glob.size_mask + 1)) {
         if (auto slot = ht_glob.slots[i].load()) {
-            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            auto attr_min    = std::get<1>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            auto attr_max    = std::get<2>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            auto attr_anyval = std::get<3>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto slot_count   = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_min     = std::get<1>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_max     = std::get<2>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+            auto attr_anyval  = std::get<3>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
             // print(slot_count, attr_min, attr_max, attr_anyval);
-            count += slot_count;
+            count            += slot_count;
             inserts++;
         }
     }

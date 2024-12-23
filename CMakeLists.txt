@@ -31,6 +31,7 @@ add_compile_definitions(HT_PAGE_SIZE_POWER=${HT_PAGE_SIZE_POWER})
 add_compile_definitions(NETWORK_PAGE_SIZE_POWER=${NETWORK_PAGE_SIZE_POWER})
 #add_compile_definitions(LOCAL_OPEN_HT)
 add_compile_definitions(GLOBAL_OPEN_HT)
+add_compile_definitions(ADAPRE)
 
 add_subdirectory(micro-benchmarks)
 add_subdirectory(adaptive-aggregation)
