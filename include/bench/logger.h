@@ -17,8 +17,11 @@ class Logger {
     template <typename T>
     static std::string normalize(const T& val)
     {
-        if constexpr (std::is_same_v<std::string, T>) {
+        if constexpr (std::is_same_v<T, std::string>) {
             return val;
+        }
+        else if constexpr (std::is_same_v<T, bool>) {
+            return val ? std::string("true") : std::string("false");
         }
         else {
             return std::to_string(val);
