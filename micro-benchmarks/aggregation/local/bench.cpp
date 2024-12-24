@@ -140,7 +140,7 @@ int main(int argc, char* argv[])
                     while (thread_io.has_inflight_requests()) {
                         process_local_page(*thread_io.get_next_page<PageTable>());
                     }
-#if defined(ADAPRE)
+#if defined(ENABLE_ADAPRE)
                     if (FLAGS_adapre and ht_loc.is_useless()) {
                         // turn off pre-aggregation
                         FLAGS_adapre       = false;
@@ -245,7 +245,12 @@ int main(int argc, char* argv[])
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch", Sketch::get_type())
         .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", FLAGS_adapre)
+#if defined(ENABLE_ADAPRE)
+        .log("adapre enabled", true)
+#else
+        .log("adapre enabled", false)
+#endif
+        .log("adapre status", FLAGS_adapre)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)

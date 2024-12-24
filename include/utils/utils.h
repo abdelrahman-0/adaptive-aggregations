@@ -95,7 +95,7 @@ void logln(Ts... args)
 {
     std::osyncstream synced_cerr(std::cerr);
     __print<delimiter>(synced_cerr /* unbuffered */, std::forward_as_tuple(std::forward<Ts>(args)...), std::index_sequence_for<Ts...>{});
-    std::cerr << '\n';
+    synced_cerr << '\n';
 }
 
 constexpr auto next_power_2(std::integral auto val) -> decltype(auto)
