@@ -114,8 +114,9 @@ int main(int argc, char* argv[])
             // LIKWID_MARKER_START("pre-aggregation");
             swatch_preagg.start();
             {
+#if defined(ENABLE_PERFEVENT)
                 PerfEventBlock perf;
-
+#endif
                 /* ----------- BEGIN ----------- */
 
                 // morsel loop

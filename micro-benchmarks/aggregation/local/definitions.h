@@ -34,8 +34,8 @@ using Aggregates = std::tuple<AGG_KEYS>;
 static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
-    std::get<2>(aggs_grp) = std::min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
-    std::get<3>(aggs_grp) = std::max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
+    std::get<2>(aggs_grp)  = std::min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
+    std::get<3>(aggs_grp)  = std::max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
 }
 static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
@@ -58,13 +58,13 @@ using BufferLocal                              = buf::EvictionBuffer<PageResult,
 using StorageGlobal                            = buf::PartitionBuffer<PageResult, true>;
 using InserterLocal                            = buf::PartitionedAggregationInserter<PageResult, idx_mode_entries, BufferLocal, Sketch, false>;
 /* --------------------------------------- */
-#if defined(LOCAL_OPEN_HT)
+#if defined(LOCAL_UNCHAINED_HT)
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, is_ht_loc_salted, false, false>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, false, false>;
 #endif
 /* --------------------------------------- */
-#if defined(GLOBAL_OPEN_HT)
+#if defined(GLOBAL_UNCHAINED_HT)
 using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, false, is_ht_glob_salted>;
 #else
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, false>;
