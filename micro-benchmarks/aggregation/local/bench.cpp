@@ -203,7 +203,7 @@ int main(int argc, char* argv[])
 
     u64 count{0};
     u64 inserts{0};
-#if defined(GLOBAL_OPEN_HT)
+#if defined(GLOBAL_UNCHAINED_HT)
     for (u64 i : range(ht_glob.size_mask + 1)) {
         if (auto slot = ht_glob.slots[i].load()) {
             auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
