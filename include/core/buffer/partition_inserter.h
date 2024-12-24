@@ -50,7 +50,6 @@ struct PartitionedTupleInserter {
         insert(tup, part_no, part_page);
     }
 
-
     [[nodiscard]]
     static std::string get_type()
     {
@@ -92,7 +91,6 @@ struct PartitionedAggregationInserter {
 
     [[maybe_unused]]
     auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
-    requires(is_grouped)
     {
         bool evicted{false};
         if ((evicted = part_page->full())) {
@@ -100,51 +98,32 @@ struct PartitionedAggregationInserter {
             part_page = part_buffer.evict(part_no, part_page);
             part_page->clear_tuples();
         }
-        group_data[part_no >> group_shift].sketch.update(key_hash);
+        if constexpr (is_grouped) {
+            group_data[part_no >> group_shift].sketch.update(key_hash);
+        }
+        else {
+            group_data.sketch.update(key_hash);
+        }
         return std::pair(part_page->emplace_back_grp(key, value), evicted);
     }
 
-    [[maybe_unused]]
-    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, u64 key_hash, u64 part_no, page_t* part_page)
-    requires(not is_grouped)
-    {
-        bool evicted{false};
-        if ((evicted = part_page->full())) {
-            // evict if full
-            part_page = part_buffer.evict(part_no, part_page);
-            part_page->clear_tuples();
-        }
-        group_data.sketch.update(key_hash);
-        return std::pair(part_page->emplace_back_grp(key, value), evicted);
-    }
-
+    template <auto EMPTY_OFFSET>
     [[maybe_unused]]
     auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, typename page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
-    requires(is_grouped)
     {
         bool evicted{false};
         if ((evicted = part_page->full())) {
             // evict if full
             part_page = part_buffer.evict(part_no, part_page);
             part_page->clear_tuples();
-            offset = 0;
+            offset = EMPTY_OFFSET;
         }
-        group_data[part_no >> group_shift].sketch.update(key_hash);
-        return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
-    }
-
-    [[maybe_unused]]
-    auto insert(const typename page_t::key_t& key, const typename page_t::value_t& value, typename page_t::idx_t offset, u64 key_hash, u64 part_no, page_t* part_page)
-    requires(not is_grouped)
-    {
-        bool evicted{false};
-        if ((evicted = part_page->full())) {
-            // evict if full
-            part_page = part_buffer.evict(part_no, part_page);
-            part_page->clear_tuples();
-            offset = 0;
+        if constexpr (is_grouped) {
+            group_data[part_no >> group_shift].sketch.update(key_hash);
         }
-        group_data.sketch.update(key_hash);
+        else {
+            group_data.sketch.update(key_hash);
+        }
         return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
     }
 
@@ -167,12 +146,6 @@ struct PartitionedAggregationInserter {
     requires(not is_grouped)
     {
         return group_data.sketch;
-    }
-
-    [[nodiscard]]
-    static std::string get_type()
-    {
-        return "inserter-"s + ht::get_idx_mode_str(entry_mode) + "_entry";
     }
 };
 

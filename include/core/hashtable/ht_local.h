@@ -45,19 +45,35 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     u32 npartitions{};
     u8 partition_shift{0};
 
+    static constexpr slot_idx_t EMPTY_DIRECT_SLOT   = 0;
+    static constexpr slot_idx_t EMPTY_INDIRECT_SLOT = -1;
+
     PartitionedAggregationHashtable(u32 _npartitions, u32 _nslots, double _threshold_preagg, part_buf_t& _part_buffer, inserter_t& _inserter)
         : base_t(_npartitions * _nslots), threshold_preagg(_threshold_preagg), part_buffer(_part_buffer), inserter(_inserter), npartitions(_npartitions),
           partition_shift(__builtin_ctz(_nslots))
     {
         ENSURE(_npartitions == next_power_2(_npartitions));
         ENSURE(_nslots == next_power_2(_nslots));
+        for (u32 part_no : range(npartitions)) {
+            clear_slots(part_no);
+        }
     }
 
-    void clear_slots(u64 part_no)
+    [[nodiscard]]
+    auto* get_part_begin(u32 part_no) const
+    {
+        return slots + (part_no << partition_shift);
+    }
+
+    void clear_slots(u32 part_no)
     {
         // clear slots
-        auto* part_begin = slots + (part_no << partition_shift);
-        ::memset(part_begin, 0, (1 << partition_shift) * sizeof(slot_idx_t));
+        if constexpr (slots_mode == DIRECT) {
+            std::fill(get_part_begin(part_no), get_part_begin(part_no + 1), EMPTY_DIRECT_SLOT);
+        }
+        else {
+            std::fill(get_part_begin(part_no), get_part_begin(part_no + 1), EMPTY_INDIRECT_SLOT);
+        }
     }
 
   public:
@@ -74,6 +90,8 @@ requires(entry_mode != NO_IDX and slots_mode != NO_IDX)
 struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous>;
     using base_t::clear_slots;
+    using base_t::EMPTY_DIRECT_SLOT;
+    using base_t::EMPTY_INDIRECT_SLOT;
     using base_t::group_found;
     using base_t::group_not_found;
     using base_t::inserter;
@@ -102,7 +120,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
         auto offset      = next_offset;
-        while (next_offset) {
+        while (next_offset != EMPTY_DIRECT_SLOT) {
             // walk chain of slots
             if (next_offset->get_group() == key) {
                 fn_agg(next_offset->get_aggregates(), value);
@@ -111,8 +129,8 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             }
             next_offset = reinterpret_cast<slot_idx_t>(part_page->get_next(next_offset));
         }
-        bool evicted;
-        std::tie(slot, evicted) = inserter.insert(key, value, reinterpret_cast<idx_t>(offset), key_hash, part_no, part_page);
+        auto [new_slot, evicted] = inserter.template insert<EMPTY_DIRECT_SLOT>(key, value, reinterpret_cast<idx_t>(offset), key_hash, part_no, part_page);
+        slot                     = new_slot;
         if (evicted) {
             clear_slots(part_no);
         }
@@ -129,7 +147,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
         auto offset      = next_offset;
-        while (next_offset) {
+        while (next_offset != EMPTY_INDIRECT_SLOT) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
@@ -138,7 +156,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             }
             next_offset = part_page->get_next(next_offset);
         }
-        auto [evicted, new_slot] = inserter.insert(key, value, offset, key_hash, part_no, part_page);
+        auto [new_slot, evicted] = inserter.template insert<EMPTY_INDIRECT_SLOT>(key, value, offset, key_hash, part_no, part_page);
         slot                     = new_slot;
         if (evicted) {
             clear_slots(part_no);
@@ -156,7 +174,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
         slot_idx_t& slot = slots[mod];
         auto next_offset = slot;
         auto offset      = next_offset;
-        while (next_offset) {
+        while (next_offset != EMPTY_INDIRECT_SLOT) {
             // walk chain of slots
             if (part_page->get_group(next_offset) == key) {
                 fn_agg(part_page->get_aggregates(next_offset), value);
@@ -165,8 +183,8 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
             }
             next_offset = reinterpret_cast<u64>(part_page->get_next(next_offset));
         }
-        bool evicted;
-        std::tie(slot, evicted) = inserter.insert(key, value, reinterpret_cast<idx_t>(static_cast<u64>(offset)), key_hash, part_no, part_page);
+        auto [new_slot, evicted] = inserter.template insert<EMPTY_INDIRECT_SLOT>(key, value, reinterpret_cast<idx_t>(static_cast<u64>(offset)), key_hash, part_no, part_page);
+        slot                     = new_slot;
         if (evicted) {
             clear_slots(part_no);
         }
@@ -191,6 +209,8 @@ requires(not is_salted or slots_mode != INDIRECT_16) // need at least 32 bits fo
 struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous>;
     using base_t::clear_slots;
+    using base_t::EMPTY_DIRECT_SLOT;
+    using base_t::EMPTY_INDIRECT_SLOT;
     using base_t::group_found;
     using base_t::group_not_found;
     using base_t::inserter;
@@ -242,7 +262,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
         auto hash_prefix   = static_cast<u16>(key_hash);
 
         // walk sequence of slots
-        while (slot) {
+        while (slot != EMPTY_DIRECT_SLOT) {
             bool condition{true};
             if constexpr (is_salted) {
                 // check salt
@@ -282,27 +302,27 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     requires(slots_mode != DIRECT and ((1ul << ((sizeof(slot_idx_t) * 8) - BITS_SALT)) > page_t::max_tuples_per_page))
     {
         // u32 and direct addressing use 16-bit salt, u64 uses 32-bit salt,  also uses 16-bit salt
-        using salt_t                              = std::conditional_t<slots_mode == INDIRECT_64, u32, u16>;
-        static constexpr slot_idx_t slot_idx_mask = static_cast<slot_idx_t>(~0) >> 1;
+        using salt_t       = std::conditional_t<slots_mode == INDIRECT_64, u32, u16>;
+        // static constexpr slot_idx_t slot_idx_mask = static_cast<slot_idx_t>(~0) >> 1;
         // extract top bits from hash
-        u64 mod                                   = key_hash >> mod_shift;
-        u64 part_no                               = mod >> partition_shift;
-        u64 partition_mask                        = part_no << partition_shift;
-        auto* part_page                           = part_buffer.get_partition_page(part_no);
-        slot_idx_t slot                           = slots[mod];
+        u64 mod            = key_hash >> mod_shift;
+        u64 part_no        = mod >> partition_shift;
+        u64 partition_mask = part_no << partition_shift;
+        auto* part_page    = part_buffer.get_partition_page(part_no);
+        slot_idx_t slot    = slots[mod];
 
         // use bottom bits for salt
-        auto hash_prefix                          = static_cast<salt_t>(key_hash);
+        auto hash_prefix   = static_cast<salt_t>(key_hash);
 
         // walk sequence of slots
-        while (slot) {
+        while (slot != EMPTY_INDIRECT_SLOT) {
             bool condition{true};
             if constexpr (is_salted) {
                 // check salt
                 condition = hash_prefix == static_cast<salt_t>(slot);
             }
             if (condition) {
-                slot = (slot & slot_idx_mask) >> BITS_SALT;
+                slot = slot >> BITS_SALT;
                 if (part_page->get_group(slot) == key) {
                     fn_agg(part_page->get_aggregates(slot), value);
                     ++group_found;
@@ -322,10 +342,10 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
             clear_slots(part_no);
         }
         if constexpr (is_salted) {
-            slots[partition_mask | mod] = (ht_entry << BITS_SALT) | hash_prefix | (~slot_idx_mask);
+            slots[partition_mask | mod] = (ht_entry << BITS_SALT) | hash_prefix;
         }
         else {
-            slots[partition_mask | mod] = ht_entry | (~slot_idx_mask);
+            slots[partition_mask | mod] = ht_entry;
         }
         ++group_not_found;
     }
