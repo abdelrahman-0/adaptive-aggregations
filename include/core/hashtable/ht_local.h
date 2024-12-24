@@ -187,7 +187,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
 
 template <typename key_t, typename value_t, IDX_MODE entry_mode, IDX_MODE slots_mode, void fn_agg(value_t&, const value_t&), concepts::is_mem_allocator Alloc, concepts::is_sketch sketch_t,
           bool is_salted, bool is_grouped, bool is_heterogeneous>
-requires(not is_salted or entry_mode != INDIRECT_16) // need at least 32 bits for 16-bit salt
+requires(not is_salted or slots_mode != INDIRECT_16) // need at least 32 bits for 16-bit salt
 struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous> {
     using base_t = PartitionedAggregationHashtable<key_t, value_t, entry_mode, slots_mode, Alloc, sketch_t, is_grouped, is_heterogeneous>;
     using base_t::clear_slots;
@@ -205,20 +205,17 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     using typename base_t::slot_idx_t;
 
     static constexpr u16 BITS_SALT = [] {
-        if constexpr (is_salted) {
-            if constexpr (slots_mode == INDIRECT_16) {
-                return 0;
-            }
-            else if constexpr (slots_mode == INDIRECT_32) {
+        // evaluated at compile-time
+        if (is_salted) {
+            switch (slots_mode) {
+            case INDIRECT_32:
                 return 16;
-            }
-            else if constexpr (slots_mode == INDIRECT_64) {
+            case INDIRECT_64:
                 return 32;
+            default:;
             }
         }
-        else {
-            return 0;
-        }
+        return 0;
     }();
 
   private:

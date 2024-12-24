@@ -45,7 +45,7 @@ static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 }
 /* --------------------------------------- */
 static constexpr ht::IDX_MODE idx_mode_slots   = ht::INDIRECT_16;
-static constexpr ht::IDX_MODE idx_mode_entries = ht::INDIRECT_16;
+static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
 static constexpr bool is_ht_loc_salted         = false;
 static constexpr bool is_ht_glob_salted        = true;
 /* --------------------------------------- */
