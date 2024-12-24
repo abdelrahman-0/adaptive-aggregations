@@ -64,8 +64,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     [[nodiscard]]
     bool is_useless() const
     {
-        return ((group_not_found + group_found) > 0) and (group_not_found >= (npartitions * page_t::max_tuples_per_page)) and
-               (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg);
+        return ((group_not_found + group_found) > 100'000) and (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg);
     }
 };
 
@@ -222,7 +221,6 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
         }
     }();
 
-
   private:
     u64 slots_mask;
 
@@ -287,7 +285,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
     requires(slots_mode != DIRECT and ((1ul << ((sizeof(slot_idx_t) * 8) - BITS_SALT)) > page_t::max_tuples_per_page))
     {
         // u32 and direct addressing use 16-bit salt, u64 uses 32-bit salt,  also uses 16-bit salt
-        using salt_t = std::conditional_t<slots_mode == INDIRECT_64, u32, u16>;
+        using salt_t                              = std::conditional_t<slots_mode == INDIRECT_64, u32, u16>;
         static constexpr slot_idx_t slot_idx_mask = static_cast<slot_idx_t>(~0) >> 1;
         // extract top bits from hash
         u64 mod                                   = key_hash >> mod_shift;
