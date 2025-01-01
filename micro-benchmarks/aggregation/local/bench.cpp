@@ -20,12 +20,13 @@ int main(int argc, char* argv[])
     FLAGS_partitions = next_power_2(FLAGS_partitions);
     FLAGS_slots      = next_power_2(FLAGS_slots);
     std::atomic<u64> current_swip{0};
-    std::atomic<bool> global_ht_construction_complete{false};
     std::atomic<u64> pages_pre_agg{0};
+    std::atomic<u64> tuple_count{0};
+    std::atomic<u64> groups_inserted{0};
+    std::atomic global_ht_construction_complete{false};
     StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
     Sketch sketch_glob;
     HashtableGlobal ht_glob;
-    DEBUGGING(std::atomic<u64> tuples_processed{0});
     /* --------------------------------------- */
     // control atomics
     auto barrier_query  = std::barrier{FLAGS_threads + 1};
@@ -41,7 +42,7 @@ int main(int argc, char* argv[])
     std::vector<std::jthread> threads{};
     for (u32 thread_id : range(FLAGS_threads)) {
         threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &storage_glob, &barrier_query, &barrier_preagg, &ht_glob, &sketch_glob, &global_ht_construction_complete,
-                              &times_preagg, &pages_pre_agg DEBUGGING(, &tuples_processed)] {
+                              &times_preagg, &pages_pre_agg, &tuple_count, &groups_inserted] {
             if (FLAGS_pin) {
                 local_node.pin_thread(thread_id);
             }
@@ -53,7 +54,6 @@ int main(int argc, char* argv[])
 
             //            StorageLocal storage_local;
             std::vector<PageTable> io_buffers(defaults::local_io_depth);
-            DEBUGGING(u64 local_tuples_processed{0});
 
             /* ----------- LOCAL I/O ----------- */
 
@@ -69,8 +69,8 @@ int main(int argc, char* argv[])
             for (u32 part_no : range(FLAGS_partitions)) {
                 auto final_part_no    = FLAGS_consumepart ? part_no : 0;
                 eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
+                    page->retire();
                     if (not page->empty()) {
-                        page->retire();
                         storage_glob.add_page(page, final_part_no);
                     }
                 };
@@ -83,21 +83,19 @@ int main(int argc, char* argv[])
 
             /* ------------ AGGREGATION LAMBDAS ------------ */
 
-            auto insert_into_ht = [&ht_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto insert_into_ht = [&ht_loc](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     ht_loc.insert(group, agg);
                 }
-                DEBUGGING(local_tuples_processed += page.num_tuples);
             };
-            auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
+            auto insert_into_buffer = [&inserter_loc](const PageTable& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
                     inserter_loc.insert(group, agg);
                 }
-                DEBUGGING(local_tuples_processed += page.num_tuples);
             };
 
             std::function process_local_page = insert_into_ht;
@@ -189,9 +187,28 @@ int main(int argc, char* argv[])
                 else {
                     pages_pre_agg = storage_glob.partition_pages[0].size();
                 }
-            }
 
-            DEBUGGING(tuples_processed += local_tuples_processed);
+#if defined(GLOBAL_UNCHAINED_HT)
+                for (u64 i : range(ht_glob.size_mask + 1)) {
+                    if (auto slot = ht_glob.slots[i].load()) {
+                        auto slot_count = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
+                        tuple_count += slot_count;
+                        ++groups_inserted;
+                    }
+                }
+#else
+                for (u64 i : range(ht_glob.size_mask + 1)) {
+                    auto slot = ht_glob.slots[i].load();
+                    while (slot) {
+                        auto slot_count  = std::get<0>(slot->get_aggregates());
+                        tuple_count     += slot_count;
+                        ++groups_inserted;
+                        slot = slot->get_next();
+                    }
+                }
+#endif
+            }
+            barrier_query.arrive_and_wait();
         });
     }
 
@@ -200,35 +217,10 @@ int main(int argc, char* argv[])
     swatch.start();
     barrier_query.arrive_and_wait();
     swatch.stop();
+    barrier_query.arrive_and_wait();
 
-    u64 count{0};
-    u64 inserts{0};
-#if defined(GLOBAL_UNCHAINED_HT)
-    for (u64 i : range(ht_glob.size_mask + 1)) {
-        if (auto slot = ht_glob.slots[i].load()) {
-            auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            count           += slot_count;
-            inserts++;
-            // auto attr_anyval  = std::get<1>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            // auto attr_min     = std::get<2>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            // auto attr_max     = std::get<3>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> (is_ht_glob_salted ? 16 : 0))->get_aggregates());
-            // print(slot_count, attr_min, attr_max, attr_anyval);
-        }
-    }
-
-#else
-    for (u64 i : range(ht_glob.size_mask + 1)) {
-        auto slot = ht_glob.slots[i].load();
-        while (slot) {
-            auto slot_count  = std::get<0>(slot->get_aggregates());
-            count           += slot_count;
-            inserts++;
-            slot = slot->get_next();
-        }
-    }
-#endif
-    print("INSERTS:", inserts);
-    print("COUNT:", count);
+    print("GROUPS:", groups_inserted.load());
+    print("TUPLES:", tuple_count.load());
 
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("traffic", "both"s)
@@ -262,12 +254,11 @@ int main(int argc, char* argv[])
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
         .log("groups pool (actual)", FLAGS_groups)
-        .log("groups node (actual)", inserts)
+        .log("groups node (actual)", groups_inserted)
         .log("groups node (estimate)", sketch_glob.get_estimate())
         .log("pages pre-agg", pages_pre_agg)
-        .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size())
-        .log("time (ms)", swatch.time_ms)                            //
-        DEBUGGING(.log("local tuples processed", tuples_processed)); //
+        .log("mean pre-agg time (ms)", std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / FLAGS_threads)
+        .log("time (ms)", swatch.time_ms);
 
     // LIKWID_MARKER_CLOSE;
 }

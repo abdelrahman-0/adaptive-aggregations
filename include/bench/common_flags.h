@@ -14,7 +14,7 @@ DEFINE_bool(random, true, "whether to use randomly generated data instead of rea
 DEFINE_uint32(npages, 2, "number of random pages to generate (only applicable if 'random' flag is set)");
 DEFINE_string(path, "data/random.tbl", "path to input relation (ignored if 'random' flag is set)");
 DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,100] (ignored if 'random' flag is set)");
-DEFINE_uint32(morselsz, 10, "number of pages to process in one morsel");
+DEFINE_uint32(morselsz, 1000, "number of pages to process in one morsel");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 
 DEFINE_uint32(partitions, 32, "number of hashtable partitions (per node) to use");

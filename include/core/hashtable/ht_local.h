@@ -31,6 +31,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     using typename base_t::idx_t;
     using typename base_t::page_t;
     using typename base_t::slot_idx_t;
+    // TODO partition allocator
     using block_alloc_t = std::conditional_t<is_heterogeneous, mem::BlockAllocatorConcurrent<page_t, Alloc>, mem::BlockAllocatorNonConcurrent<page_t, Alloc>>;
     using part_buf_t    = buf::EvictionBuffer<page_t, block_alloc_t>;
     using inserter_t    = buf::PartitionedAggregationInserter<page_t, entry_mode, part_buf_t, sketch_t, is_grouped>;
@@ -110,6 +111,7 @@ struct PartitionedChainedAggregationHashtable : PartitionedAggregationHashtable<
     {
     }
 
+    // TODO update last not head
     void aggregate(key_t& key, value_t& value, u64 key_hash)
     requires(slots_mode == DIRECT)
     {

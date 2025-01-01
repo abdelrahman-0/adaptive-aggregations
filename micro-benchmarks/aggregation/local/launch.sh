@@ -1,6 +1,6 @@
 TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_local'
 
-FLAGS="--random --morselsz=1000 --pin --slots=8192"
+FLAGS="--random --morselsz=1000 --nopin --slots=4096"
 PRINT_HEADER='--print_header'
 
 for NPAGES in 2400000; do

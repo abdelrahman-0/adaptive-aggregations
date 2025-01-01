@@ -19,7 +19,7 @@ class EvictionBuffer {
     BlockAlloc& block_alloc;
 
   public:
-    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<EvictionFn>& _eviction_fns) : partitions(npartitions), block_alloc(block_alloc), eviction_fns(_eviction_fns)
+    EvictionBuffer(u32 npartitions, BlockAlloc& block_alloc, const std::vector<EvictionFn>& _eviction_fns) : partitions(npartitions), eviction_fns(_eviction_fns), block_alloc(block_alloc)
     {
         // alloc partitions
         for (auto& part : partitions) {
