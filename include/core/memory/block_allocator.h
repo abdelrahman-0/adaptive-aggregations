@@ -12,12 +12,12 @@
 
 namespace mem {
 
-template <typename object_t, concepts::is_mem_allocator Alloc = mem::JEMALLOCator<true>, bool is_concurrent = false>
+template <typename object_t, concepts::is_mem_allocator Alloc = JEMALLOCator<true>, bool is_concurrent = false>
 class BlockAllocator {
     struct BlockAllocation {
-        u64 nobjects;
-        std::conditional_t<is_concurrent, std::atomic<u64>, u64> used;
-        object_t* ptr; // pointer bumping
+        u64 nobjects{0};
+        std::conditional_t<is_concurrent, std::atomic<u64>, u64> used{0};
+        object_t* ptr{nullptr}; // pointer bumping
 
         BlockAllocation(u64 _nobjects, u64 _used, object_t* _ptr) : nobjects(_nobjects), used(_used), ptr(_ptr)
         {
@@ -62,11 +62,12 @@ class BlockAllocator {
 
     ~BlockAllocator()
     {
+        // TODO comment out so that we can sum up counts in micro-benchmarks
+        print("called deallocate");
         // loop through partitions and deallocate them
-        // TODO commented out so that we can sum up counts in micro-benchmarks
-        //        for (auto& allocation : allocations) {
-        //            Alloc::dealloc(allocation.ptr, allocation.nobjects * sizeof(object_t));
-        //        }
+        for (auto& allocation : allocations) {
+            Alloc::dealloc(allocation.ptr, allocation.nobjects * sizeof(object_t));
+        }
     }
 
     [[maybe_unused]]
@@ -97,19 +98,30 @@ class BlockAllocatorNonConcurrent : public BlockAllocator<object_t, Alloc, false
     {
     }
 
+    BlockAllocatorNonConcurrent(u32 part_no, u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
+    {
+    }
+
+    [[nodiscard]]
+    object_t* get_object(u32)
+    {
+        return get_object();
+    }
+
+    [[nodiscard]]
     object_t* get_object()
     {
         object_t* obj;
         if ((obj = try_bump_pointer())) {
             return obj;
         }
-        else if (not free_objects.empty()) {
+        if (not free_objects.empty()) {
             // check for free objects
             obj = free_objects.front();
             free_objects.pop();
             return obj;
         }
-        else if (allocation_budget) {
+        if (allocation_budget) {
             // allocate new block
             return allocate();
         }
@@ -134,6 +146,11 @@ class BlockAllocatorConcurrent : public BlockAllocator<object_t, Alloc, true> {
     {
     }
 
+    BlockAllocatorConcurrent(u32 part_no, u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
+    {
+    }
+
+    [[nodiscard]]
     object_t* get_object()
     {
     retry:;

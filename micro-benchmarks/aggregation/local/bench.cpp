@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
                 };
             }
 
-            BlockAlloc block_alloc(FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc);
+            BlockAlloc block_alloc(FLAGS_partitions, 32, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             InserterLocal inserter_loc{FLAGS_partitions, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
@@ -155,6 +155,7 @@ int main(int argc, char* argv[])
                 // barrier
                 barrier_preagg.arrive_and_wait();
 
+                print("starting glob");
                 // LIKWID_MARKER_START("concurrent aggregation");
                 if (FLAGS_consumepart) {
                     while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
@@ -238,6 +239,11 @@ int main(int argc, char* argv[])
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch", Sketch::get_type())
         .log("consume partitions", FLAGS_consumepart)
+#if defined(ENABLE_PART_BLOCK)
+        .log("block allocator", "partition-aware"s)
+#else
+        .log("block allocator", "partition-unaware"s)
+#endif
 #if defined(ENABLE_ADAPRE)
         .log("adapre enabled", true)
 #else

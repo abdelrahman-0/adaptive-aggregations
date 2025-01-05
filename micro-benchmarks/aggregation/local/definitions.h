@@ -13,6 +13,7 @@
 #include "core/buffer/partition_inserter.h"
 #include "core/hashtable/ht_global.h"
 #include "core/hashtable/ht_local.h"
+#include "core/memory/partition_block_allocator.h"
 #include "core/sketch/hll_custom.h"
 #include "core/storage/page_local.h"
 #include "core/storage/table.h"
@@ -22,8 +23,8 @@
 
 using namespace std::chrono_literals;
 /* --------------------------------------- */
-#define AGG_VALS 1, page.get_attribute<1>(j), page.get_attribute<2>(j), page.get_attribute<3>(j)
-#define AGG_KEYS u64, u64, u64, u64
+#define AGG_VALS 1
+#define AGG_KEYS u64
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
 /* --------------------------------------- */
@@ -31,17 +32,13 @@ using Groups     = std::tuple<GRP_KEYS>;
 using Aggregates = std::tuple<AGG_KEYS>;
 #define TABLE_SCHEMA GRP_KEYS, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 /* --------------------------------------- */
-static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
+void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
-    std::get<2>(aggs_grp)  = std::min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
-    std::get<3>(aggs_grp)  = std::max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
 }
-static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
+void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
-    utils::atomic_add(std::get<0>(aggs_grp), std::get<0>(aggs_tup));
-    utils::atomic_min(std::get<2>(aggs_grp), std::get<2>(aggs_tup));
-    utils::atomic_max(std::get<3>(aggs_grp), std::get<3>(aggs_tup));
+    __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 /* --------------------------------------- */
 static constexpr ht::IDX_MODE idx_mode_slots   = ht::INDIRECT_16;
@@ -53,15 +50,19 @@ using MemAlloc                                 = mem::JEMALLOCator<true>;
 using Sketch                                   = ht::HLLSketch<true>;
 using PageTable                                = PageLocal<TABLE_SCHEMA>;
 using PageResult                               = ht::PageAggregation<Groups, Aggregates, idx_mode_entries, idx_mode_slots == ht::DIRECT, true>;
-using BlockAlloc                               = mem::BlockAllocatorNonConcurrent<PageResult, MemAlloc>;
-using BufferLocal                              = buf::EvictionBuffer<PageResult, BlockAlloc>;
-using StorageGlobal                            = buf::PartitionBuffer<PageResult, true>;
-using InserterLocal                            = buf::PartitionedAggregationInserter<PageResult, idx_mode_entries, BufferLocal, Sketch, false>;
+#if defined(ENABLE_PART_BLOCK)
+using BlockAlloc = mem::PartitionBlockAllocatorNonConcurrent<PageResult, MemAlloc>;
+#else
+using BlockAlloc = mem::BlockAllocatorNonConcurrent<PageResult, MemAlloc>;
+#endif
+using BufferLocal   = buf::EvictionBuffer<PageResult, BlockAlloc>;
+using StorageGlobal = buf::PartitionBuffer<PageResult, true>;
+using InserterLocal = buf::PartitionedAggregationInserter<PageResult, idx_mode_entries, BufferLocal, Sketch, false>;
 /* --------------------------------------- */
 #if defined(LOCAL_UNCHAINED_HT)
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, is_ht_loc_salted, false, false>;
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, BlockAlloc, Sketch, is_ht_loc_salted, false, false>;
 #else
-using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, false, false>;
+using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, BlockAlloc, Sketch, false, false>;
 #endif
 /* --------------------------------------- */
 #if defined(GLOBAL_UNCHAINED_HT)

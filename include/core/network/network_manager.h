@@ -13,7 +13,6 @@ namespace network {
 
 // tagged pointer with two 8-bit tags
 class UserData {
-  private:
     static constexpr u64 pointer_tag_mask = 0x0000FFFFFFFFFFFF;
     static constexpr u64 bottom_tag_mask  = 0x00FF000000000000;
     static constexpr u64 top_tag_mask     = bottom_tag_mask << 8;
@@ -28,7 +27,7 @@ class UserData {
         return data >> tag_shift;
     }
 
-    static inline auto tag_pointer(auto* ptr, std::integral auto top_tag, std::integral auto bottom_tag = 0)
+    static auto tag_pointer(auto* ptr, std::integral auto top_tag, std::integral auto bottom_tag = 0)
     {
         return reinterpret_cast<uintptr_t>(ptr) | (static_cast<u64>(bottom_tag) << tag_shift) | (static_cast<u64>(top_tag) << top_tag_shift);
     }
@@ -285,7 +284,6 @@ class HeterogeneousEgressNetworkManager : public EgressNetworkManager<true, obje
     using base_t::npeers;
     using base_t::pending_objects;
 
-  private:
     std::atomic<bool> continue_egress{true};
 
   public:
