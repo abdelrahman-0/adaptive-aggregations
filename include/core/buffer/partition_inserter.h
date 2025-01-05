@@ -116,7 +116,7 @@ struct PartitionedAggregationInserter {
             // evict if full
             part_page = part_buffer.evict(part_no, part_page);
             part_page->clear_tuples();
-            offset = EMPTY_OFFSET;
+            offset = reinterpret_cast<typename page_t::idx_t>(static_cast<u64>(EMPTY_OFFSET));
         }
         if constexpr (is_grouped) {
             group_data[part_no >> group_shift].sketch.update(key_hash);
