@@ -63,11 +63,10 @@ class BlockAllocator {
     ~BlockAllocator()
     {
         // TODO comment out so that we can sum up counts in micro-benchmarks
-        print("called deallocate");
         // loop through partitions and deallocate them
-        for (auto& allocation : allocations) {
-            Alloc::dealloc(allocation.ptr, allocation.nobjects * sizeof(object_t));
-        }
+        // for (auto& allocation : allocations) {
+        //     Alloc::dealloc(allocation.ptr, allocation.nobjects * sizeof(object_t));
+        // }
     }
 
     [[maybe_unused]]

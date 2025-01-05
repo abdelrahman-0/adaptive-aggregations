@@ -76,7 +76,7 @@ int main(int argc, char* argv[])
                 };
             }
 
-            BlockAlloc block_alloc(FLAGS_partitions, 32, FLAGS_maxalloc);
+            BlockAlloc block_alloc(FLAGS_partitions, FLAGS_bump, FLAGS_maxalloc);
             BufferLocal partition_buffer{FLAGS_partitions, block_alloc, eviction_fns};
             InserterLocal inserter_loc{FLAGS_partitions, partition_buffer};
             HashtableLocal ht_loc{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
@@ -98,9 +98,12 @@ int main(int argc, char* argv[])
                 }
             };
 
-            std::function process_local_page = insert_into_ht;
+#if not defined(ENABLE_ADAPRE)
+            const
+#endif
+                std::function process_local_page = insert_into_ht;
 
-            auto process_page_glob           = [&ht_glob](PageResult& page) {
+            auto process_page_glob               = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -155,7 +158,6 @@ int main(int argc, char* argv[])
                 // barrier
                 barrier_preagg.arrive_and_wait();
 
-                print("starting glob");
                 // LIKWID_MARKER_START("concurrent aggregation");
                 if (FLAGS_consumepart) {
                     while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {

@@ -31,7 +31,7 @@ add_compile_definitions(HT_PAGE_SIZE_POWER=${HT_PAGE_SIZE_POWER})
 add_compile_definitions(NETWORK_PAGE_SIZE_POWER=${NETWORK_PAGE_SIZE_POWER})
 add_compile_definitions(LOCAL_UNCHAINED_HT)
 add_compile_definitions(GLOBAL_UNCHAINED_HT)
-#add_compile_definitions(ENABLE_PART_BLOCK)
+add_compile_definitions(ENABLE_PART_BLOCK)
 #add_compile_definitions(ENABLE_ADAPRE)
 #add_compile_definitions(ENABLE_PERFEVENT)
 
