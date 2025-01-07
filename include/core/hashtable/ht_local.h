@@ -229,6 +229,7 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
         // evaluated at compile-time
         if (is_salted) {
             switch (slots_mode) {
+            case DIRECT:
             case INDIRECT_32:
                 return 16;
             case INDIRECT_64:
@@ -277,7 +278,6 @@ struct PartitionedOpenAggregationHashtable : PartitionedAggregationHashtable<key
                     return;
                 }
             }
-
             mod  = (mod + 1) & slots_mask;
             slot = slots[partition_mask | mod];
         }
