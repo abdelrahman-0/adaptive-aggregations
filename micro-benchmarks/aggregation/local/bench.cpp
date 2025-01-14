@@ -94,7 +94,11 @@ int main(int argc, char* argv[])
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
+#if defined(ENABLE_PREAGG)
                     inserter_loc.insert(group, agg);
+#else
+                    inserter_loc.insert<true>(group, agg);
+#endif
                 }
             };
 #if defined(ENABLE_PREAGG)

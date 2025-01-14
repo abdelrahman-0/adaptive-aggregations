@@ -8,14 +8,14 @@
 #define DEFAULTS_AUTO static constexpr auto
 #define CACHELINE_SZ 64
 
-using s8        = int8_t;
-using u8        = uint8_t;
-using s16       = int16_t;
-using u16       = uint16_t;
-using s32       = int32_t;
-using u32       = uint32_t;
-using s64       = int64_t;
-using u64       = uint64_t;
+using s8     = int8_t;
+using s16    = int16_t;
+using s32    = int32_t;
+using s64    = int64_t;
+using u8     = uint8_t;
+using u16    = uint16_t;
+using u32    = uint32_t;
+using u64    = uint64_t;
 
 using node_t = u16;
 
@@ -33,6 +33,6 @@ DEFAULTS_AUTO kernel_send_buffer_size = 1u << 29;
 DEFAULTS_AUTO listen_queue_depth      = 100;
 
 // node-specific defaults
-DEFAULTS_AUTO node_bandwidth_GB_per_s          = 100e9 / 8;
+DEFAULTS_AUTO node_bandwidth_GB_per_s = 100e9 / 8;
 
 } // namespace defaults

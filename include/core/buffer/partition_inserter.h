@@ -127,11 +127,18 @@ struct PartitionedAggregationInserter {
         return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
     }
 
+    template <bool single_part = false>
     void insert(typename page_t::key_t& key, typename page_t::value_t& value)
     {
         // extract lower bits from hash
-        u64 key_hash    = hash_tuple(key);
-        u64 part_no     = key_hash >> partition_shift;
+        u64 key_hash = hash_tuple(key);
+        u64 part_no;
+        if constexpr (single_part) {
+            part_no = 0;
+        }
+        else {
+            part_no = key_hash >> partition_shift;
+        }
         auto* part_page = part_buffer.get_partition_page(part_no);
         insert(key, value, key_hash, part_no, part_page);
     }
