@@ -103,6 +103,7 @@ int main(int argc, char* argv[])
 #endif
                 std::function process_local_page = insert_into_ht;
 #else
+            FLAGS_consumepart = false;
             const std::function process_local_page = insert_into_buffer;
 #endif
 
