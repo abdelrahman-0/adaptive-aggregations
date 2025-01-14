@@ -97,13 +97,16 @@ int main(int argc, char* argv[])
                     inserter_loc.insert(group, agg);
                 }
             };
-
-#if not defined(ENABLE_ADAPRE)
+#if defined(ENABLE_RADIX)
+#if not defined(ENABLE_CART)
             const
 #endif
                 std::function process_local_page = insert_into_ht;
+#else
+            const std::function process_local_page = insert_into_buffer;
+#endif
 
-            auto process_page_glob               = [&ht_glob](PageResult& page) {
+            auto process_page_glob = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
                 }
@@ -142,10 +145,10 @@ int main(int argc, char* argv[])
                     while (thread_io.has_inflight_requests()) {
                         process_local_page(*thread_io.get_next_page<PageTable>());
                     }
-#if defined(ENABLE_ADAPRE)
-                    if (FLAGS_adapre and ht_loc.is_useless()) {
+#if defined(ENABLE_CART)
+                    if (FLAGS_cart and ht_loc.is_useless()) {
                         // turn off pre-aggregation
-                        FLAGS_adapre       = false;
+                        FLAGS_cart         = false;
                         process_local_page = insert_into_buffer;
                     }
 #endif
@@ -246,12 +249,12 @@ int main(int argc, char* argv[])
 #else
         .log("block allocator", "partition-unaware"s)
 #endif
-#if defined(ENABLE_ADAPRE)
-        .log("adapre enabled", true)
+#if defined(ENABLE_CART)
+        .log("cart enabled", true)
 #else
-        .log("adapre enabled", false)
+        .log("cart enabled", false)
 #endif
-        .log("adapre status", FLAGS_adapre)
+        .log("cart status", FLAGS_cart)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
