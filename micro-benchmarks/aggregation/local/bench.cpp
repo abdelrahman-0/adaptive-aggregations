@@ -97,16 +97,14 @@ int main(int argc, char* argv[])
                     inserter_loc.insert(group, agg);
                 }
             };
-#if defined(ENABLE_RADIX)
+#if defined(ENABLE_PREAGG)
 #if not defined(ENABLE_CART)
             const
 #endif
                 std::function process_local_page = insert_into_ht;
 #else
-            FLAGS_consumepart = false;
             const std::function process_local_page = insert_into_buffer;
 #endif
-
             auto process_page_glob = [&ht_glob](PageResult& page) {
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     ht_glob.insert(page.get_tuple_ref(j));
@@ -254,6 +252,11 @@ int main(int argc, char* argv[])
         .log("cart enabled", true)
 #else
         .log("cart enabled", false)
+#endif
+#if defined(ENABLE_PREAGG)
+        .log("pre-aggregation enabled", true)
+#else
+        .log("pre-aggregation enabled", false)
 #endif
         .log("cart status", FLAGS_cart)
         .log("threshold pre-aggregation", FLAGS_thresh)
