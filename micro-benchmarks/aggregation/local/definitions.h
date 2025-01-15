@@ -23,8 +23,8 @@
 
 using namespace std::chrono_literals;
 /* --------------------------------------- */
-#define AGG_VALS 1
-#define AGG_KEYS u64
+#define AGG_VALS 1, page.get_attribute<1>(j)
+#define AGG_KEYS u64, u64
 #define GPR_KEYS_IDX 0
 #define GRP_KEYS u64
 /* --------------------------------------- */
