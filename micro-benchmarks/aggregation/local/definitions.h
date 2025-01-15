@@ -79,4 +79,4 @@ DEFINE_uint32(bump, 32, "block size (in pages) to use when allocating memory for
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
 DEFINE_bool(cart, true, "turn Conditional pre-Aggregation at Run-Time (CART) on/off initially");
-DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling local pre-aggregation");
+DEFINE_double(thresh, 0.7, "pre-aggregation threshold for disabling CART");
