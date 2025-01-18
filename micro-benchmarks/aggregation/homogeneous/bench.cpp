@@ -6,7 +6,7 @@ int main(int argc, char* argv[])
     /* --------------------------------------- */
     auto config         = adapt::Configuration{FLAGS_config};
     auto local_node     = sys::Node{FLAGS_threads};
-    node_t node_id   = local_node.get_id();
+    node_t node_id      = local_node.get_id();
     /* --------------------------------------- */
     auto table          = Table{FLAGS_npages / FLAGS_nodes};
     auto& swips         = table.get_swips();
@@ -74,7 +74,7 @@ int main(int argc, char* argv[])
             DEBUGGING(u64 local_tuples_sent{0});
             DEBUGGING(u64 local_tuples_received{0});
             /* --------------------------------------- */
-            auto recv_alloc                 = BlockAlloc{npeers * 10, FLAGS_maxalloc};
+            auto recv_alloc                 = BlockAlloc{1, npeers * 10, FLAGS_maxalloc};
             auto manager_recv               = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             auto manager_send               = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             auto remote_sketches_ingress    = std::vector<Sketch>(npeers);
@@ -110,7 +110,7 @@ int main(int argc, char* argv[])
             // dependency injection
             auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
             for (u64 grp_no : range(npartgrps)) {
-                node_t dst           = (grp_no * FLAGS_nodes) >> npartgrps_shift;
+                node_t dst              = (grp_no * FLAGS_nodes) >> npartgrps_shift;
                 bool has_extra_grp      = dst < num_workers_with_extra_grp;
                 auto grps_per_dst       = min_grps_per_dst + has_extra_grp;
                 auto grp_offset         = (grps_per_dst * dst) + (has_extra_grp ? 0 : num_workers_with_extra_grp);
@@ -145,7 +145,7 @@ int main(int argc, char* argv[])
                 }
             }
             /* --------------------------------------- */
-            auto block_alloc                      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
+            auto block_alloc                      = BlockAlloc{FLAGS_partitions, FLAGS_bump, FLAGS_maxalloc};
             auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
             auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer, npartgrps};
             auto ht_loc                           = HashtableLocal{FLAGS_partitions, FLAGS_slots, FLAGS_thresh, partition_buffer, inserter_loc};
@@ -205,9 +205,9 @@ int main(int argc, char* argv[])
                 while (thread_io.has_inflight_requests()) {
                     process_local_page(*thread_io.get_next_page<PageTable>());
                 }
-                if (FLAGS_adapre and ht_loc.is_useless()) {
+                if (FLAGS_cart and ht_loc.is_useless()) {
                     // turn off pre-aggregation
-                    FLAGS_adapre       = false;
+                    FLAGS_cart         = false;
                     process_local_page = insert_into_buffer;
                 }
             }
@@ -306,8 +306,18 @@ int main(int argc, char* argv[])
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch", Sketch::get_type())
-        .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", FLAGS_adapre)
+        .log("block allocator", "partition-unaware"s)
+#if defined(ENABLE_CART)
+        .log("cart enabled", true)
+#else
+        .log("cart enabled", false)
+#endif
+#if defined(ENABLE_PREAGG)
+        .log("pre-aggregation enabled", true)
+#else
+        .log("pre-aggregation enabled", false)
+#endif
+        .log("cart status", FLAGS_cart)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
