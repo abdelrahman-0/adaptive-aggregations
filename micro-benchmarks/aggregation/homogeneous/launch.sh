@@ -2,7 +2,7 @@ TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_hom
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=100 --pin"
+FLAGS="--nolocal --random --morselsz=100 --pin --config=../../../configs/config_aws.json"
 # --seed=${LOCAL_NODE_ID}
 PRINT_HEADER='--print_header'
 
