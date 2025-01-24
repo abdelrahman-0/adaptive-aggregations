@@ -174,7 +174,7 @@ int main(int argc, char* argv[])
                 }
                 else {
                     const u64 npages = storage_glob.partition_pages[0].size();
-                    while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < npages) {
+                    while ((morsel_begin = current_swip.fetch_add(100)) < npages) {
                         morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
                         while (morsel_begin < morsel_end) {
                             process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);

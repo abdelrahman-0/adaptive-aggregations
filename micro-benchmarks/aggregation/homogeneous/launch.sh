@@ -11,7 +11,7 @@ for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
   #    continue
   #  fi
   for NPAGES in 2400000; do
-    for THREADS in 1 4 6 12 24 30 32; do
+    for THREADS in 1 4 6 12 24 32; do
       for NGROUPS in 1 100 100000 1000000 10000000; do
         for NPARTS in 32 64 96 128 256; do
           for PRTGRPSZ in 1 4 8; do
