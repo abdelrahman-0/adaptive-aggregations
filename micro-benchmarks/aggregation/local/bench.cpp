@@ -24,7 +24,11 @@ int main(int argc, char* argv[])
     std::atomic<u64> tuple_count{0};
     std::atomic<u64> groups_inserted{0};
     std::atomic global_ht_construction_complete{false};
-    StorageGlobal storage_glob{FLAGS_consumepart ? FLAGS_partitions : 1};
+#if defined(ENABLE_RADIX)
+    StorageGlobal storage_glob{FLAGS_partitions};
+#else
+    StorageGlobal storage_glob{1};
+#endif
     Sketch sketch_glob;
     HashtableGlobal ht_glob;
     /* --------------------------------------- */
@@ -67,7 +71,11 @@ int main(int argc, char* argv[])
 
             std::vector<BufferLocal::EvictionFn> eviction_fns(FLAGS_partitions);
             for (u32 part_no : range(FLAGS_partitions)) {
-                auto final_part_no    = FLAGS_consumepart ? part_no : 0;
+#if defined(ENABLE_RADIX)
+                auto final_part_no = part_no;
+#else
+                auto final_part_no = 0;
+#endif
                 eviction_fns[part_no] = [final_part_no, &storage_glob](PageResult* page, bool) {
                     page->retire();
                     if (not page->empty()) {
@@ -94,7 +102,7 @@ int main(int argc, char* argv[])
                 for (auto j{0u}; j < page.num_tuples; ++j) {
                     auto group = page.get_tuple<GPR_KEYS_IDX>(j);
                     auto agg   = std::make_tuple<AGG_KEYS>(AGG_VALS);
-#if defined(ENABLE_PREAGG)
+#if defined(ENABLE_RADIX)
                     inserter_loc.insert(group, agg);
 #else
                     inserter_loc.insert<true>(group, agg);
@@ -165,22 +173,22 @@ int main(int argc, char* argv[])
                 barrier_preagg.arrive_and_wait();
 
                 // LIKWID_MARKER_START("concurrent aggregation");
-                if (FLAGS_consumepart) {
-                    while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
-                        for (auto* page : storage_glob.partition_pages[morsel_begin]) {
-                            process_page_glob(*page);
-                        }
+#if defined(ENABLE_RADIX)
+                while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
+                    print(storage_glob.partition_pages[morsel_begin].size());
+                    for (auto* page : storage_glob.partition_pages[morsel_begin]) {
+                        process_page_glob(*page);
                     }
                 }
-                else {
-                    const u64 npages = storage_glob.partition_pages[0].size();
-                    while ((morsel_begin = current_swip.fetch_add(100)) < npages) {
-                        morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
-                        while (morsel_begin < morsel_end) {
-                            process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
-                        }
+#else
+                const u64 npages = storage_glob.partition_pages[0].size();
+                while ((morsel_begin = current_swip.fetch_add(100)) < npages) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, npages);
+                    while (morsel_begin < morsel_end) {
+                        process_page_glob(*storage_glob.partition_pages[0][morsel_begin++]);
                     }
                 }
+#endif
 
                 times_preagg[thread_id] = swatch_preagg.time_ms;
                 // LIKWID_MARKER_STOP("concurrent aggregation");
@@ -190,12 +198,11 @@ int main(int argc, char* argv[])
 
             /* ----------- END ----------- */
             if (thread_id == 0) {
-                if (FLAGS_consumepart) {
-                    std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
-                }
-                else {
-                    pages_pre_agg = storage_glob.partition_pages[0].size();
-                }
+#if defined(ENABLE_RADIX)
+                std::for_each(storage_glob.partition_pages.begin(), storage_glob.partition_pages.end(), [&pages_pre_agg](auto&& part_pgs) { pages_pre_agg += part_pgs.size(); });
+#else
+                pages_pre_agg = storage_glob.partition_pages[0].size();
+#endif
 
 #if defined(GLOBAL_UNCHAINED_HT)
                 for (u64 i : range(ht_glob.size_mask + 1)) {
@@ -246,7 +253,11 @@ int main(int argc, char* argv[])
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch", Sketch::get_type())
-        .log("consume partitions", FLAGS_consumepart)
+#if defined(ENABLE_RADIX)
+        .log("consume partitions", true)
+#else
+        .log("consume partitions", false)
+#endif
 #if defined(ENABLE_PART_BLOCK)
         .log("block allocator", "partition-aware"s)
 #else

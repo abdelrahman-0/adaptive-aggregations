@@ -81,7 +81,7 @@ struct PartitionedAggregationHashtable : protected BaseAggregationHashtable<key_
     [[nodiscard]]
     bool is_useless() const
     {
-        return ((group_not_found + group_found) > 10'000) and (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg);
+        return ((group_not_found + group_found) > 100'000) and (((1.0 * group_not_found) / (group_not_found + group_found)) > threshold_preagg);
     }
 };
 
