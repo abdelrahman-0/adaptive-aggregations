@@ -20,12 +20,16 @@ struct TaskScheduler {
     std::atomic<u32> morsel_current{0};
     std::atomic<u32> morsel_end{0};
     std::atomic<u16> nworkers;
-    std::atomic<bool> nworkers_is_stable{false};
+    std::atomic<bool> finished{false};
+    std::atomic<bool> consumed_at_least_one{false};
     u32 morsel_sz;
     std::atomic<bool> responded_to_current_task{true};
-    u64 SLA_s{};
+    u16 npeers_max;
+    u16 threads_per_worker;
+    u32 time_budget{};
 
-    explicit TaskScheduler(u32 _morsel_sz, double _SLA_s, TaskMetrics& _task_metrics) : task_metrics(_task_metrics), morsel_sz(_morsel_sz), SLA_s(_SLA_s)
+    explicit TaskScheduler(u32 _morsel_sz, u32 budget, TaskMetrics& _task_metrics, u16 _npeers_max, u16 _threads_per_worker)
+        : task_metrics(_task_metrics), morsel_sz(_morsel_sz), npeers_max(_npeers_max), threads_per_worker(_threads_per_worker), time_budget(budget)
     {
     }
 
@@ -38,7 +42,7 @@ struct TaskScheduler {
         if (not responded_to_current_task and percent_done > min_wait_percentage) {
             auto estimated_workers = estimate_nworkers();
             if (estimated_workers > nworkers) {
-                // TODO update morsel_end safely
+                // TODO split properly
                 auto new_morsel_end       = morsel_current_snapshot + (morsel_end - morsel_current_snapshot) / estimated_workers;
                 auto old_morsel_end       = morsel_end.exchange(new_morsel_end);
                 responded_to_current_task = true;
@@ -57,17 +61,10 @@ struct TaskScheduler {
         return task_state;
     }
 
-    void reset()
-    {
-        SLA_s                     -= task_metrics.get_elapsed_time_ms() / 1000.0;
-        responded_to_current_task  = false;
-        task_metrics.reset();
-    }
-
     [[nodiscard]]
     bool is_done() const
     {
-        return nworkers_is_stable;
+        return finished;
     }
 
     void enqueue_task(Task task)
@@ -80,17 +77,19 @@ struct TaskScheduler {
     bool dequeue_task()
     {
         responded_to_current_task.wait(false);
-        Task next_task;
-        if (tasks.try_pop(next_task)) {
-            reset();
-            morsel_begin   = next_task.start;
-            morsel_current = next_task.start;
-            morsel_end     = next_task.end;
+        if (Task next_task{}; tasks.try_pop(next_task)) {
+            task_metrics.reset();
+            responded_to_current_task = false;
+            morsel_begin              = next_task.start;
+            morsel_current            = next_task.start;
+            morsel_end                = next_task.end;
+            consumed_at_least_one     = true;
             return true;
         }
         return false;
     }
 
+    [[nodiscard]]
     Task get_next_morsel()
     {
         auto begin = morsel_current.fetch_add(morsel_sz);
@@ -104,34 +103,22 @@ struct TaskScheduler {
     }
 
     [[nodiscard]]
-    double estimate_glob_ht_build_s(u64 nunique_grps)
-    {
-        // TODO GLM? (output tuple sz + estimated grps)
-        return nunique_grps / 1'000'000.0;
-    }
-
     u16 estimate_nworkers()
     {
-        u32 morsel_now                        = morsel_current;
-        double elapsed_time_s                 = task_metrics.get_elapsed_time_ms() / 1000.0;
-        double SLA_adjusted_s                 = SLA_s - elapsed_time_s;
-        u32 pages_done                        = morsel_now - morsel_begin;
-        u32 pages_left                        = morsel_end - morsel_now;
-        double remainder_factor               = (1.0 * pages_left) / pages_done;
-        u64 nunique_grps                      = task_metrics.estimate_unique_groups(nworkers) * (remainder_factor + 1);
-        double estimated_glob_ht_built_time_s = estimate_glob_ht_build_s(nunique_grps);
-        // TODO also initial pages need to be transferred
-        double estimated_transfer_time_s      = remainder_factor * task_metrics.get_output_size_B() / defaults::node_bandwidth_GB_per_s;
-        double cpu_bound_estimate             = (elapsed_time_s * remainder_factor + estimated_glob_ht_built_time_s) / SLA_adjusted_s;
-        double network_bound_estimate         = math::find_max_quadratic_root(SLA_adjusted_s, -estimated_transfer_time_s - estimated_glob_ht_built_time_s, estimated_transfer_time_s);
-        static u64 printed                    = 0;
-        if (printed++ % 1000 == 0) {
-            print("remainder factor", remainder_factor, "nunique_grps", nunique_grps, "estimated glob ht time", estimated_glob_ht_built_time_s, "estimated transfer time",
-                  estimated_transfer_time_s);
-            print("cpu bound estimate:", cpu_bound_estimate, "network bound estimate:", network_bound_estimate);
+        // TODO switch policy
+        auto unique_groups = task_metrics.estimate_unique_groups(1);
+        for (auto i = nworkers.load(); nworkers < npeers_max; nworkers++) {
+            if (estimate_time_ms(i, unique_groups, threads_per_worker) < (time_budget - task_metrics.get_elapsed_time_ms())) {
+                return i;
+            }
         }
-        node_t nworkers_estimated = std::ceil(std::max(cpu_bound_estimate, network_bound_estimate));
-        return nworkers_estimated;
+        return npeers_max;
+    }
+
+    [[nodiscard]]
+    u32 estimate_time_ms(u32 groups, u16 nworkers, u16 threads_per_worker)
+    {
+        return std::exp(5.828258 - 0.387998 * nworkers + 0.136706 * std::log(groups) - 0.887925 * log(threads_per_worker) + 0.014630 * nworkers * threads_per_worker);
     }
 };
 

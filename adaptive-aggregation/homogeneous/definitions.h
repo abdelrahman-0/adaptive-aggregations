@@ -35,11 +35,11 @@ using Groups     = std::tuple<GRP_KEYS>;
 using Aggregates = std::tuple<AGG_KEYS>;
 #define TABLE_SCHEMA GRP_KEYS, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
 /* --------------------------------------- */
-static void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
+void fn_agg(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
     std::get<0>(aggs_grp) += std::get<0>(aggs_tup);
 }
-static void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
+void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
 {
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
@@ -61,13 +61,13 @@ using InserterLocal                            = buf::PartitionedAggregationInse
 using EgressManager                            = network::HomogeneousEgressNetworkManager<PageResult, Sketch>;
 using IngressManager                           = network::HomogeneousIngressNetworkManager<PageResult, Sketch>;
 /* --------------------------------------- */
-#if defined(LOCAL_OPEN_HT)
-using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, Sketch, is_ht_loc_salted, true, false>;
+#if defined(LOCAL_UNCHAINED_HT)
+using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, BlockAlloc, Sketch, is_ht_loc_salted, true, false>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true, false>;
 #endif
 /* --------------------------------------- */
-#if defined(GLOBAL_OPEN_HT)
+#if defined(GLOBAL_UNCHAINED_HT)
 using HashtableGlobal = ht::ConcurrentOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, fn_agg_concurrent, MemAlloc, true, is_ht_glob_salted>;
 #else
 using HashtableGlobal = ht::ConcurrentChainedAggregationHashtable<Groups, Aggregates, fn_agg_concurrent, MemAlloc, true>;
@@ -79,7 +79,5 @@ DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(slots, PageResult::max_tuples_per_page * 2, "number of slots to use per partition");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
-DEFINE_bool(consumepart, true, "whether threads should consume partitions or individual pages when building the global hashtable");
-DEFINE_bool(adapre, true, "turn local adaptive pre-aggregation on/off initially");
 DEFINE_double(thresh, 0.2, "tuple ratio threshold for disabling local pre-aggregation");
-DEFINE_double(sla, 1.5, "total runtime SLA (in seconds)");
+DEFINE_uint32(budget, 200, "time budget (in milliseconds)");

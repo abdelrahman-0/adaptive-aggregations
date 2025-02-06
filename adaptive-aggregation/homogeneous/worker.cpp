@@ -28,17 +28,17 @@ int main(int argc, char* argv[])
     auto ht_glob         = HashtableGlobal{};
     // worker state
     auto task_metrics    = adapt::TaskMetrics{node_id, sizeof(Groups) + sizeof(Aggregates), npartgrps};
-    auto task_scheduler  = adapt::TaskScheduler{FLAGS_morselsz, FLAGS_sla, task_metrics};
+    auto task_scheduler  = adapt::TaskScheduler{FLAGS_morselsz, FLAGS_budget, task_metrics, static_cast<u16>(npeers_max), static_cast<u16>(FLAGS_threads)};
     /* --------------------------------------- */
     // monitor thread connects to coordinator
     std::latch coordinator_latch{1};
-    auto monitor_thread = std::jthread{[node_id, &config, &coordinator_latch, &task_scheduler]() {
+    auto monitor_thread = std::jthread{[node_id, &config, &coordinator_latch, &task_scheduler] {
         auto [ip, port] = config.get_coordinator_info();
         auto conn_fds   = Connection::setup_egress(node_id, ip, port, 1);
         coordinator_latch.count_down();
         auto egress_network_manager  = network::HomogeneousEgressNetworkManager<adapt::StateMessage>{1, FLAGS_depthnw, FLAGS_sqpoll, conn_fds};
         auto ingress_network_manager = network::HomogeneousIngressNetworkManager<adapt::StateMessage>{1, FLAGS_depthnw, FLAGS_sqpoll, conn_fds};
-        adapt::WorkerMonitor monitor{egress_network_manager, ingress_network_manager, task_scheduler};
+        adapt::WorkerMonitor monitor{egress_network_manager, ingress_network_manager, task_scheduler, node_id == 0};
         monitor.monitor_query();
         Connection::close_connections(conn_fds);
     }};
@@ -82,40 +82,28 @@ int main(int argc, char* argv[])
                 socket_fds.emplace_back(Connection::setup_egress(node_id, ip, port));
             }
             /* --------------------------------------- */
-            auto page_alloc_ingress      = BlockAlloc{npeers_max * 10, FLAGS_maxalloc};
-            auto manager_recv            = IngressManager{npeers_max, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto manager_send            = EgressManager{npeers_max, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto remote_sketches_ingress = std::vector<Sketch>(npeers_max);
-            auto remote_sketches_egress  = std::vector<Sketch>(npeers_max);
-            auto storage_loc             = StorageLocal{FLAGS_partitions};
-            node_t sketches_seen         = 0;
-            node_t peers_ready           = 0;
+            auto page_alloc_ingress         = BlockAlloc{npeers_max * 10, FLAGS_maxalloc};
+            auto manager_recv               = IngressManager{npeers_max, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+            auto manager_send               = EgressManager{npeers_max, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+            auto remote_sketches_ingress    = std::vector<Sketch>(npeers_max);
+            auto remote_sketches_egress     = std::vector<Sketch>(npeers_max);
+            node_t sketches_seen            = 0;
+            node_t peers_ready              = 0;
             /* --------------------------------------- */
-            auto ingress_page_consumer_fn =
-                std::function{[&page_alloc_ingress, &storage_loc, &storage_glob, &remote_sketches_ingress, &manager_recv, &peers_ready](PageResult* page, u32 dst) {
-                    if (page->is_secondary_bit_set()) {
-                        // phase 1
-                        if (page->is_primary_bit_set()) {
-                            manager_recv.recv(dst, remote_sketches_ingress.data() + dst);
-                        }
-                        else {
-                            manager_recv.recv(dst, page_alloc_ingress.get_object());
-                        }
-                        if (not page->empty()) {
-                            // contains local part_no
-                            storage_glob.add_page(page, page->get_part_no());
-                        }
-                    }
-                    else {
-                        // phase 0
-                        manager_recv.recv(dst, page_alloc_ingress.get_object());
-                        peers_ready += page->is_primary_bit_set();
-                        if (not page->empty()) {
-                            // contains global part_no
-                            storage_loc.add_page(page, page->get_part_no());
-                        }
-                    }
-                }};
+            auto ingress_page_consumer_fn   = std::function{[&page_alloc_ingress, &storage_glob, &remote_sketches_ingress, &manager_recv, &peers_ready](PageResult* page, u32 dst) {
+                if (page->is_primary_bit_set()) {
+                    // End-Of-Stream (EOS)
+                    manager_recv.recv(dst, remote_sketches_ingress.data() + dst);
+                    peers_ready++;
+                }
+                else {
+                    manager_recv.recv(dst, page_alloc_ingress.get_object());
+                }
+                if (not page->empty()) {
+                    // contains global part_no
+                    storage_glob.add_page(page, page->get_part_no());
+                }
+            }};
             auto ingress_sketch_consumer_fn = std::function{[&sketch_glob, &sketches_seen](const Sketch* sketch, u32) {
                 sketch_glob.merge_concurrent(*sketch);
                 sketches_seen++;
@@ -130,7 +118,7 @@ int main(int argc, char* argv[])
             for (auto part_no_glob : range(FLAGS_partitions)) {
                 auto grp_no                = part_no_glob >> partgrpsz_shift;
                 // calculate destination on each eviction
-                eviction_fns[part_no_glob] = [=, &task_scheduler, &storage_loc, &manager_send, &partitions_end, &task_metrics](PageResult* page, bool is_last) {
+                eviction_fns[part_no_glob] = [=, &task_scheduler, &storage_glob, &manager_send, &partitions_end, &task_metrics](PageResult* page, bool is_last) {
                     // defer last_page
                     auto current_workers = task_scheduler.nworkers.load();
                     node_t dst           = (grp_no * current_workers) >> npartgrps_shift;
@@ -141,7 +129,7 @@ int main(int argc, char* argv[])
                     if (dst == node_id) {
                         if (not page->empty()) {
                             // add to local storage since number of workers might change
-                            storage_loc.add_page(page, part_no_glob);
+                            storage_glob.add_page(page, part_no_glob);
                         }
                     }
                     else if (not page->empty() or last_page_to_send) {
@@ -187,25 +175,26 @@ int main(int argc, char* argv[])
             for (node_t dst : range(npeers_max)) {
                 manager_recv.recv(dst, page_alloc_ingress.get_object());
             }
+            bool CART_active = true;
             // wait for query end
-            while (not task_scheduler.is_done()) {
+            while (not task_scheduler.consumed_at_least_one) {
                 // one task per iteration
                 barrier_task.arrive_and_wait();
                 while (adapt::Task morsel = task_scheduler.get_next_morsel()) {
                     while (morsel.start < morsel.end) {
                         process_local_page(*swips[morsel.start++].get_pointer<PageTable>());
                     }
-                    if (FLAGS_adapre and ht_loc.is_useless()) {
+                    if (CART_active and ht_loc.is_useless()) {
                         // turn off pre-aggregation
-                        FLAGS_adapre       = false;
+                        CART_active        = false;
                         process_local_page = insert_into_buffer;
                     }
                     for (u32 grp_id{0}; grp_id < npartgrps; ++grp_id) {
                         task_metrics.merge_sketch(grp_id, inserter_loc.get_sketch(grp_id));
                     }
+                    manager_recv.consume_done();
+                    manager_send.try_drain_pending();
                 }
-                manager_recv.consume_done();
-                manager_send.try_drain_pending();
             }
 
             node_t nworkers_final, npeers_final;
@@ -240,36 +229,6 @@ int main(int argc, char* argv[])
                 manager_send.try_drain_pending();
             }
 
-            // loop through partitions and send out what not mine (and set secondary bit and primary bit), and add to storage_glob what is mine
-            for (node_t part_no_glob : range(FLAGS_partitions)) {
-                auto grp_no         = part_no_glob >> partgrpsz_shift;
-                auto dst            = (grp_no * nworkers_final) >> npartgrps_shift;
-                bool sent_last_page = false;
-                auto actual_dst     = dst - (dst > node_id);
-                bool is_last_part   = part_no_glob == partitions_end[dst];
-                for (auto& part_page : storage_loc.partition_pages[part_no_glob]) {
-                    if (dst == node_id) {
-                        storage_glob.add_page(part_page, part_no_glob);
-                    }
-                    else {
-                        part_page->set_secondary_bit();
-                        if (is_last_part) {
-                            part_page->set_primary_bit();
-                            sent_last_page = true;
-                        }
-                        manager_send.send(actual_dst, part_page);
-                    }
-                }
-                if (dst != node_id and is_last_part and not sent_last_page) {
-                    // send empty last page
-                    auto* empty_page = page_alloc_egress.get_object();
-                    empty_page->set_secondary_bit();
-                    empty_page->set_primary_bit();
-                    manager_send.send(actual_dst, empty_page);
-                }
-                manager_recv.consume_done();
-                manager_send.try_drain_pending();
-            }
             // merge and send sketches
             for (u32 grp_no : range(npartgrps)) {
                 node_t dst = (grp_no * nworkers_final) >> npartgrps_shift;
@@ -320,6 +279,20 @@ int main(int argc, char* argv[])
     barrier_query.arrive_and_wait();
     swatch.stop();
 
+    u64 count{0};
+    u64 inserts{0};
+    if (is_active_worker) {
+        for (u64 i : range(ht_glob.size_mask + 1)) {
+            if (auto slot = ht_glob.slots[i].load()) {
+                auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
+                count           += slot_count;
+                inserts++;
+            }
+        }
+    }
+    print("INSERTS:", inserts);
+    print("COUNT:", count);
+
     Logger{FLAGS_print_header, FLAGS_csv}
         .log("node id", node_id)
         .log("nodes", FLAGS_nodes)
@@ -337,8 +310,6 @@ int main(int argc, char* argv[])
         .log("hashtable (local)", HashtableLocal::get_type())
         .log("hashtable (global)", HashtableGlobal::get_type())
         .log("sketch", Sketch::get_type())
-        .log("consume partitions", FLAGS_consumepart)
-        .log("adaptive pre-aggregation", FLAGS_adapre)
         .log("threshold pre-aggregation", FLAGS_thresh)
         .log("cache (%)", FLAGS_cache)
         .log("pin", FLAGS_pin)
@@ -349,24 +320,11 @@ int main(int argc, char* argv[])
         .log("partition group size", FLAGS_partgrpsz)
         .log("slots", FLAGS_slots)
         .log("threads", FLAGS_threads)
-        .log("SLA", FLAGS_sla)
+        .log("budget", FLAGS_budget)
         .log("groups seed", FLAGS_seed)
-        .log("groups total (actual)", FLAGS_groups)
+        .log("groups pool (actual)", FLAGS_groups)
+        .log("groups node (actual)", inserts)
         .log("groups node (estimate)", sketch_glob.get_estimate())
         .log("mean pre-agg time (ms)", static_cast<u64>(std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size()))
         .log("time (ms)", swatch.time_ms);
-
-    if (is_active_worker) {
-        u64 count{0};
-        u64 inserts{0};
-        for (u64 i : range(ht_glob.size_mask + 1)) {
-            if (auto slot = ht_glob.slots[i].load()) {
-                auto slot_count  = std::get<0>(reinterpret_cast<HashtableGlobal::slot_idx_raw_t>(reinterpret_cast<uintptr_t>(slot) >> 16)->get_aggregates());
-                count           += slot_count;
-                inserts++;
-            }
-        }
-        print("INSERTS:", inserts);
-        print("COUNT:", count);
-    }
 }

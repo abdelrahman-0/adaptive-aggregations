@@ -31,6 +31,7 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     using base_t::msg_buffer;
     TaskScheduler& task_scheduler;
     bool received_first_task{false};
+    bool is_starting_worker{false};
 
     void initialize_query()
     {
@@ -53,7 +54,8 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     }
 
   public:
-    explicit WorkerMonitor(EgressMgr& _egress_mgr, IngressMgr& _ingress_mgr, TaskScheduler& _adaptive_state) : base_t(_egress_mgr, _ingress_mgr), task_scheduler(_adaptive_state)
+    explicit WorkerMonitor(EgressMgr& _egress_mgr, IngressMgr& _ingress_mgr, TaskScheduler& _adaptive_state, bool _is_starting_worker)
+        : base_t(_egress_mgr, _ingress_mgr), task_scheduler(_adaptive_state), is_starting_worker(_is_starting_worker)
     {
         std::function message_fn_ingress = [this](StateMessage* msg, u32) {
             switch (msg->type) {
@@ -61,17 +63,13 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
                 ingress_mgr.recv(0, msg_buffer.get_message_storage());
                 print("worker: received task offer (", msg->task.start, msg->task.end, ") with workers =", msg->nworkers, "from coordinator");
                 received_first_task = true;
+                // TODO split work if starting_worker
+                task_scheduler.update_nworkers(msg->nworkers);
                 task_scheduler.enqueue_task(msg->task);
-                task_scheduler.update_nworkers(msg->nworkers);
                 break;
-            case NUM_WORKERS_UPDATE:
-                print("worker: received num workers update (", msg->nworkers, ")");
-                ingress_mgr.recv(0, msg_buffer.get_message_storage());
-                task_scheduler.update_nworkers(msg->nworkers);
-                break;
-            case QUERY_END:
-                print("worker: received QUERY_END");
-                task_scheduler.nworkers_is_stable = true;
+            case NO_WORK:
+                print("worker: received NO_WORK");
+                task_scheduler.finished = true;
                 break;
             default:
                 ENSURE(false);
@@ -86,10 +84,12 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     void monitor_query()
     {
         initialize_query();
-        while (not task_scheduler.nworkers_is_stable) {
+        while (ingress_mgr.has_inflight() or egress_mgr.has_inflight()) {
             ingress_mgr.consume_done();
             egress_mgr.try_drain_pending();
-            check_query_state();
+            if (is_starting_worker) {
+                check_query_state();
+            }
         }
     }
 };
@@ -134,8 +134,6 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void finalize_query() const
     {
-        StateMessage message{QUERY_END};
-        egress_mgr.broadcast(&message);
         print("waiting for all");
         egress_mgr.wait_all();
         print("finished waiting");
@@ -150,51 +148,30 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
             print("coordinator: received task response (", msg->task.start, msg->task.end, ")", "with workers =", msg->nworkers);
             if (worker_states[dst].handle_response(*msg)) {
                 // worker did not fully accept offer
-                auto num_inactive_workers       = workers_inactive.size();
-                node_t available_active_workers = 0;
-                std::for_each(worker_states.begin(), worker_states.begin() + workers_active.size(), [&](const WorkerQueryState& s) { available_active_workers += s.can_accept_work(); });
-                node_t max_available_workers = available_active_workers + num_inactive_workers;
-                auto requested_workers       = std::min(msg->nworkers, max_available_workers);
-                print("available active workers: ", available_active_workers);
-                print("num inactive workers", num_inactive_workers);
-                if (requested_workers < msg->nworkers) {
-                    print("warning: clipping requested workers [", msg->nworkers, "] to max available workers [", max_available_workers, "]");
-                }
-                bool increased_workers{false};
-                while (available_active_workers++ < requested_workers) {
-                    increased_workers = true;
-                    workers_active.push_back(workers_inactive.front());
-                    workers_inactive.pop_front();
-                }
-                auto num_active_workers = workers_active.size();
-                print("coordinator: requested_workers =", requested_workers);
-                print("coordinator: increased_workers =", increased_workers);
-
+                auto requested_workers = std::min(msg->nworkers, static_cast<u16>(workers_inactive.size()));
                 // split remainder offer between available nodes
-                u32 start   = msg->task.start;
-                u32 end     = msg->task.end;
-                auto offset = ((end - start) + requested_workers - 1) / requested_workers;
+                u32 start              = msg->task.start;
+                u32 end                = msg->task.end;
+                auto offset            = ((end - start) + requested_workers - 1) / requested_workers;
                 print("start: ", start, ", end: ", end, ", offset: ", offset);
-                for (u16 worker_id : workers_active) {
-                    if (worker_states[worker_id].can_accept_work()) {
-                        // send offer
-                        auto worker_task = Task{start, std::min(start + offset, end)};
-                        auto* msg_egress = new (msg_buffer.get_message_storage()) StateMessage{worker_task, num_active_workers, TASK_OFFER};
-                        egress_mgr.send(worker_id, msg_egress);
-                        print("coordinator: sent task:", start, std::min(start + offset, end));
-                        // recv offer response
-                        ingress_mgr.recv(worker_id, msg_buffer.get_message_storage());
-
-                        // update state
-                        worker_states[worker_id].sent_task();
-                        start += offset;
-                    }
-                    else if (increased_workers) {
-                        // send update
-                        auto* msg_response = new (msg_buffer.get_message_storage()) StateMessage{num_active_workers, NUM_WORKERS_UPDATE};
-                        egress_mgr.send(worker_id, msg_response);
-                    }
+                auto total_new_workers = requested_workers + 1u;
+                while (requested_workers--) {
+                    // send offer
+                    u16 worker_id    = workers_inactive.front();
+                    auto worker_task = Task{start, std::min(start + offset, end)};
+                    auto* msg_egress = new (msg_buffer.get_message_storage()) StateMessage{worker_task, total_new_workers, TASK_OFFER};
+                    egress_mgr.send(worker_id, msg_egress);
+                    print("coordinator: sent task:", start, std::min(start + offset, end));
+                    // update state
+                    worker_states[worker_id].sent_task();
+                    workers_inactive.pop_front();
+                    workers_active.push_back(worker_id);
+                    start += offset;
                 }
+            }
+            for (u16 worker_id : workers_inactive) {
+                auto* msg_egress = new (msg_buffer.get_message_storage()) StateMessage{-1u, NO_WORK};
+                egress_mgr.send(worker_id, msg_egress);
             }
             msg_buffer.return_message(msg);
         };

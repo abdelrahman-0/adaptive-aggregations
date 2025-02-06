@@ -34,12 +34,7 @@ struct Task {
     };
 };
 
-enum MSG_TYPE : s8 {
-    TASK_OFFER          = 0,
-    TASK_OFFER_RESPONSE = 1,
-    NUM_WORKERS_UPDATE  = 2,
-    QUERY_END           = 3,
-};
+enum MSG_TYPE : s8 { TASK_OFFER = 0, TASK_OFFER_RESPONSE = 1, NUM_WORKERS_UPDATE = 2, QUERY_END = 3, NO_WORK = 4 };
 
 struct StateMessage {
     Task task;

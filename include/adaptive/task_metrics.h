@@ -51,8 +51,8 @@ struct TaskMetrics {
         for (u16 i{lower_limit}; i < upper_limit; ++i) {
             combined_sketch.merge_concurrent(sketches[i]);
         }
-        // TODO exp weighted? check second and first order grad? f' & f'' (store in state struct)
         auto unique_grps = combined_sketch.get_estimate();
+        // TODO exp weighted
         return unique_grps;
     }
 
