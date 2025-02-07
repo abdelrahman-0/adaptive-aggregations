@@ -26,10 +26,6 @@ struct TaskMetrics {
 
     void reset()
     {
-        for (auto& sketch : sketches) {
-            sketch.clear();
-        }
-        tuples_produced = 0;
         start_time_ns   = std::chrono::high_resolution_clock::now();
     }
 

@@ -31,7 +31,8 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     using base_t::msg_buffer;
     TaskScheduler& task_scheduler;
     bool received_first_task{false};
-    bool is_starting_worker{false};
+    bool is_starting_worker;
+    std::atomic<bool> sent_response{false};
 
     void initialize_query()
     {
@@ -46,10 +47,10 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void check_query_state()
     {
-        // check task_scheduler's current query]
-        std::optional<std::pair<u16, Task>> res;
-        if (received_first_task and ((res = task_scheduler.get_task_state()))) {
-            send_task_response(res->first, res->second);
+        // check task_scheduler's current query
+        if (not sent_response and task_scheduler.response_available) {
+            send_task_response(task_scheduler.nworkers - 1, task_scheduler.response);
+            sent_response = true;
         }
     }
 
@@ -60,20 +61,20 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
         std::function message_fn_ingress = [this](StateMessage* msg, u32) {
             switch (msg->type) {
             case TASK_OFFER:
-                ingress_mgr.recv(0, msg_buffer.get_message_storage());
                 print("worker: received task offer (", msg->task.start, msg->task.end, ") with workers =", msg->nworkers, "from coordinator");
                 received_first_task = true;
-                // TODO split work if starting_worker
                 task_scheduler.update_nworkers(msg->nworkers);
                 task_scheduler.enqueue_task(msg->task);
                 break;
             case NO_WORK:
                 print("worker: received NO_WORK");
-                task_scheduler.finished = true;
+                task_scheduler.consumed_at_least_one = true;
                 break;
             default:
                 ENSURE(false);
             }
+            task_scheduler.received_message_from_coordinator = true;
+            task_scheduler.received_message_from_coordinator.notify_one();
             msg_buffer.return_message(msg);
         };
         ingress_mgr.register_consumer_fn(message_fn_ingress);
@@ -84,12 +85,14 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     void monitor_query()
     {
         initialize_query();
-        while (ingress_mgr.has_inflight() or egress_mgr.has_inflight()) {
+        while (ingress_mgr.has_inflight()) {
             ingress_mgr.consume_done();
-            egress_mgr.try_drain_pending();
-            if (is_starting_worker) {
+        }
+        if (is_starting_worker) {
+            while (not sent_response) {
                 check_query_state();
             }
+            egress_mgr.wait_all();
         }
     }
 };

@@ -1,6 +1,7 @@
 #pragma once
 
 #include <barrier>
+#include <cmath>
 #include <gflags/gflags.h>
 #include <latch>
 #include <thread>
@@ -80,4 +81,6 @@ DEFINE_uint32(slots, PageResult::max_tuples_per_page * 2, "number of slots to us
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 DEFINE_double(htfactor, 2.0, "growth factor to use when allocating global hashtable");
 DEFINE_double(thresh, 0.2, "tuple ratio threshold for disabling local pre-aggregation");
-DEFINE_uint32(budget, 200, "time budget (in milliseconds)");
+DEFINE_string(policy, "regression", "scale out policy (either regression or static)");
+DEFINE_uint32(timeout, 200, "time budget in milliseconds (time limit for regression policy; scale out point for static policy)");
+DEFINE_uint32(static_workers, 2, "number of workers to scale out to (only for static policy)");

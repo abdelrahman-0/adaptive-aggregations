@@ -1,17 +1,19 @@
 #pragma once
 
 namespace adapt {
-struct PolicyDefault {
-    [[nodiscard]]
-    static bool should_scale_out()
+namespace policy {
+
+enum PolicyType { STATIC, REGRESSION };
+
+struct Policy {
+    PolicyType type;
+    u32 time_out;
+    u16 workers;
+
+    Policy(const std::string& name, u32 _time_out, u16 _workers = 0) : type(name == "static" ? STATIC : REGRESSION), time_out(_time_out), workers(_workers)
     {
-        // TODO calculate if need to scale out and respond and SLA and minimum answer time and maximum answer time
-        return false;
     }
 };
 
-// TODO static polict
-
-using AdaptivePolicy = PolicyDefault;
-
+} // namespace policy
 } // namespace adapt
