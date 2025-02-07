@@ -139,8 +139,7 @@ int main(int argc, char* argv[])
                     if (dst == node_id) {
                         if (not page->empty()) {
                             // add to local storage since number of workers might change
-                            // TODO storage_loc
-                            storage_glob.add_page(page, part_no_glob);
+                            storage_loc.add_page(page, part_no_glob);
                         }
                     }
                     else if (not page->empty() or last_page_to_send) {
@@ -236,6 +235,32 @@ int main(int argc, char* argv[])
             }
 
             // TODO
+            // loop through partitions and send out what not mine (and set secondary bit and primary bit), and add to storage_glob what is mine
+            for (node_t part_no_glob : range(FLAGS_partitions)) {
+                for (auto& part_page : storage_loc.partition_pages[part_no_glob]) {
+                    if (dst == node_id) {
+                        storage_glob.add_page(part_page, part_no_glob);
+                    }
+                    else {
+                        part_page->set_secondary_bit();
+                        if (is_last_part) {
+                            part_page->set_primary_bit();
+                            sent_last_page = true;
+                        }
+                        manager_send.send(actual_dst, part_page);
+                    }
+                }
+                if (dst != node_id and is_last_part and not sent_last_page) {
+                    // send empty last page
+                    auto* empty_page = page_alloc_egress.get_object();
+                    empty_page->set_secondary_bit();
+                    empty_page->set_primary_bit();
+                    manager_send.send(actual_dst, empty_page);
+                }
+                manager_recv.consume_done();
+                manager_send.try_drain_pending();
+            }
+
             partition_buffer.finalize(true);
             while (peers_ready < npeers_final) {
                 // ping pong
