@@ -97,6 +97,7 @@ int main(int argc, char* argv[])
             auto manager_send               = EgressManager{npeers_max, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
             auto remote_sketches_ingress    = std::vector<Sketch>(npeers_max);
             auto remote_sketches_egress     = std::vector<Sketch>(npeers_max);
+            auto storage_loc                = StorageLocal{FLAGS_partitions};
             node_t sketches_seen            = 0;
             node_t peers_ready              = 0;
             /* --------------------------------------- */
@@ -128,7 +129,7 @@ int main(int argc, char* argv[])
             for (auto part_no_glob : range(FLAGS_partitions)) {
                 auto grp_no                = part_no_glob >> partgrpsz_shift;
                 // calculate destination on each eviction
-                eviction_fns[part_no_glob] = [=, &task_scheduler, &storage_glob, &manager_send, &partitions_end, &task_metrics](PageResult* page, bool is_last) {
+                eviction_fns[part_no_glob] = [=, &task_scheduler, &storage_loc, &manager_send, &partitions_end, &task_metrics](PageResult* page, bool is_last) {
                     // defer last_page
                     auto current_workers = task_scheduler.nworkers.load();
                     node_t dst           = (grp_no * current_workers) >> npartgrps_shift;
@@ -188,7 +189,6 @@ int main(int argc, char* argv[])
             bool CART_active = true;
             // wait for query end
             while (not task_scheduler.finished) {
-                print("morsel loop");
                 // one task per iteration
                 barrier_task.arrive_and_wait();
                 while (adapt::Task morsel = task_scheduler.get_next_morsel()) {
@@ -236,29 +236,19 @@ int main(int argc, char* argv[])
 
             // TODO
             // loop through partitions and send out what not mine (and set secondary bit and primary bit), and add to storage_glob what is mine
-            for (node_t part_no_glob : range(FLAGS_partitions)) {
-                for (auto& part_page : storage_loc.partition_pages[part_no_glob]) {
-                    if (dst == node_id) {
-                        storage_glob.add_page(part_page, part_no_glob);
-                    }
-                    else {
-                        part_page->set_secondary_bit();
-                        if (is_last_part) {
-                            part_page->set_primary_bit();
-                            sent_last_page = true;
+            for (u16 worker_id : range(nworkers_final)) {
+                for (u32 part_no = partitions_begin[worker_id]; part_no < partitions_end[worker_id]; ++part_no) {
+                    for (auto* part_page : storage_loc.partition_pages[part_no]) {
+                        if (dst == node_id) {
+                            storage_glob.add_page(part_page, part_no);
                         }
-                        manager_send.send(actual_dst, part_page);
+                        else {
+                            manager_send.send(actual_dst, part_page);
+                        }
                     }
+                    manager_recv.consume_done();
+                    manager_send.try_drain_pending();
                 }
-                if (dst != node_id and is_last_part and not sent_last_page) {
-                    // send empty last page
-                    auto* empty_page = page_alloc_egress.get_object();
-                    empty_page->set_secondary_bit();
-                    empty_page->set_primary_bit();
-                    manager_send.send(actual_dst, empty_page);
-                }
-                manager_recv.consume_done();
-                manager_send.try_drain_pending();
             }
 
             partition_buffer.finalize(true);
