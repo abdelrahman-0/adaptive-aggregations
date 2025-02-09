@@ -14,7 +14,7 @@ namespace adapt {
 using sketch_t = ht::HLLSketch<true>;
 
 struct GroupCardinalityHistory {
-    static constexpr u64 history_depth = 16;
+    static constexpr u64 history_depth = 32;
     sketch_t combined_sketch{};
     tbb::concurrent_vector<u64> group_history;
     tbb::concurrent_vector<u64> page_num_history;
@@ -43,7 +43,7 @@ struct GroupCardinalityHistory {
     auto estimate_linear_regression_coefficients() const
     {
         double mean_groups = 0.0, mean_pages = 0.0;
-        for (u16 i{0}; i < history_depth; ++i) {
+        for (u16 i{0}; i < std::min(history_depth, tail.load()); ++i) {
             mean_groups += group_history[i];
             mean_pages  += page_num_history[i];
         }
@@ -103,7 +103,7 @@ struct GroupCardinalityHistory {
     {
         auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
         for (u16 i{0}; i < history_depth; ++i) {
-            print(i, group_history[i]);
+            print(i, page_num_history[i], group_history[i]);
         }
         return beta_0 + beta_1 * total_pages;
     }
