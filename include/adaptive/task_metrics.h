@@ -41,7 +41,7 @@ struct GroupCardinalityHistory {
     }
 
     [[nodiscard]]
-    auto estimate_linear_regression_coefficients() const
+    auto estimate_logarithmic_regression_coefficients() const
     {
         double mean_groups = 0.0, mean_pages = 0.0;
         u16 total_seen = std::min(history_depth, tail.load());
@@ -54,6 +54,33 @@ struct GroupCardinalityHistory {
         double numerator = 0.0, denominator = 0.0;
         for (u16 i{0}; i < total_seen; ++i) {
             double deviation  = std::log(page_num_history[i]) - mean_pages;
+            numerator        += deviation * (group_history[i] - mean_groups);
+            denominator      += deviation * deviation;
+        }
+        if (denominator < numerical_error_thresh) {
+            // guard against numerical precision errors
+            return std::make_tuple(mean_groups, 0.0);
+        }
+        double beta_0, beta_1;
+        beta_1 = numerator / denominator;
+        beta_0 = mean_groups - beta_1 * mean_pages;
+        return std::make_tuple(beta_0, beta_1);
+    }
+
+    [[nodiscard]]
+    auto estimate_linear_regression_coefficients() const
+    {
+        double mean_groups = 0.0, mean_pages = 0.0;
+        u16 total_seen = std::min(history_depth, tail.load());
+        for (u16 i{0}; i < total_seen; ++i) {
+            mean_groups += group_history[i];
+            mean_pages  += page_num_history[i];
+        }
+        mean_groups      /= total_seen;
+        mean_pages       /= total_seen;
+        double numerator = 0.0, denominator = 0.0;
+        for (u16 i{0}; i < total_seen; ++i) {
+            double deviation  = page_num_history[i] - mean_pages;
             numerator        += deviation * (group_history[i] - mean_groups);
             denominator      += deviation * deviation;
         }
@@ -105,10 +132,14 @@ struct GroupCardinalityHistory {
     }
 
     [[nodiscard]]
-    u64 estimate_total_groups() const
+    u64 estimate_total_groups(double percentage_done) const
     {
+        if (percentage_done < 25.0) {
+            auto [beta_0, beta_1] = estimate_logarithmic_regression_coefficients();
+            return beta_0 + beta_1 * std::log(total_pages);
+        }
         auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
-        return beta_0 + beta_1 * std::log(total_pages);
+        return beta_0 + beta_1 * total_pages;
     }
 };
 
@@ -116,11 +147,9 @@ struct TaskMetrics {
     u64 tuples_total{};
     std::atomic<u64> tuples_produced{0};
     std::chrono::time_point<std::chrono::system_clock> start_time_ns{};
-    const u16 node_id;
-    const u16 output_tup_sz;
     GroupCardinalityHistory history;
 
-    explicit TaskMetrics(node_t _node_id, u16 _output_tup_sz, u32 _total_pages) : node_id(_node_id), output_tup_sz(_output_tup_sz), history(_total_pages)
+    explicit TaskMetrics(u32 _total_pages) : history(_total_pages)
     {
     }
 
@@ -136,12 +165,6 @@ struct TaskMetrics {
         return duration_cast<milliseconds>(high_resolution_clock::now() - start_time_ns).count();
     }
 
-    [[nodiscard]]
-    u64 get_output_size_B() const
-    {
-        return output_tup_sz * tuples_produced;
-    }
-
     void merge_sketch(const sketch_t& sketch)
     {
         history.update_sketch(sketch);
@@ -152,9 +175,10 @@ struct TaskMetrics {
         history.checkpoint(page_num);
     }
 
-    auto estimate_total_groups() const
+    [[nodiscard]]
+    auto estimate_total_groups(double percentage_done) const
     {
-        return history.estimate_total_groups();
+        return history.estimate_total_groups(percentage_done);
     }
 };
 

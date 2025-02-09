@@ -28,7 +28,7 @@ int main(int argc, char* argv[])
     auto ht_glob            = HashtableGlobal{};
     // worker state
     bool is_starting_worker = node_id == 0;
-    auto task_metrics       = adapt::TaskMetrics{node_id, sizeof(Groups) + sizeof(Aggregates), FLAGS_npages};
+    auto task_metrics       = adapt::TaskMetrics{FLAGS_npages};
     adapt::policy::Policy policy{FLAGS_policy, FLAGS_timeout, static_cast<u16>(FLAGS_static_workers)};
     auto task_scheduler = adapt::TaskScheduler{FLAGS_morselsz, task_metrics, FLAGS_nodes, FLAGS_threads, is_starting_worker, policy};
     /* --------------------------------------- */

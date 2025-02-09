@@ -31,6 +31,7 @@ struct TaskScheduler {
     bool is_first_worker;
     u32 offset{};
     u16 split;
+    u16 splits_done{0};
     std::atomic<Task> response;
     std::atomic<bool> response_available{false};
     policy::Policy scale_out_policy;
@@ -98,6 +99,7 @@ struct TaskScheduler {
             morsel_current        = next_task.start;
             morsel_end            = next_task.end;
             consumed_at_least_one = true;
+            splits_done++;
             return true;
         }
         return false;
@@ -148,7 +150,7 @@ struct TaskScheduler {
             return nworkers.load();
         }
         case policy::REGRESSION: {
-            auto unique_groups = task_metrics.estimate_total_groups();
+            auto unique_groups = task_metrics.estimate_total_groups(static_cast<double>(splits_done) / static_cast<double>(split));
             print("estimate unique groups: ", unique_groups);
             for (auto i = nworkers.load(); i < max_workers; i++) {
                 u64 remaining_ms = std::max(static_cast<s64>(scale_out_policy.time_out) - task_metrics.get_elapsed_time_ms(), 0l);
