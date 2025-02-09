@@ -107,10 +107,6 @@ struct GroupCardinalityHistory {
     [[nodiscard]]
     u64 estimate_total_groups() const
     {
-        for (u16 i{0}; i < history_depth; ++i) {
-            // TODO remove
-            print(i, page_num_history[i], group_history[i]);
-        }
         auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
         return beta_0 + beta_1 * std::log(total_pages);
     }
