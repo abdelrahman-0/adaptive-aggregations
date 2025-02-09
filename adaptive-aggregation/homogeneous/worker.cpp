@@ -313,7 +313,8 @@ int main(int argc, char* argv[])
     swatch.start();
     barrier_query.arrive_and_wait();
     swatch.stop();
-    u64 time_to_scale_out_ms = std::chrono::duration_cast<std::chrono::milliseconds>(task_scheduler.scale_out_timestamp - swatch.begin).count();
+    u64 time_to_scale_out_ms =
+        (is_starting_worker and task_scheduler.nworkers.load() > 1) ? std::chrono::duration_cast<std::chrono::milliseconds>(task_scheduler.scale_out_timestamp - swatch.begin).count() : 0;
 
     u64 count{0};
     u64 inserts{0};
@@ -363,7 +364,7 @@ int main(int argc, char* argv[])
         .log("groups pool (actual)", FLAGS_groups)
         .log("groups node (actual)", inserts)
         .log("groups node (estimate)", sketch_glob.get_estimate())
-        .log("time to scale out (ms)", is_starting_worker ? time_to_scale_out_ms : 0)
+        .log("time to scale out (ms)", time_to_scale_out_ms)
         .log("mean pre-agg time (ms)", static_cast<u64>(std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size()))
         .log("time (ms)", swatch.time_ms);
 }
