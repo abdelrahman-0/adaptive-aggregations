@@ -3,6 +3,7 @@
 #include <atomic>
 #include <chrono>
 #include <cmath>
+#include <oneapi/tbb/concurrent_vector.h>
 
 #include "core/sketch/hll_custom.h"
 #include "defaults.h"
@@ -12,21 +13,114 @@ namespace adapt {
 
 using sketch_t = ht::HLLSketch<true>;
 
+struct GroupCardinalityHistory {
+    static constexpr u64 history_depth = 32;
+    sketch_t combined_sketch{};
+    tbb::concurrent_vector<u64> group_history;
+    tbb::concurrent_vector<u64> page_num_history;
+    u64 total_pages;
+    std::atomic<u64> tail{0};
+
+    explicit GroupCardinalityHistory(u64 _total_page) : total_pages(_total_page)
+    {
+        group_history.resize(history_depth);
+        page_num_history.resize(history_depth);
+    }
+
+    void update_sketch(const sketch_t& sketch)
+    {
+        combined_sketch.merge_concurrent(sketch);
+    }
+
+    void checkpoint(u64 page_num)
+    {
+        group_history[tail]    = combined_sketch.get_estimate();
+        page_num_history[tail] = page_num;
+        tail                   = (tail + 1) & (history_depth - 1);
+    }
+
+    [[nodiscard]]
+    auto estimate_linear_regression_coefficients() const
+    {
+        double mean_groups = 0.0, mean_pages = 0.0;
+        for (u16 i{0}; i < history_depth; ++i) {
+            mean_groups += group_history[i];
+            mean_pages  += page_num_history[i];
+        }
+        mean_groups      /= history_depth;
+        mean_pages       /= history_depth;
+        double numerator = 0.0, denominator = 0.0;
+        for (u16 i{0}; i < history_depth; ++i) {
+            double deviation  = page_num_history[i] - mean_pages;
+            numerator        += deviation * (group_history[i] - mean_groups);
+            denominator      += deviation * deviation;
+        }
+        double beta_0, beta_1;
+        beta_1 = numerator / denominator;
+        beta_0 = mean_groups - beta_1 * mean_pages;
+        return std::make_tuple(beta_0, beta_1);
+    }
+
+    [[nodiscard]]
+    auto estimate_quadratic_regression_coefficients() const
+    {
+        // this function is not used for now
+        // https://math.stackexchange.com/questions/267865/equations-for-quadratic-regression
+        double sum_x1         = 0.0;
+        double sum_x2         = 0.0;
+        double sum_x1_x2      = 0.0;
+        double sum_squared_x2 = 0.0;
+        double sum_y          = 0.0;
+        double sum_y_x1       = 0.0;
+        double sum_y_x2       = 0.0;
+        for (u16 i{0}; i < history_depth; ++i) {
+            const double x  = page_num_history[i];
+            const double y  = group_history[i];
+            sum_x1         += x;
+            sum_x2         += x * x;
+            sum_x1_x2      += x * x * x;
+            sum_squared_x2 += x * x * x * x;
+            sum_y          += y;
+            sum_y_x1       += y * x;
+            sum_y_x2       += y * x * x;
+        }
+        double s11    = sum_x2 - (sum_x1 * sum_x1 / history_depth);
+        double s12    = sum_x1_x2 - (sum_x1 * sum_x2 / history_depth);
+        double s22    = sum_squared_x2 - (sum_x2 * sum_x2 / history_depth);
+        double sy1    = sum_y_x1 - (sum_y * sum_x1 / history_depth);
+        double sy2    = sum_y_x2 - (sum_y * sum_x2 / history_depth);
+        double x1_bar = sum_x1 / history_depth;
+        double x2_bar = sum_x2 / history_depth;
+        double y_bar  = sum_y / history_depth;
+        double beta_2 = (sy1 * s22 - sy2 * s12) / (s22 * s11 - s12 * s12);
+        double beta_3 = (sy2 * s11 - sy1 * s12) / (s22 * s11 - s12 * s12);
+        double beta_1 = y_bar - beta_2 * x1_bar - beta_3 * x2_bar;
+        return std::make_tuple(beta_1, beta_2, beta_3);
+    }
+
+    [[nodiscard]]
+    u64 estimate_total_groups() const
+    {
+        auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
+        return beta_0 + beta_1 * total_pages;
+    }
+};
+
 struct TaskMetrics {
     u64 tuples_total{};
     std::atomic<u64> tuples_produced{0};
     std::chrono::time_point<std::chrono::system_clock> start_time_ns{};
-    std::vector<sketch_t> sketches;
     const u16 node_id;
     const u16 output_tup_sz;
+    GroupCardinalityHistory history;
 
-    explicit TaskMetrics(node_t _node_id, u16 _output_tup_sz, u32 _ngroups) : sketches(_ngroups), node_id(_node_id), output_tup_sz(_output_tup_sz)
+    explicit TaskMetrics(node_t _node_id, u16 _output_tup_sz, u32 _total_pages) : node_id(_node_id), output_tup_sz(_output_tup_sz), history(_total_pages)
     {
     }
 
     void reset()
     {
-        start_time_ns   = std::chrono::high_resolution_clock::now();
+        start_time_ns = std::chrono::high_resolution_clock::now();
     }
 
     [[nodiscard]]
@@ -37,30 +131,24 @@ struct TaskMetrics {
     }
 
     [[nodiscard]]
-    u64 estimate_unique_groups(u16 nworkers) const
-    {
-        sketch_t combined_sketch;
-        auto [sketches_per_worker, extra_sketches] = std::ldiv(sketches.size(), nworkers);
-        bool has_extra_sketch                      = node_id < extra_sketches;
-        u16 lower_limit                            = node_id * sketches_per_worker + (has_extra_sketch ? node_id : extra_sketches);
-        u16 upper_limit                            = lower_limit + sketches_per_worker + has_extra_sketch;
-        for (u16 i{lower_limit}; i < upper_limit; ++i) {
-            combined_sketch.merge_concurrent(sketches[i]);
-        }
-        auto unique_grps = combined_sketch.get_estimate();
-        // TODO exp weighted
-        return unique_grps;
-    }
-
-    [[nodiscard]]
     u64 get_output_size_B() const
     {
         return output_tup_sz * tuples_produced;
     }
 
-    void merge_sketch(u16 part_grp_id, const sketch_t& sketch)
+    void merge_sketch(const sketch_t& sketch)
     {
-        sketches[part_grp_id].merge_concurrent(sketch);
+        history.update_sketch(sketch);
+    }
+
+    void checkpoint_unique_groups(u64 page_num)
+    {
+        history.checkpoint(page_num);
+    }
+
+    auto estimate_total_groups() const
+    {
+        return history.estimate_total_groups();
     }
 };
 

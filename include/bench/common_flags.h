@@ -17,7 +17,7 @@ DEFINE_uint32(cache, 100, "percentage of table to cache in-memory in range [0,10
 DEFINE_uint32(morselsz, 1000, "number of pages to process in one morsel");
 DEFINE_bool(sequential_io, true, "whether to use sequential or random I/O for cached swips");
 
-DEFINE_uint32(partitions, 32, "number of hashtable partitions (per node) to use");
+DEFINE_uint32(partitions, 64, "number of hashtable partitions (per node) to use");
 DEFINE_uint32(partgrpsz, 4, "number of partitions per partition group");
 DEFINE_uint64(groups, 1, "number of unique groups to use");
 DEFINE_uint64(seed, 0, "random generator seed");

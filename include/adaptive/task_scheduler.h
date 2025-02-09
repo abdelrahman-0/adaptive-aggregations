@@ -12,8 +12,6 @@
 namespace adapt {
 
 struct TaskScheduler {
-    static constexpr double min_wait_percentage = 10.0;
-    static constexpr double max_wait_percentage = 80.0;
     tbb::concurrent_queue<Task> tasks;
     TaskMetrics& task_metrics;
     u32 morsel_begin{0};
@@ -25,8 +23,8 @@ struct TaskScheduler {
     std::atomic<bool> received_message_from_coordinator{false};
     std::atomic<bool> consumed_at_least_one{false};
     std::atomic<bool> task_available{false};
-    u16 npeers_max;
-    u16 threads_per_worker;
+    u32 max_workers;
+    u32 threads_per_worker;
     std::atomic<Task> total_task{};
     bool is_first_worker;
     u32 offset{};
@@ -34,10 +32,11 @@ struct TaskScheduler {
     std::atomic<Task> response;
     std::atomic<bool> response_available{false};
     policy::Policy scale_out_policy;
+    std::chrono::time_point<std::chrono::high_resolution_clock> scale_out_timestamp;
 
-    explicit TaskScheduler(u32 _morsel_sz, TaskMetrics& _task_metrics, u16 _npeers_max, u16 _threads_per_worker, bool _is_first_worker, policy::Policy _scale_out_policy)
-        : task_metrics(_task_metrics), morsel_sz(_morsel_sz), npeers_max(_npeers_max), threads_per_worker(_threads_per_worker), is_first_worker(_is_first_worker),
-          split(is_first_worker ? 10 : 1), scale_out_policy(_scale_out_policy)
+    explicit TaskScheduler(u32 _morsel_sz, TaskMetrics& _task_metrics, u32 _max_workers, u32 _threads_per_worker, bool _is_first_worker, policy::Policy _scale_out_policy)
+        : task_metrics(_task_metrics), morsel_sz(_morsel_sz), max_workers(_max_workers), threads_per_worker(_threads_per_worker), is_first_worker(_is_first_worker),
+          split(is_first_worker ? 8 : 1), scale_out_policy(_scale_out_policy)
     {
     }
 
@@ -52,7 +51,6 @@ struct TaskScheduler {
     {
         if (not finished) {
             Task task{total_task.load().start, std::min(total_task.load().start + offset, total_task.load().end)};
-            print("consuming chunk:", task.start, task.end, offset);
             if (task.end == total_task.load().end) {
                 finished           = true;
                 response_available = true;
@@ -68,16 +66,15 @@ struct TaskScheduler {
     {
         if (consumed_at_least_one and not response_available) {
             auto new_workers = estimate_nworkers();
-            print("estimating nworkers: ", new_workers);
             if (new_workers > nworkers) {
+                scale_out_timestamp = std::chrono::high_resolution_clock::now();
                 // split remaining work between all new_workers
                 auto new_offset     = (total_task.load().end - total_task.load().start + new_workers - 1) / new_workers;
                 auto task_separator = std::min(total_task.load().start + new_offset, total_task.load().end);
                 Task task{total_task.load().start, task_separator};
                 tasks.push(task);
-                finished = true;
-                response = Task{task_separator, total_task.load().end};
-                print("scaling out -------", task.start, task.end, response.load().start, response.load().end, new_offset);
+                finished           = true;
+                response           = Task{task_separator, total_task.load().end};
                 nworkers           = new_workers;
                 response_available = true;
             }
@@ -143,21 +140,21 @@ struct TaskScheduler {
     {
         switch (scale_out_policy.type) {
         case policy::STATIC: {
-            print("elapsed time:", task_metrics.get_elapsed_time_ms());
             if (task_metrics.get_elapsed_time_ms() > scale_out_policy.time_out) {
                 return scale_out_policy.workers;
             }
-            return nworkers;
+            return nworkers.load();
         }
         case policy::REGRESSION: {
-
-            auto unique_groups = task_metrics.estimate_unique_groups(nworkers);
-            for (auto i = nworkers.load(); nworkers < npeers_max; nworkers++) {
-                if (estimate_time_ms(i, unique_groups, threads_per_worker) < (scale_out_policy.time_out - task_metrics.get_elapsed_time_ms())) {
+            auto unique_groups = task_metrics.estimate_total_groups();
+            print("estimate unique groups: ", unique_groups);
+            for (auto i = nworkers.load(); i < max_workers; i++) {
+                u64 remaining_ms = std::max(static_cast<s64>(scale_out_policy.time_out) - task_metrics.get_elapsed_time_ms(), 0l);
+                if (estimate_time_ms(i, unique_groups, threads_per_worker) < remaining_ms) {
                     return i;
                 }
             }
-            return npeers_max;
+            return max_workers;
         }
         default:
             ENSURE(false);

@@ -175,7 +175,6 @@ int main(int argc, char* argv[])
                 // LIKWID_MARKER_START("concurrent aggregation");
 #if defined(ENABLE_RADIX)
                 while ((morsel_begin = current_swip.fetch_add(1)) < FLAGS_partitions) {
-                    print(storage_glob.partition_pages[morsel_begin].size());
                     for (auto* page : storage_glob.partition_pages[morsel_begin]) {
                         process_page_glob(*page);
                     }

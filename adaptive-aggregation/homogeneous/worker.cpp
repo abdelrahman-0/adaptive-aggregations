@@ -28,9 +28,9 @@ int main(int argc, char* argv[])
     auto ht_glob            = HashtableGlobal{};
     // worker state
     bool is_starting_worker = node_id == 0;
-    auto task_metrics       = adapt::TaskMetrics{node_id, sizeof(Groups) + sizeof(Aggregates), npartgrps};
+    auto task_metrics       = adapt::TaskMetrics{node_id, sizeof(Groups) + sizeof(Aggregates), FLAGS_npages};
     adapt::policy::Policy policy{FLAGS_policy, FLAGS_timeout, static_cast<u16>(FLAGS_static_workers)};
-    auto task_scheduler = adapt::TaskScheduler{FLAGS_morselsz, task_metrics, static_cast<u16>(npeers_max), static_cast<u16>(FLAGS_threads), is_starting_worker, policy};
+    auto task_scheduler = adapt::TaskScheduler{FLAGS_morselsz, task_metrics, FLAGS_nodes, FLAGS_threads, is_starting_worker, policy};
     /* --------------------------------------- */
     // monitor thread connects to coordinator
     std::latch coordinator_latch{1};
@@ -54,11 +54,8 @@ int main(int argc, char* argv[])
                                              task_scheduler.dequeue_task_starting_worker();
                                          }
                                          else {
-                                             print("task barrier enter");
                                              is_active_worker = task_scheduler.dequeue_task_auxilary_worker();
-                                             print("task barrier exit");
                                          }
-                                         print("is_active_worker = ", is_active_worker);
                                          current_swip = 0;
                                      }};
     auto barrier_preagg   = std::barrier{FLAGS_threads, [&ht_glob, &sketch_glob, &current_swip] {
@@ -202,16 +199,20 @@ int main(int argc, char* argv[])
                     }
                     manager_recv.consume_done();
                     manager_send.try_drain_pending();
-                }
-                for (u32 grp_id{0}; grp_id < npartgrps; ++grp_id) {
-                    task_metrics.merge_sketch(grp_id, inserter_loc.get_sketch(grp_id));
+                    if (thread_id == 0 and task_scheduler.nworkers.load() == 1) {
+                        // still did not scale out
+                        for (u32 grp_id{0}; grp_id < npartgrps; ++grp_id) {
+                            task_metrics.merge_sketch(inserter_loc.get_sketch(grp_id));
+                        }
+                        task_metrics.checkpoint_unique_groups(morsel.end);
+                    }
                 }
             }
-            print("finished loop");
 
             node_t nworkers_final, npeers_final;
             u64 first_partition, npartitions_node, groups_per_worker, extra_groups;
             ldiv_t div_result;
+
             if (not is_active_worker) {
                 goto finished_query_processing;
             }
@@ -234,24 +235,29 @@ int main(int argc, char* argv[])
                 partitions_end.push_back(last_part_no);
             }
 
-            // TODO
-            // loop through partitions and send out what not mine (and set secondary bit and primary bit), and add to storage_glob what is mine
+            // loop through partitions and send out non-local partitions
             for (u16 worker_id : range(nworkers_final)) {
-                for (u32 part_no = partitions_begin[worker_id]; part_no < partitions_end[worker_id]; ++part_no) {
-                    for (auto* part_page : storage_loc.partition_pages[part_no]) {
-                        if (dst == node_id) {
-                            storage_glob.add_page(part_page, part_no);
-                        }
-                        else {
+                if (worker_id != node_id) {
+                    for (u32 part_no = partitions_begin[worker_id]; part_no <= partitions_end[worker_id]; ++part_no) {
+                        for (auto* part_page : storage_loc.partition_pages[part_no]) {
+                            auto actual_dst = worker_id - (worker_id > node_id);
                             manager_send.send(actual_dst, part_page);
                         }
+                        manager_recv.consume_done();
+                        manager_send.try_drain_pending();
                     }
-                    manager_recv.consume_done();
-                    manager_send.try_drain_pending();
                 }
             }
 
             partition_buffer.finalize(true);
+
+            // clean up any locally evicted pages
+            for (u32 part_no = partitions_begin[node_id]; part_no <= partitions_end[node_id]; ++part_no) {
+                for (auto* part_page : storage_loc.partition_pages[part_no]) {
+                    storage_glob.add_page(part_page, part_no);
+                }
+            }
+
             while (peers_ready < npeers_final) {
                 // ping pong
                 manager_recv.consume_done();
@@ -307,6 +313,7 @@ int main(int argc, char* argv[])
     swatch.start();
     barrier_query.arrive_and_wait();
     swatch.stop();
+    u64 time_to_scale_out_ms = std::chrono::duration_cast<std::chrono::milliseconds>(task_scheduler.scale_out_timestamp - swatch.begin).count();
 
     u64 count{0};
     u64 inserts{0};
@@ -356,6 +363,7 @@ int main(int argc, char* argv[])
         .log("groups pool (actual)", FLAGS_groups)
         .log("groups node (actual)", inserts)
         .log("groups node (estimate)", sketch_glob.get_estimate())
+        .log("time to scale out (ms)", time_to_scale_out_ms)
         .log("mean pre-agg time (ms)", static_cast<u64>(std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size()))
         .log("time (ms)", swatch.time_ms);
 }
