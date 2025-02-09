@@ -11,9 +11,6 @@ for NPAGES in 2400000; do
       for NPARTS in 64; do
         for PRTGRPSZ in 4; do
           for TRY in $(seq 1 3); do
-            if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
-              sleep 2s
-            fi
             $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$MAX_NODES --npages=$NPAGES >/dev/null
             sleep 2s
             PRINT_HEADER='--noprint_header'

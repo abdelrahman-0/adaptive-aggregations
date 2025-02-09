@@ -2,8 +2,7 @@ TARGET_PATH='../../../build-release/adaptive-aggregation/worker_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=100 --pin --config=../../../configs/config_aws.json"
-# --seed=${LOCAL_NODE_ID}
+FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../configs/config_aws_4_workers.json"
 PRINT_HEADER='--print_header --policy=regression --timeout=200 --static_workers=4'
 
 for NPAGES in 2400000; do
