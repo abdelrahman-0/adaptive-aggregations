@@ -102,6 +102,9 @@ struct GroupCardinalityHistory {
     u64 estimate_total_groups() const
     {
         auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
+        for (u16 i{0}; i < history_depth; ++i) {
+            print(i, group_history[i]);
+        }
         return beta_0 + beta_1 * total_pages;
     }
 };
