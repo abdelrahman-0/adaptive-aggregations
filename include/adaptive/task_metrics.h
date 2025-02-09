@@ -14,7 +14,8 @@ namespace adapt {
 using sketch_t = ht::HLLSketch<true>;
 
 struct GroupCardinalityHistory {
-    static constexpr u64 history_depth = 8;
+    static constexpr u64 history_depth             = 16;
+    static constexpr double numerical_error_thresh = 1e-5;
     sketch_t combined_sketch{};
     tbb::concurrent_vector<u64> group_history;
     tbb::concurrent_vector<u64> page_num_history;
@@ -34,26 +35,31 @@ struct GroupCardinalityHistory {
 
     void checkpoint(u64 page_num)
     {
-        group_history[tail]    = combined_sketch.get_estimate();
-        page_num_history[tail] = page_num;
-        tail                   = (tail + 1) & (history_depth - 1);
+        group_history[tail & (history_depth - 1)]    = combined_sketch.get_estimate();
+        page_num_history[tail & (history_depth - 1)] = page_num;
+        tail++;
     }
 
     [[nodiscard]]
     auto estimate_linear_regression_coefficients() const
     {
         double mean_groups = 0.0, mean_pages = 0.0;
-        for (u16 i{0}; i < std::min(history_depth, tail.load()); ++i) {
+        u16 total_seen = std::min(history_depth, tail.load());
+        for (u16 i{0}; i < total_seen; ++i) {
             mean_groups += group_history[i];
-            mean_pages  += page_num_history[i];
+            mean_pages  += std::log(page_num_history[i]);
         }
-        mean_groups      /= history_depth;
-        mean_pages       /= history_depth;
+        mean_groups      /= total_seen;
+        mean_pages       /= total_seen;
         double numerator = 0.0, denominator = 0.0;
-        for (u16 i{0}; i < history_depth; ++i) {
-            double deviation  = page_num_history[i] - mean_pages;
+        for (u16 i{0}; i < total_seen; ++i) {
+            double deviation  = std::log(page_num_history[i]) - mean_pages;
             numerator        += deviation * (group_history[i] - mean_groups);
             denominator      += deviation * deviation;
+        }
+        if (denominator < numerical_error_thresh) {
+            // guard against numerical precision errors
+            return std::make_tuple(mean_groups, 0.0);
         }
         double beta_0, beta_1;
         beta_1 = numerator / denominator;
@@ -101,11 +107,12 @@ struct GroupCardinalityHistory {
     [[nodiscard]]
     u64 estimate_total_groups() const
     {
-        auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
         for (u16 i{0}; i < history_depth; ++i) {
+            // TODO remove
             print(i, page_num_history[i], group_history[i]);
         }
-        return beta_0 + beta_1 * total_pages;
+        auto [beta_0, beta_1] = estimate_linear_regression_coefficients();
+        return beta_0 + beta_1 * std::log(total_pages);
     }
 };
 
