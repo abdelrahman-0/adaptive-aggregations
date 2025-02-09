@@ -14,7 +14,7 @@ namespace adapt {
 using sketch_t = ht::HLLSketch<true>;
 
 struct GroupCardinalityHistory {
-    static constexpr u64 history_depth = 32;
+    static constexpr u64 history_depth = 16;
     sketch_t combined_sketch{};
     tbb::concurrent_vector<u64> group_history;
     tbb::concurrent_vector<u64> page_num_history;

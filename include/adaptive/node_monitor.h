@@ -111,7 +111,7 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void log_task_sent(node_t worker_id, Task task) const
     {
-        print("coordinator: sent task: [", task.start, task.end, "] to worker", worker_id);
+        print("coordinator: sent task [", task.start, task.end, "] to worker", worker_id);
     }
 
     void initialize_query(u32 start, u32 end)

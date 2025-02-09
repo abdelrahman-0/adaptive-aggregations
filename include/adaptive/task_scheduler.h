@@ -12,6 +12,8 @@
 namespace adapt {
 
 struct TaskScheduler {
+    static constexpr u16 total_task_splits = 10;
+
     tbb::concurrent_queue<Task> tasks;
     TaskMetrics& task_metrics;
     u32 morsel_begin{0};
@@ -36,7 +38,7 @@ struct TaskScheduler {
 
     explicit TaskScheduler(u32 _morsel_sz, TaskMetrics& _task_metrics, u32 _max_workers, u32 _threads_per_worker, bool _is_first_worker, policy::Policy _scale_out_policy)
         : task_metrics(_task_metrics), morsel_sz(_morsel_sz), max_workers(_max_workers), threads_per_worker(_threads_per_worker), is_first_worker(_is_first_worker),
-          split(is_first_worker ? 8 : 1), scale_out_policy(_scale_out_policy)
+          split(is_first_worker ? total_task_splits : 1), scale_out_policy(_scale_out_policy)
     {
     }
 
