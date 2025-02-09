@@ -24,8 +24,8 @@ int main(int argc, char* argv[])
     ENSURE(FLAGS_initworkers <= FLAGS_nodes);
     auto monitor = adapt::CoordinatorMonitor{FLAGS_initworkers, available_workers, egress_network_manager, ingress_network_manager};
 
-    print("coordinator: starting query");
+    print("coordinator: launching...");
     monitor.monitor_query(0u, FLAGS_npages);
+    print("coordinator: finished");
     Connection::close_connections(conn_fds);
-    print("coordinator done");
 }

@@ -41,7 +41,7 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void send_task_response(u16 nworkers, Task task_response)
     {
-        print("worker: sending task response (", task_response.start, task_response.end, ") with workers =", nworkers);
+        print("worker: sending task response [", task_response.start, task_response.end, "] with workers hint =", nworkers);
         egress_mgr.send(0, new (msg_buffer.get_message_storage()) StateMessage{task_response, nworkers, TASK_OFFER_RESPONSE});
     }
 
@@ -61,7 +61,7 @@ class WorkerMonitor : NodeMonitor<EgressMgr, IngressMgr> {
         std::function message_fn_ingress = [this](StateMessage* msg, u32) {
             switch (msg->type) {
             case TASK_OFFER:
-                print("worker: received task offer (", msg->task.start, msg->task.end, ") with workers =", msg->nworkers, "from coordinator");
+                print("worker: received TASK_OFFER with task [", msg->task.start, msg->task.end, "] with workers =", msg->nworkers);
                 received_first_task = true;
                 task_scheduler.update_nworkers(msg->nworkers);
                 task_scheduler.enqueue_task(msg->task);
@@ -109,6 +109,11 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
     std::deque<node_t> workers_active;
     std::deque<node_t> workers_inactive;
 
+    void log_task_sent(node_t worker_id, Task task) const
+    {
+        print("coordinator: sent task: [", task.start, task.end, "] to worker", worker_id);
+    }
+
     void initialize_query(u32 start, u32 end)
     {
         print("coordinator: initializing query");
@@ -117,9 +122,10 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
         auto num_active_workers = workers_active.size();
         u32 offset              = ((end - start) + num_active_workers - 1) / num_active_workers;
         for (auto worker_id : workers_active) {
-            auto* msg = new (msg_buffer.get_message_storage()) StateMessage{Task{start, std::min(start + offset, end)}, num_active_workers, TASK_OFFER};
-            print("coordinator: sending offer(", msg->task.start, msg->task.end, ") to", worker_id);
+            Task task{start, std::min(start + offset, end)};
+            auto* msg = new (msg_buffer.get_message_storage()) StateMessage{task, num_active_workers, TASK_OFFER};
             egress_mgr.send(worker_id, msg);
+            log_task_sent(worker_id, task);
             ingress_mgr.recv(worker_id, msg_buffer.get_message_storage());
             worker_states[worker_id].sent_task();
             start += offset;
@@ -137,9 +143,8 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
 
     void finalize_query() const
     {
-        print("waiting for all");
+        print("coordinator: waiting");
         egress_mgr.wait_all();
-        print("finished waiting");
     }
 
   public:
@@ -148,7 +153,7 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
           workers_active(available_workers.begin(), available_workers.begin() + initial_nworkers), workers_inactive(available_workers.begin() + initial_nworkers, available_workers.end())
     {
         std::function message_fn_ingress = [this](StateMessage* msg, u32 dst) {
-            print("coordinator: received task response (", msg->task.start, msg->task.end, ")", "with workers =", msg->nworkers);
+            print("coordinator: received task remainder [", msg->task.start, msg->task.end, "]", "with workers hint =", msg->nworkers);
             if (worker_states[dst].handle_response(*msg)) {
                 // worker did not fully accept offer
                 auto requested_workers = std::min(msg->nworkers, static_cast<u16>(workers_inactive.size()));
@@ -156,15 +161,14 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
                 u32 start              = msg->task.start;
                 u32 end                = msg->task.end;
                 auto offset            = ((end - start) + requested_workers - 1) / requested_workers;
-                print("start: ", start, ", end: ", end, ", offset: ", offset);
                 auto total_new_workers = requested_workers + 1u;
                 while (requested_workers--) {
                     // send offer
-                    u16 worker_id    = workers_inactive.front();
+                    node_t worker_id = workers_inactive.front();
                     auto worker_task = Task{start, std::min(start + offset, end)};
                     auto* msg_egress = new (msg_buffer.get_message_storage()) StateMessage{worker_task, total_new_workers, TASK_OFFER};
                     egress_mgr.send(worker_id, msg_egress);
-                    print("coordinator: sent task:", start, std::min(start + offset, end));
+                    log_task_sent(worker_id, worker_task);
                     // update state
                     worker_states[worker_id].sent_task();
                     workers_inactive.pop_front();
@@ -172,7 +176,7 @@ class CoordinatorMonitor : NodeMonitor<EgressMgr, IngressMgr> {
                     start += offset;
                 }
             }
-            for (u16 worker_id : workers_inactive) {
+            for (node_t worker_id : workers_inactive) {
                 auto* msg_egress = new (msg_buffer.get_message_storage()) StateMessage{-1u, NO_WORK};
                 egress_mgr.send(worker_id, msg_egress);
             }

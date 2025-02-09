@@ -363,7 +363,7 @@ int main(int argc, char* argv[])
         .log("groups pool (actual)", FLAGS_groups)
         .log("groups node (actual)", inserts)
         .log("groups node (estimate)", sketch_glob.get_estimate())
-        .log("time to scale out (ms)", time_to_scale_out_ms)
+        .log("time to scale out (ms)", is_starting_worker ? time_to_scale_out_ms : 0)
         .log("mean pre-agg time (ms)", static_cast<u64>(std::reduce(times_preagg.begin(), times_preagg.end()) * 1.0 / times_preagg.size()))
         .log("time (ms)", swatch.time_ms);
 }
