@@ -14,7 +14,7 @@ for NPAGES in 2400000; do
             if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
               sleep 5s
             fi
-            $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$MAX_NODES --npages=$NPAGES --threads=$THREADS --groups=$NGROUPS --partitions=$NPARTS --partgrpsz=$PRTGRPSZ >/dev/null
+            $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$MAX_NODES --npages=$NPAGES --threads=$THREADS --groups=$NGROUPS --partitions=$NPARTS --partgrpsz=$PRTGRPSZ
             sleep 5s
             PRINT_HEADER='--noprint_header'
           done
