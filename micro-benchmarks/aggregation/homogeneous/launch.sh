@@ -2,19 +2,22 @@ TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_hom
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=100 --pin --config=../../../configs/config_aws.json"
+FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../../configs/config_aws_4_workers.json"
 # --seed=${LOCAL_NODE_ID}
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
-  #  if [[ "${NODES}" == 3 ]]; then
-  #    continue
-  #  fi
+    if [[ "${NODES}" == 3 ]]; then
+      continue
+    fi
+    if [[ "${NODES}" == 2 ]]; then
+          continue
+        fi
   for NPAGES in 2400000; do
-    for THREADS in 1 4 6 12 24 32; do
-      for NGROUPS in 1 100 100000 1000000 10000000; do
-        for NPARTS in 32 64 96 128 256; do
-          for PRTGRPSZ in 1 4 8; do
+    for THREADS in 6 12 32; do
+      for NGROUPS in 10 1000 100000 10000000; do
+        for NPARTS in 64; do
+          for PRTGRPSZ in 4; do
             for TRY in $(seq 1 3); do
               if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
                 sleep 2s
