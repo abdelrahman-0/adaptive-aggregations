@@ -153,14 +153,12 @@ struct TaskScheduler {
             auto unique_groups = task_metrics.estimate_total_groups(static_cast<double>(splits_done) / static_cast<double>(split));
             print("estimate unique groups: ", unique_groups);
             for (auto i = nworkers.load(); i < max_workers; i++) {
-                u64 remaining_ms = std::max(static_cast<s64>(scale_out_policy.time_out) - task_metrics.get_elapsed_time_ms(), 0l);
-                auto estimated_time = estimate_time_ms(i, unique_groups, threads_per_worker);
+                u64 remaining_ms    = std::max(static_cast<s64>(scale_out_policy.time_out) - task_metrics.get_elapsed_time_ms(), 0l);
+                auto estimated_time = estimate_time_ms(unique_groups, i, threads_per_worker);
                 if (estimated_time < remaining_ms) {
-                    print("estimate time:", estimated_time, "workers:", i);
                     return i;
                 }
             }
-            print("estimating max workers:", max_workers);
             return max_workers;
         }
         default:
