@@ -12,7 +12,7 @@ for NPAGES in 2400000; do
         for PRTGRPSZ in 4; do
           for TRY in $(seq 1 3); do
             $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$MAX_NODES --npages=$NPAGES
-            sleep 2s
+            sleep 1s
             PRINT_HEADER='--noprint_header'
           done
         done
