@@ -1,4 +1,4 @@
-TARGET_PATH='../../../build-release/adaptive-aggregation/worker_homogeneous'
+TARGET_PATH='../../build-release/adaptive-aggregation/worker_homogeneous'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
@@ -14,7 +14,8 @@ for NPAGES in 2400000; do
             if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
               sleep 2s
             fi
-            $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$NODES --npages=$NPAGES --threads=$THREADS --groups=$NGROUPS --partitions=$NPARTS --partgrpsz=$PRTGRPSZ >/dev/null
+            $TARGET_PATH $PRINT_HEADER $FLAGS --nodes=$MAX_NODES --npages=$NPAGES --threads=$THREADS --groups=$NGROUPS --partitions=$NPARTS
+            --partgrpsz=$PRTGRPSZ >/dev/null
             sleep 2s
             PRINT_HEADER='--noprint_header'
           done

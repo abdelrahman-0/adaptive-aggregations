@@ -1,8 +1,8 @@
-TARGET_PATH='../../../build-release/adaptive-aggregation/coordinator'
+TARGET_PATH='../build-release/adaptive-aggregation/coordinator'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--config=../../configs/config_aws_4_workers.json"
+FLAGS="--config=../configs/config_aws_4_workers.json"
 PRINT_HEADER='--print_header'
 
 for NPAGES in 2400000; do
