@@ -7,18 +7,18 @@ FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../../configs/config
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do
-    if [[ "${NODES}" == 3 ]]; then
-      continue
-    fi
-    if [[ "${NODES}" == 2 ]]; then
-          continue
-        fi
-  for NPAGES in 2400000; do
+  if [[ "${NODES}" == 3 ]]; then
+    continue
+  fi
+#  if [[ "${NODES}" == 2 ]]; then
+#    continue
+#  fi
+  for NPAGES in 24000000; do
     for THREADS in 6 12 32; do
-      for NGROUPS in 10 1000 100000 10000000; do
+      for NGROUPS in 10 100000 10000000; do
         for NPARTS in 64; do
           for PRTGRPSZ in 4; do
-            for TRY in $(seq 1 3); do
+            for TRY in $(seq 1 1); do
               if [[ "${LOCAL_NODE_ID}" == 0 ]]; then
                 sleep 2s
               fi
