@@ -5,7 +5,7 @@ MAX_NODES=4
 FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../configs/config_aws_4_workers.json --policy=regression --static_workers=4"
 PRINT_HEADER='--print_header'
 
-for TIMEOUT in 2000; do
+for TIMEOUT in 1000; do
   for NPAGES in 24000000; do
     for THREADS in 6 12 32; do
       for NGROUPS in 10 1000000 100000000; do
