@@ -1,0 +1,255 @@
+coordinator: waiting for 4 connections
+accepted connection from node 3 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.165.52 )
+accepted connection from node 1 ( ip: 2.0.128.186 )
+accepted connection from node 0 ( ip: 2.0.178.144 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.134.120 )
+accepted connection from node 3 ( ip: 2.0.190.2 )
+accepted connection from node 0 ( ip: 2.0.160.100 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 18600000 24000000 ] with workers hint = 3
+coordinator: sent task [ 18600000 20400000 ] to worker 1
+coordinator: sent task [ 20400000 22200000 ] to worker 2
+coordinator: sent task [ 22200000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.167.46 )
+accepted connection from node 3 ( ip: 2.0.139.66 )
+accepted connection from node 0 ( ip: 2.0.194.204 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 18600000 24000000 ] with workers hint = 3
+coordinator: sent task [ 18600000 20400000 ] to worker 1
+coordinator: sent task [ 20400000 22200000 ] to worker 2
+coordinator: sent task [ 22200000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 3 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.200.230 )
+accepted connection from node 1 ( ip: 2.0.164.204 )
+accepted connection from node 0 ( ip: 2.0.223.66 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.164.198 )
+accepted connection from node 3 ( ip: 2.0.143.50 )
+accepted connection from node 0 ( ip: 2.0.190.58 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.193.100 )
+accepted connection from node 3 ( ip: 2.0.137.154 )
+accepted connection from node 0 ( ip: 2.0.130.74 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 3 ( ip: 2.0.148.174 )
+accepted connection from node 1 ( ip: 2.0.207.70 )
+accepted connection from node 0 ( ip: 2.0.215.242 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.219.202 )
+accepted connection from node 3 ( ip: 2.0.196.2 )
+accepted connection from node 0 ( ip: 2.0.198.92 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 3 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.235.148 )
+accepted connection from node 2 ( ip: 2.0.198.224 )
+accepted connection from node 0 ( ip: 2.0.226.230 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 3 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.180.200 )
+accepted connection from node 1 ( ip: 2.0.203.72 )
+accepted connection from node 0 ( ip: 2.0.206.46 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 16800000 24000000 ] with workers hint = 3
+coordinator: sent task [ 16800000 19200000 ] to worker 1
+coordinator: sent task [ 19200000 21600000 ] to worker 2
+coordinator: sent task [ 21600000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 3 ( ip: 2.0.179.236 )
+accepted connection from node 1 ( ip: 2.0.165.138 )
+accepted connection from node 0 ( ip: 2.0.197.108 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 13200000 24000000 ] with workers hint = 3
+coordinator: sent task [ 13200000 16800000 ] to worker 1
+coordinator: sent task [ 16800000 20400000 ] to worker 2
+coordinator: sent task [ 20400000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 1 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.146.134 )
+accepted connection from node 3 ( ip: 2.0.131.0 )
+accepted connection from node 0 ( ip: 2.0.142.62 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 13200000 24000000 ] with workers hint = 3
+coordinator: sent task [ 13200000 16800000 ] to worker 1
+coordinator: sent task [ 16800000 20400000 ] to worker 2
+coordinator: sent task [ 20400000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 3 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.197.200 )
+accepted connection from node 1 ( ip: 2.0.208.224 )
+accepted connection from node 0 ( ip: 2.0.184.248 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 3 ( ip: 2.0.163.148 )
+accepted connection from node 1 ( ip: 2.0.179.8 )
+accepted connection from node 0 ( ip: 2.0.191.134 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 16800000 24000000 ] with workers hint = 3
+coordinator: sent task [ 16800000 19200000 ] to worker 1
+coordinator: sent task [ 19200000 21600000 ] to worker 2
+coordinator: sent task [ 21600000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.232.140 )
+accepted connection from node 3 ( ip: 2.0.152.46 )
+accepted connection from node 0 ( ip: 2.0.201.42 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 16800000 24000000 ] with workers hint = 3
+coordinator: sent task [ 16800000 19200000 ] to worker 1
+coordinator: sent task [ 19200000 21600000 ] to worker 2
+coordinator: sent task [ 21600000 24000000 ] to worker 3
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 3 ( ip: 2.0.181.178 )
+accepted connection from node 1 ( ip: 2.0.133.222 )
+accepted connection from node 0 ( ip: 2.0.170.220 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 2 ( ip: 2.0.23.112 )
+accepted connection from node 1 ( ip: 2.0.190.186 )
+accepted connection from node 3 ( ip: 2.0.141.242 )
+accepted connection from node 0 ( ip: 2.0.229.220 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections
+coordinator: waiting for 4 connections
+accepted connection from node 1 ( ip: 2.0.23.112 )
+accepted connection from node 2 ( ip: 2.0.211.108 )
+accepted connection from node 3 ( ip: 2.0.229.242 )
+accepted connection from node 0 ( ip: 2.0.209.240 )
+coordinator: launching...
+coordinator: initializing query
+coordinator: sent task [ 0 24000000 ] to worker 0
+coordinator: monitoring query state
+coordinator: received task remainder [ 0 0 ] with workers hint = 0
+coordinator: waiting
+coordinator: finished
+closing connections

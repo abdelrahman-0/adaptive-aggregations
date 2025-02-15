@@ -1,0 +1,33 @@
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=1 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,1,16384,100000,204700000,1374,9.539447
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=2 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,2,2,16384,100000,204700000,697,18.805165
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=3 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,3,3,16384,100000,204700000,493,26.586613
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=4 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,4,4,16384,100000,204700000,343,38.213411
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=5 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,5,5,16384,100000,204700000,354,37.025989
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=6 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,6,6,16384,100000,204700000,297,44.131987
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=7 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,7,7,16384,100000,204700000,357,36.714846
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=8 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,8,8,16384,100000,204700000,367,35.714441
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=9 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,9,9,16384,100000,204700000,339,38.664307
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=10 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,10,10,16384,100000,204700000,351,37.342450
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_multithreaded_recv --connections=11 > /dev/null
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,11,11,16384,100000,204700000,382,34.312042

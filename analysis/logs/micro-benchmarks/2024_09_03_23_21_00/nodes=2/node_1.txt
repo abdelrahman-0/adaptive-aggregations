@@ -1,0 +1,65 @@
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=1 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,1,131072,1,100,401,63580087,10.214464,20.428928
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=1 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,1,131072,10,100,385,66200348,10.638961,21.277922
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=1 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,1,131072,100,100,496,51409830,8.258065,16.516129
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=2 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,2,131072,1,100,237,107573122,17.282700,34.565401
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=2 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,2,131072,10,100,194,131495242,21.113402,42.226804
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=2 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,2,131072,100,100,285,89471445,14.371930,28.743860
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=4 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,4,131072,1,100,115,221665478,35.617391,71.234783
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=4 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,4,131072,10,100,105,242886590,39.009524,78.019048
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=4 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,4,131072,100,100,137,186130518,29.897810,59.795620
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=8 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,8,131072,1,100,61,418022655,67.147541,134.295082
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=8 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,8,131072,10,100,52,490224365,78.769231,157.538462
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=8 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,8,131072,100,100,80,318732775,51.200000,102.400000
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=16 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,16,131072,1,100,33,772819545,124.121212,248.242424
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=16 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,16,131072,10,100,32,796955375,128.000000,256.000000
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=16 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,16,131072,100,100,37,689210513,110.702703,221.405405
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=32 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,32,131072,1,100,31,822763419,132.129032,264.258065
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=32 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,32,131072,10,100,32,796940718,128.000000,256.000000
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=32 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,32,131072,100,100,34,750111117,120.470588,240.941176
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=16 --morselsz=1 > /dev/null
+^C
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=64 --morselsz=1 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,64,131072,1,100,29,879109896,141.241379,282.482759
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=64 --morselsz=10 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,64,131072,10,100,34,749840441,120.470588,240.941176
+ubuntu@ip-10-0-0-5:~/grasshopper-db$ ./build-release/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --random --npages=250000 --nodes=2 --threads=64 --morselsz=100 > /dev/null
+node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+1,2,both,shuffle_homogeneous,64,131072,100,100,24,1062698791,170.666667,341.333333

@@ -1,0 +1,641 @@
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=1
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.174 ( port 3502 ) ...
+accepted connection from node 0 ( ip: 2.0.13.174 )
+accepted connection from node 1 ( ip: 2.0.151.106 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,1,65536,100,3,100,108,30878370,5.949212,17.847637
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=2
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.176 ( port 3505 ) ...
+listening on 2.0.13.176 ( port 3504 ) ...
+accepted connection from node 0 ( ip: 2.0.13.176 )
+accepted connection from node 1 ( ip: 2.0.222.130 )
+accepted connection from node 1 ( ip: 2.0.131.72 )
+accepted connection from node 0 ( ip: 2.0.162.228 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,2,65536,100,3,100,97,34380041,6.623865,19.871596
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=4
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.180 ( port 3509 ) ...
+listening on 2.0.13.180 ( port 3508 ) ...
+listening on 2.0.13.182 ( port 3510 ) ...
+listening on 2.0.13.183 ( port 3511 ) ...
+accepted connection from node 1 ( ip: 2.0.13.183 )
+accepted connection from node accepted connection from node0 ( ip:  2.0.213.2000  )( ip:
+ 2.0.213.200 )
+accepted connection from node 0 ( ip: 2.0.193.16 )
+accepted connection from node 0 ( ip: 2.0.146.32 )
+accepted connection from node 1 ( ip: 2.0.196.212 )
+accepted connection from node 1 ( ip: 2.0.160.168 )
+accepted connection from node 1 ( ip: 2.0.189.90 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,4,65536,100,3,100,71,46969915,9.049506,27.148519
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=8
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.188 ( port 3516 ) ...
+listening on 2.0.13.190 ( port 3518 ) ...
+listening on 2.0.13.189 ( port 3517 ) ...
+listening on 2.0.13.192 ( port 3520 ) ...
+listening on 2.0.13.191 ( port 3519 ) ...
+listening on 2.0.13.194 ( port 3522 ) ...
+listening on 2.0.13.193 ( port 3521 ) ...
+listening on 2.0.13.195 ( port 3523 ) ...
+accepted connection from node 0 ( ip: 2.0.13.195 )
+accepted connection from node 0 ( ip: 2.0.155.192 )
+accepted connection from node 1 ( ip: 2.0.217.238 )
+accepted connection from node 0 ( ip: 2.0.151.124 )
+accepted connection from node 0 ( ip: 2.0.145.30 )
+accepted connection from node 1 ( ip: 2.0.187.234 )
+accepted connection from node 0 ( ip: 2.0.190.160 )
+accepted connection from node 1 ( ip: 2.0.175.36 )
+accepted connection from node 1 ( ip: 2.0.150.36 )
+accepted connection from node 0 ( ip: 2.0.186.46 )
+accepted connection from node 1 ( ip: 2.0.226.154 )
+accepted connection from node 1 ( ip: 2.0.238.62 )
+accepted connection from node 0 ( ip: 2.0.131.146 )
+accepted connection from node 1 ( ip: 2.0.149.182 )
+accepted connection from node 0 ( ip: 2.0.218.198 )
+accepted connection from node 1 ( ip: 2.0.185.148 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,8,65536,100,3,100,57,58506385,11.272192,33.816576
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=16
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.206 ( port 3534 ) ...
+listening on 2.0.13.209 ( port 3537 ) ...
+listening on 2.0.13.204 ( port 3532 ) ...
+listening on 2.0.13.207 ( port 3535 ) ...
+listening on 2.0.13.205 ( port 3533 ) ...
+listening on 2.0.13.208 ( port 3536 ) ...
+listening on 2.0.13.210 ( port 3538 ) ...
+listening on 2.0.13.214 ( port 3542 ) ...
+listening on 2.0.13.213 ( port 3541 ) ...
+listening on 2.0.13.211 ( port 3539 ) ...
+listening on 2.0.13.215 ( port 3543 ) ...
+listening on 2.0.13.217 ( port 3545 ) ...
+listening on 2.0.13.212 ( port 3540 ) ...
+listening on 2.0.13.218 ( port 3546 ) ...
+listening on 2.0.13.216 ( port 3544 ) ...
+listening on 2.0.13.219 ( port 3547 ) ...
+accepted connection from node 1 ( ip: 2.0.13.219 )
+accepted connection from node 0 ( ip: 2.0.203.158 )
+accepted connection from node 0 ( ip: 2.0.190.184 )
+accepted connection from node accepted connection from node0  ( ip: 2.0.227.250 )
+0 ( ip: 2.0.227.250 )
+accepted connection from node 1 ( ip: 2.0.131.144 )
+accepted connection from node 0 ( ip: 2.0.208.116 )
+accepted connection from node 0 ( ip: 2.0.218.112 )
+accepted connection from node 1 ( ip: 2.0.140.222 )
+accepted connection from nodeaccepted connection from node  1 ( ip: 12.0.235.150  )
+( ip: 2.0.235.150 )
+accepted connection from node 0 ( ip: 2.0.235.150 )
+accepted connection from node 1 ( ip: 2.0.143.130 )
+accepted connection from node 1 ( ip: 2.0.181.16 )
+accepted connection from node 0 ( ip: 2.0.154.18 )
+accepted connection from node 1 ( ip: 2.0.208.118 )
+accepted connection from node 1 ( ip: 2.0.147.106 )
+accepted connection from node 0 ( ip: 2.0.131.26 )
+accepted connection from nodeaccepted connection from node  00  ( ip:( ip:  2.0.138.1702.0.138.170  ))
+
+accepted connection from node 0 ( ip: 2.0.166.28 )
+accepted connection from node 0 ( ip: 2.0.154.164 )
+accepted connection from nodeaccepted connection from node  1 ( ip: 2.0.154.164 )
+0 ( ip: 2.0.137.180 )
+accepted connection from node 1 ( ip: 2.0.137.180 )
+accepted connection from node 1 ( ip: 2.0.187.90 )
+accepted connection from node 1 ( ip: 2.0.189.14 )
+accepted connection from node 0 ( ip: 2.0.149.28 )
+accepted connection from node 1 ( ip: 2.0.214.164 )
+accepted connection from node 1 ( ip: 2.0.214.164 )
+accepted connection from node 0 ( ip: 2.0.192.234 )
+accepted connection from node 1 ( ip: 2.0.201.26 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,16,65536,100,3,100,56,59551142,11.473481,34.420443
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=32
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.13.236 ( port 3564 ) ...
+listening on 2.0.13.237 ( port 3565 ) ...
+listening on 2.0.13.239 ( port 3567 ) ...
+listening on 2.0.13.238 ( port 3566 ) ...
+listening on 2.0.13.248 ( port 3576 ) ...
+listening on 2.0.13.253 ( port 3581 ) ...
+listening on 2.0.14.0 ( port 3584 ) ...
+listening on 2.0.13.242 ( port 3570 ) ...
+listening on 2.0.13.244 ( port 3572 ) ...
+listening on 2.0.13.243 ( port 3571 ) ...
+listening on 2.0.13.245 ( port 3573 ) ...
+listening on 2.0.13.246 ( port 3574 ) ...
+listening on 2.0.13.252 ( port 3580 ) ...
+listening on 2.0.13.241 ( port 3569 ) ...
+listening on 2.0.13.254 ( port 3568 ) ...
+listening on 2.0.13.247 ( port 3575 ) ...
+listening on 2.0.13.247 ( port 3577 ) ...
+listening on 2.0.14.2 ( port 3586 ) ...
+listening on 2.0.14.2 ( port 3578 ) ...
+listening on 2.0.14.2 ( port 3579 ) ...
+listening on 2.0.14.1 ( port 3585 ) ...
+listening on 2.0.14.1 ( port 3582 ) ...
+listening on 2.0.14.1 ( port 3583 ) ...
+listening on 2.0.14.1 ( port 3587 ) ...
+listening on 2.0.14.11 ( port 3595 ) ...
+listening on 2.0.14.7 ( port 3591 ) ...
+listening on 2.0.14.6 ( port 3590 ) ...
+listening on 2.0.14.5 ( port 3589 ) ...
+listening on 2.0.14.4 ( port 3588 ) ...
+listening on 2.0.14.8 ( port 3592 ) ...
+listening on 2.0.14.10 ( port 3594 ) ...
+listening on 2.0.14.9 ( port 3593 ) ...
+accepted connection from node 0 ( ip: 2.0.14.9 )
+accepted connection from node 0 ( ip: 2.0.139.196 )
+accepted connection from node 0 ( ip: 2.0.143.126 )
+accepted connection from node 0 ( ip: 2.0.187.236 )
+accepted connection from node 1 ( ip: 2.0.187.236 )
+accepted connection from node 0 ( ip: 2.0.168.68 )
+accepted connection from node 1 ( ip: 2.0.201.178 )
+accepted connection from node accepted connection from node1  ( ip: 2.0.145.182 )0accepted connection from node  1 ( ip: 2.0.145.182 )
+
+accepted connection from node 0 ( ip: 2.0.145.182 )
+( ip: 2.0.145.182 )
+accepted connection from node 1 ( ip: 2.0.130.198 )
+accepted connection from node 0 ( ip: 2.0.160.158 )
+accepted connection from node 0 ( ip: 2.0.160.158 )
+accepted connection from node 1 ( ip: 2.0.160.158 )
+accepted connection from node 1 ( ip: 2.0.164.56 )
+accepted connection from node 0 ( ip: 2.0.195.66 )
+accepted connection from node 1 ( ip: 2.0.139.180 )
+accepted connection from node 0 ( ip: 2.0.140.146 )
+accepted connection from node 1 ( ip: 2.0.140.146 )
+accepted connection from node 1 ( ip: 2.0.140.146 )
+accepted connection from node 1 ( ip: 2.0.177.30 )
+accepted connection from node 1 ( ip: 2.0.223.0 )
+accepted connection from node 1 ( ip: 2.0.206.38 )
+accepted connection from node 0 ( ip: 2.0.156.76 )
+accepted connection from node 0 ( ip: 2.0.177.136 )
+accepted connection from node 0 ( ip: 2.0.158.170 )
+accepted connection from node 1 ( ip: 2.0.154.192 )
+accepted connection from node 0 ( ip: 2.0.216.90 )
+accepted connection from node 1 ( ip: 2.0.216.90 )
+accepted connection from node 1 ( ip: 2.0.188.34 )
+accepted connection from node 0 ( ip: 2.0.188.34 )
+accepted connection from node 1 ( ip: 2.0.169.118 )
+accepted connection from node 0 ( ip: 2.0.171.8 )
+accepted connection from node 1 ( ip: 2.0.159.188 )
+accepted connection from node 0 ( ip: 2.0.221.242 )
+accepted connection from nodeaccepted connection from node  1 ( ip: 2.0.131.1840  )( ip:
+ 2.0.131.184 )
+accepted connection from node 1 ( ip: 2.0.165.102 )
+accepted connection from node 0 ( ip: 2.0.158.120 )
+accepted connection from node 0 ( ip: 2.0.136.4 )
+accepted connection from node 0 ( ip: 2.0.144.238 )
+accepted connection from node 0 ( ip: 2.0.144.238 )
+accepted connection from node 0 ( ip: 2.0.168.128 )
+accepted connection from nodeaccepted connection from nodeaccepted connection from node 1 ( ip: 2.0.217.118 )
+ 0 ( ip: 2.0.217.118 )
+accepted connection from node 1 ( ip: 2.0.234.246 )
+accepted connection from node 1 ( ip: 2.0.154.24 )
+accepted connection from node 1 ( ip: 2.0.131.70 )
+accepted connection from node 0 ( ip: 2.0.179.210 )
+accepted connection from node 1 ( ip: 2.0.217.118 )
+accepted connection from node 0 ( ip: 2.0.145.194 )
+accepted connection from node 0 ( ip: 2.0.217.118 )
+accepted connection from node 0 ( ip: 2.0.160.114 )
+accepted connection from nodeaccepted connection from node  0 ( ip:0 2.0.217.118  ( ip:)
+ 2.0.217.118 )
+accepted connection from node 1 ( ip: 2.0.233.54 )
+accepted connection from node 1 ( ip: 2.0.132.130 )
+accepted connection from node 1 ( ip: 2.0.146.88 )
+accepted connection from node 1 ( ip: 2.0.155.214 )
+accepted connection from node  1 ( ip: 2.0.204.102 )
+0 ( ip: 2.0.217.118 )
+accepted connection from node 1 ( ip: 2.0.154.50 )
+accepted connection from node 1 ( ip: 2.0.141.68 )
+tuples received: 2223466
+tuples sent: 2221882
+tuples processed: 1111398
+traffic,implementation,threads,page size,morsel size,nodes,cache (%),time (ms),throughput (tuples/s),node throughput (Gb/s),total throughput (Gb/s)
+ingress,shuffle_homogeneous,32,65536,100,3,100,63,52934349,10.198650,30.595950
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=64
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.14.46 ( port 3630 ) ...
+listening on 2.0.14.50 ( port 3634 ) ...
+listening on 2.0.14.48 ( port 3632 ) ...
+listening on 2.0.14.45 ( port 3628 ) ...
+listening on 2.0.14.47 ( port 3629 ) ...
+listening on 2.0.14.47 ( port 3631 ) ...
+listening on 2.0.14.49 ( port 3633 ) ...
+listening on 2.0.14.51 ( port 3635 ) ...
+listening on 2.0.14.52 ( port 3636 ) ...
+listening on 2.0.14.54 ( port 3638 ) ...
+listening on 2.0.14.53 ( port 3637 ) ...
+listening on 2.0.14.56 ( port 3640 ) ...
+listening on 2.0.14.55 ( port 3639 ) ...
+listening on 2.0.14.58 ( port 3642 ) ...
+listening on 2.0.14.63 ( port 3647 ) ...
+listening on 2.0.14.62 ( port 3646 ) ...
+listening on 2.0.14.60 ( port 3641 ) ...
+listening on 2.0.14.64 ( port 3648 ) ...
+listening on 2.0.14.59 ( port 3643 ) ...
+listening on 2.0.14.59 ( port 3645 ) ...
+listening on 2.0.14.65 ( port 3649 ) ...
+listening on 2.0.14.65 ( port 3644 ) ...
+listening on 2.0.14.71 ( port 3655 ) ...
+listening on 2.0.14.72 ( port 3656 ) ...
+listening on 2.0.14.70 ( port 3654 ) ...
+listening on 2.0.14.68 ( port 3652 ) ...
+listening on 2.0.14.66 ( port 3650 ) ...
+listening on 2.0.14.79 ( port 3663 ) ...
+listening on 2.0.14.75 ( port 3659 ) ...
+listening on 2.0.14.77 ( port 3661 ) ...
+listening on 2.0.14.74 ( port 3658 ) ...
+listening on 2.0.14.76 ( port 3660 ) ...
+listening on 2.0.14.76 ( port 3653 ) ...
+listening on 2.0.14.76 ( port 3651 ) ...
+listening on 2.0.14.78 ( port 3662 ) ...
+listening on 2.0.14.73 ( port 3657 ) ...
+listening on 2.0.14.81 ( port 3665 ) ...
+listening on 2.0.14.84 ( port 3668 ) ...
+listening on 2.0.14.86 ( port 3670 ) ...
+listening on 2.0.14.87 ( port 3671 ) ...
+listening on 2.0.14.88 ( port 3672 ) ...
+listening on 2.0.14.90 ( port 3674 ) ...
+listening on 2.0.14.89 ( port 3673 ) ...
+listening on 2.0.14.82 ( port 3666 ) ...
+listening on 2.0.14.80 ( port 3664 ) ...
+listening on 2.0.14.91 ( port 3675 ) ...
+listening on 2.0.14.92 ( port 3676 ) ...
+listening on 2.0.14.85 ( port 3669 ) ...
+listening on 2.0.14.83 ( port 3667 ) ...
+listening on 2.0.14.93 ( port 3677 ) ...
+listening on 2.0.14.94 ( port 3678 ) ...
+listening on 2.0.14.95 ( port 3679 ) ...
+listening on 2.0.14.97 ( port 3681 ) ...
+listening on 2.0.14.103 ( port 3687 ) ...
+listening on 2.0.14.102 ( port 3686 ) ...
+listening on 2.0.14.104 ( port 3688 ) ...
+listening on 2.0.14.101 ( port 3685 ) ...
+listening on 2.0.14.96 ( port 3680 ) ...
+listening on 2.0.14.99 ( port 3683 ) ...
+listening on 2.0.14.98 ( port 3682 ) ...
+listening on 2.0.14.107 ( port 3689 ) ...
+listening on 2.0.14.100 ( port 3684 ) ...
+listening on 2.0.14.100 ( port 3691 ) ...
+listening on 2.0.14.100 ( port 3690 ) ...
+accepted connection from node 0 ( ip: 2.0.14.100 )
+accepted connection from node 0 ( ip: 2.0.164.68 )
+accepted connection from node 0 ( ip: 2.0.230.134 )
+accepted connection from node 0 ( ip: 2.0.230.134 )
+accepted connection from node 1 ( ip: 2.0.230.134 )
+accepted connection from node 0 ( ip: 2.0.161.194 )
+accepted connection from node 1 ( ip: 2.0.196.104 )
+accepted connection from node 1 ( ip: 2.0.160.70 )
+accepted connection from node 1 ( ip: 2.0.140.110 )
+accepted connection from node 1 ( ip: 2.0.206.24 )
+accepted connection from node 0 ( ip:accepted connection from node  2.0.139.200 )0
+ ( ip: 2.0.139.200 )
+accepted connection from node 0 ( ip: 2.0.146.8accepted connection from node 1 ( ip: 2.0.146.8 )
+ )
+accepted connection from node 1 ( ip: 2.0.205.216 )
+accepted connection from node 1 ( ip: 2.0.190.196 )
+accepted connection from node 0 ( ip: 2.0.190.226 )
+accepted connection from node 1 ( ip: 2.0.190.202 )
+accepted connection from node 0 ( ip: 2.0.190.202 )
+accepted connection from node 0 ( ip: 2.0.191.82 )
+accepted connection from node 1 ( ip: 2.0.216.222 )
+accepted connection from node 0 ( ip: 2.0.168.24 )
+accepted connection from node 1 ( ip: 2.0.161.76 )
+accepted connection from node 0 ( ip: 2.0.133.254 )
+accepted connection from node 1 ( ip: 2.0.132.216 )
+accepted connection from node 1 ( ip: 2.0.131.148 )
+accepted connection from node 1 ( ip: 2.0.236.92 )
+accepted connection from node 0 ( ip: 2.0.130.84 )
+accepted connection from node 0 ( ip: 2.0.234.188 )
+accepted connection from node 0 ( ip: 2.0.224.250 )
+accepted connection from node 1 ( ip: 2.0.153.206 )
+accepted connection from node 0 ( ip: 2.0.153.206 )
+accepted connection from node 1 ( ip: 2.0.137.120 )
+accepted connection from node 1 ( ip: 2.0.190.172 )
+accepted connection from node 1 ( ip: 2.0.190.172 )
+accepted connection from node 0 ( ip:accepted connection from node  2.0.136.126 )
+accepted connection from node 1 ( ip: 0 ( ip: 2.0.136.126 )
+2.0.136.126 )
+accepted connection from node accepted connection from node 1 ( ip: 2.0.236.28 0)
+accepted connection from node 0 ( ip: 2.0.158.230 )
+( ip: 2.0.139.50 )
+accepted connection from node 1 ( ip: 2.0.148.234 )
+accepted connection from node accepted connection from node 1 ( ip:1  2.0.227.190( ip: )
+ 2.0.227.190 )
+accepted connection from node 0 ( ip: 2.0.138.166 )
+accepted connection from node 0 ( ip: 2.0.225.240 )
+accepted connection from node 1 ( ip: 2.0.174.122 )
+accepted connection from node 0 ( ip: 2.0.202.248 )
+accepted connection from node 1 ( ip: 2.0.155.72 )
+accepted connection from node 1 ( ip: 2.0.216.26 )
+accepted connection from node 0 ( ip: 2.0.182.64 )
+accepted connection from node 0 ( ip: 2.0.200.132 )
+accepted connection from node 0 ( ip: 2.0.198.154 )
+accepted connection from node 1 ( ip: 2.0.220.54 )
+accepted connection from node 0 ( ip: 2.0.193.144 )
+accepted connection from node 0 ( ip: 2.0.210.18 )
+accepted connection from node 1 ( ip: 2.0.175.66 )
+accepted connection from node 0 ( ip: 2.0.164.200 )
+accepted connection from node 0 ( ip: 2.0.144.220 )
+accepted connection from node 0 ( ip: 2.0.192.114 )
+accepted connection from node 1 ( ip: 2.0.219.148 )
+accepted connection from node 1 ( ip: 2.0.141.128 )
+accepted connection from node accepted connection from node 1 ( ip:0 ( ip: 2.0.187.244 )
+ 2.0.187.244 )
+accepted connection from node 0 ( ip: 2.0.236.216 )
+accepted connection from nodeaccepted connection from node  01  ( ip:( ip:  2.0.165.2402.0.165.240  )
+)
+accepted connection from node 1 ( ip: 2.0.151.74 )
+accepted connection from node 1 ( ip: 2.0.133.98 )
+accepted connection from node 1 ( ip: 2.0.133.98 )
+accepted connection from node 0 ( ip: 2.0.144.182 )
+accepted connection from node 1 ( ip: 2.0.224.84 )
+accepted connection from node 1 ( ip: 2.0.223.194 )
+accepted connection from node 1 ( ip: 2.0.223.194 )
+accepted connection from node 1 ( ip: 2.0.222.194 )
+accepted connection from node 0 ( ip: 2.0.143.184 )
+accepted connection from node 0 ( ip: 2.0.136.32 )
+accepted connection from node 0 ( ip: 2.0.149.116 )
+accepted connection from node 0 ( ip: 2.0.229.128 )
+accepted connection from node 1 ( ip: 2.0.169.102 )
+accepted connection from node 1 ( ip: 2.0.128.116 )
+accepted connection from node 0 ( ip: 2.0.131.218 )
+accepted connection from node 0 ( ip: 2.0.183.52 )
+accepted connection from node 1 ( ip: 2.0.183.52 )
+accepted connection from nodeaccepted connection from node 1 ( ip:  2.0.148.1061  ( ip:)
+accepted connection from node 0 ( ip: 2.0.148.106 )
+2.0.183.52 )
+accepted connection from node 0 ( ip: 2.0.220.232 )
+accepted connection from node 1 ( ip: 2.0.162.202 )
+accepted connection from nodeaccepted connection from node  00 ( ip:  ( ip:2.0.157.236 )
+2.0.157.236 )
+accepted connection from node 1 ( ip: 2.0.183.20 )
+accepted connection from node 0 ( ip: 2.0.224.250 )
+accepted connection from node 1 ( ip: 2.0.227.220 )
+accepted connection from node 0 ( ip: 2.0.226.178 )
+accepted connection from node 0 ( ip: 2.0.226.178 )
+accepted connection from node 1 ( ip: 2.0.176.64 )
+accepted connection from node 0 ( ip: 2.0.232.130 )
+accepted connection from node 1 ( ip: 2.0.148.132 )
+accepted connection from node 1 ( ip: 2.0.202.14 )
+accepted connection from node 1 ( ip: 2.0.212.176 )
+accepted connection from node 0 ( ip: 2.0.206.116 )
+accepted connection from node 0 ( ip: 2.0.135.14 )
+accepted connection from node 1 ( ip: 2.0.152.18 )
+accepted connection from node 0 ( ip: 2.0.157.142 )
+accepted connection from node 0 ( ip: 2.0.195.248 )
+accepted connection from node accepted connection from node 0 0( ip: 2.0.159.72 )
+ ( ip: 2.0.159.72 )
+accepted connection from node 1 ( ip: 2.0.200.250 )
+accepted connection from node 1 ( ip: 2.0.132.124 )
+accepted connection from node 1 ( ip: 2.0.132.124 )
+accepted connection from node 1 ( ip: 2.0.181.16 )
+accepted connection from node 0 ( ip: 2.0.178.70 )
+accepted connection from node 1 ( ip: 2.0.211.228 )
+accepted connection from node 0 ( ip: 2.0.225.130 )
+accepted connection from node 0 ( ip: 2.0.152.86 )
+accepted connection from node 1 ( ip: 2.0.234.254 )
+accepted connection from node 1 ( ip: 2.0.194.102 )
+accepted connection from node 1 ( ip: 2.0.194.102 )
+accepted connection from node 0 ( ip: 2.0.162.158 )
+accepted connection from node 0 ( ip: 2.0.188.24 )
+accepted connection from node 0 ( ip: 2.0.188.24 )
+accepted connection from node 0 ( ip: 2.0.219.24 )
+accepted connection from node 1 ( ip: 2.0.144.76 )
+accepted connection from node 0 ( ip: 2.0.167.202 )
+accepted connection from node 1 ( ip: 2.0.214.246 )
+accepted connection from node 1 ( ip: 2.0.147.34 )
+accepted connection from node 1 ( ip: 2.0.165.116 )
+terminate called after throwing an instance of 'IOUringRecvError'
+  what():  Error receiving page -- Connection reset by peer
+Aborted (core dumped)
+ubuntu@ip-10-0-0-6:~/grasshopper-db$ ./build-relwithdebinfo/micro-benchmarks/shuffle/shuffle_homogeneous --nolocal --nodes=3 --cache=100 --threads=64
+NODE 2 of 2 :
+---------
+reading bytes: 160628736 → 240943104
+listening on 2.0.14.49 ( port 3633 ) ...
+listening on 2.0.14.44 ( port 3628 ) ...
+listening on 2.0.14.54 ( port 3638 ) ...
+listening on 2.0.14.59 ( port 3643 ) ...
+listening on 2.0.14.46 ( port 3630 ) ...
+listening on 2.0.14.50 ( port 3634 ) ...
+listening on 2.0.14.48 ( port 3632 ) ...
+listening on 2.0.14.52 ( port 3636 ) ...
+listening on 2.0.14.47 ( port 3631 ) ...
+listening on 2.0.14.56 ( port 3640 ) ...
+listening on 2.0.14.53 ( port 3637 ) ...
+listening on 2.0.14.58 ( port 3642 ) ...
+listening on 2.0.14.45 ( port 3629 ) ...
+listening on 2.0.14.57 ( port 3641 ) ...
+listening on 2.0.14.57 ( port 3639 ) ...
+listening on 2.0.14.51 ( port 3635 ) ...
+listening on 2.0.14.60 ( port 3644 ) ...
+listening on 2.0.14.65 ( port 3649 ) ...
+listening on 2.0.14.63 ( port 3647 ) ...
+listening on 2.0.14.74 ( port 3658 ) ...
+listening on 2.0.14.64 ( port 3648 ) ...
+listening on 2.0.14.75 ( port 3659 ) ...
+listening on 2.0.14.61 ( port 3645 ) ...
+listening on 2.0.14.62 ( port 3646 ) ...
+listening on 2.0.14.68 ( port 3652 ) ...
+listening on 2.0.14.73 ( port 3657 ) ...
+listening on 2.0.14.71 ( port 3655 ) ...
+listening on 2.0.14.72 ( port 3656 ) ...
+listening on 2.0.14.69 ( port 3653 ) ...
+listening on 2.0.14.70 ( port 3654 ) ...
+listening on 2.0.14.70 ( port 3651 ) ...
+listening on 2.0.14.66 ( port 3650 ) ...
+listening on 2.0.14.76 ( port 3660 ) ...
+listening on 2.0.14.77 ( port 3661 ) ...
+listening on 2.0.14.79 ( port 3663 ) ...
+listening on 2.0.14.80 ( port 3664 ) ...
+listening on 2.0.14.81 ( port 3665 ) ...
+listening on 2.0.14.83 ( port 3667 ) ...
+listening on 2.0.14.84 ( port 3668 ) ...
+listening on 2.0.14.85 ( port 3669 ) ...
+listening on 2.0.14.88 ( port 3672 ) ...
+listening on 2.0.14.78 ( port 3662 ) ...
+listening on 2.0.14.82 ( port 3666 ) ...
+listening on 2.0.14.91 ( port 3675 ) ...
+listening on 2.0.14.86 ( port 3670 ) ...
+listening on 2.0.14.96 ( port 3680 ) ...
+listening on 2.0.14.96 ( port 3678 ) ...
+listening on 2.0.14.87 ( port 3671 ) ...
+listening on 2.0.14.99 ( port 3683 ) ...
+listening on 2.0.14.105 ( port 3689 ) ...
+listening on 2.0.14.100 ( port 3684 ) ...
+listening on 2.0.14.106 ( port 3690 ) ...
+listening on 2.0.14.90 ( port 3674 ) ...
+listening on 2.0.14.92 ( port 3676 ) ...
+listening on 2.0.14.93 ( port 3677 ) ...
+listening on 2.0.14.89 ( port 3673 ) ...
+listening on 2.0.14.97 ( port 3681 ) ...
+listening on 2.0.14.103 ( port 3687 ) ...
+listening on 2.0.14.98 ( port 3682 ) ...
+listening on 2.0.14.107 ( port 3691 ) ...
+listening on 2.0.14.107 ( port 3685 ) ...
+listening on 2.0.14.107 ( port 3686 ) ...
+listening on 2.0.14.107 ( port 3688 ) ...
+listening on 2.0.14.107 ( port 3679 ) ...
+accepted connection from node 0 ( ip: 2.0.14.107 )
+accepted connection from node 0 ( ip: 2.0.14.107 )
+accepted connection from node accepted connection from nodeaccepted connection from node 0  0( ip:  0 ( ip: 2.0.229.182 )
+( ip: 2.0.229.182 )
+2.0.229.182 )
+accepted connection from node 0 ( ip: 2.0.199.228 )
+accepted connection from node 0 ( ip: 2.0.162.156 )
+accepted connection from node 0 ( ip: 2.0.132.128 )
+accepted connection from node 0 ( ip: 2.0.228.124 )
+accepted connection from node 1 ( ip: 2.0.234.134 )
+accepted connection from node 0 ( ip: 2.0.234.134 )
+accepted connection from node 0 ( ip: 2.0.200.236 )
+accepted connection from node 1 ( ip: 2.0.134.220 )
+accepted connection from node 0 ( ip: 2.0.184.180 )
+accepted connection from node 0 ( ip: 2.0.184.180 )
+accepted connection from node 1 ( ip: 2.0.194.74 )
+accepted connection from node 0 ( ip: 2.0.191.252 )
+accepted connection from node 1 ( ip: 2.0.185.182 )
+accepted connection from node 1 ( ip: 2.0.238.54 )
+accepted connection from nodeaccepted connection from node  1 1( ip: ( ip:  2.0.223.1642.0.223.164  ))
+accepted connection from node 0 ( ip: 2.0.223.164 )
+
+accepted connection from node 1 ( ip: 2.0.205.122 )
+accepted connection from node 0 ( ip: 2.0.205.122 )
+accepted connection from node 1 ( ip: 2.0.143.36 )
+accepted connection from node accepted connection from node0 ( ip: 2.0.143.36 )
+accepted connection from nodeaccepted connection from node 1 ( ip: 2.0.142.178 )
+accepted connection from node 1 ( ip: 2.0.142.178 )
+accepted connection from nodeaccepted connection from node 1 ( ip: 2.0.223.136  )
+1 ( ip: 2.0.223.136 )
+accepted connection from node 0 ( ip: 2.0.149.8 )
+accepted connection from node 1 ( ip: 2.0.132.224 )
+accepted connection from node 0 ( ip: 2.0.156.114 )
+accepted connection from node 1 ( ip: 2.0.227.174 )
+accepted connection from node 0 ( ip: 2.0.130.12 )
+accepted connection from node 1 ( ip: 2.0.130.12 )
+ accepted connection from node0 ( ip: 2.0.143.36 )
+accepted connection from node  11  ( ip:( ip: 2.0.143.36  1 ( ip: 2.0.143.36 )
+ accepted connection from node 1 ( ip: 2.0.221.202 )
+accepted connection from node 0 ( ip: 2.0.187.80 )
+)
+accepted connection from node 0 ( ip: 2.0.144.230 )
+accepted connection from node 1 ( ip: 2.0.130.114accepted connection from node  )1
+ ( ip: 2.0.130.114 )
+accepted connection from node 1 ( ip: 2.0.236.26 )
+accepted connection from node 1 ( ip: 2.0.196.240 )
+accepted connection from node 0 ( ip: 2.0.145.72 )
+accepted connection from node 1 ( ip: 2.0.182.104 )
+2.0.203.6 )
+accepted connection from node 0 ( ip: 2.0.132.194 )
+accepted connection from node 0 ( ip: 2.0.132.194 )
+accepted connection from node 1 ( ip: 2.0.215.170 )
+accepted connection from node 1 ( ip: 2.0.190.38 )
+accepted connection from node 0 ( ip: 2.0.236.140 )
+accepted connection from node 1 ( ip: 2.0.160.90 )
+accepted connection from node 1 ( ip: 2.0.169.90 )
+accepted connection from node 1 ( ip: 2.0.169.90 )
+accepted connection from node 0 ( ip: 2.0.217.2 )
+accepted connection from node 1 ( ip: 2.0.194.20 )
+accepted connection from node 1 ( ip: 2.0.180.138 )
+accepted connection from node 0 ( ip: 2.0.180.138 )
+accepted connection from node 0 ( ip: 2.0.137.134 )
+accepted connection from node 0 ( ip: 2.0.137.134 )
+accepted connection from node 0 ( ip: 2.0.151.56 )
+accepted connection from node 0 ( ip: 2.0.151.56 )
+accepted connection from node 0 ( ip: 2.0.189.46 )
+accepted connection from node 1 ( ip: 2.0.189.46 )
+accepted connection from node 0 ( ip: 2.0.137.62 )
+accepted connection from node 0 ( ip: 2.0.197.246 )
+accepted connection from node 0 ( ip: 2.0.145.52 )
+accepted connection from node 0 ( ip: 2.0.145.52 )
+accepted connection from node 0 ( ip: 2.0.226.158 )
+accepted connection from node 0 ( ip: 2.0.184.242 )
+accepted connection from node 1 ( ip: 2.0.174.190 )
+accepted connection from node 1 ( ip: 2.0.174.190 )
+accepted connection from node 1 ( ip: 2.0.174.190 )
+accepted connection from node 0 ( ip: 2.0.200.174 )
+accepted connection from node 1 ( ip: 2.0.214.160 )
+accepted connection from node 0 ( ip: 2.0.232.182 )
+accepted connection from node accepted connection from node1 ( ip: 2.0.178.42 )
+1 ( ip: 2.0.178.42 )
+accepted connection from node 1 ( ip: 2.0.134.172 )
+accepted connection from node 1 ( ip: 2.0.151.150 )
+accepted connection from node 1 ( ip: 2.0.211.138 )
+accepted connection from node 0 ( ip: 2.0.203.22 )
+accepted connection from node 0 ( ip: 2.0.191.50 )
+accepted connection from node 1 ( ip: 2.0.155.236 )
+accepted connection from node 0 ( ip: 2.0.193.32 )
+accepted connection from node 0 ( ip: 2.0.138.24 )
+accepted connection from node 0 ( ip: 2.0.227.122 )
+accepted connection from node accepted connection from node1  0( ip: accepted connection from nodeaccepted connection from node ( ip: 2.0.178.42 )
+ 2.0.178.42 )
+accepted connection from node  01  ( ip:0accepted connection from node  ( ip:1 2.0.153.78  )( ip:
+ 2.0.153.78 )
+accepted connection from node 1 ( ip: 2.0.134.172 )
+accepted connection from node 1 ( ip: 2.0.226.212 )
+ 2.0.153.78 )
+( ip: 2.0.178.42 )
+accepted connection from node 1 ( ip: 2.0.171.124 )
+accepted connection from node 1 ( ip: 2.0.137.144 )
+accepted connection from node 0 ( ip: 2.0.210.184 )
+accepted connection from node 0 ( ip: 2.0.185.176 )
+accepted connection from node 0 ( ip: 2.0.153.78 )
+accepted connection from node 1 ( ip: 2.0.172.178 )
+accepted connection from node 0 ( ip: 2.0.227.166 )
+accepted connection from node 1 ( ip: 2.0.155.238 )
+accepted connection from node 1 ( ip: 2.0.208.96 )
+accepted connection from node 0 ( ip: 2.0.166.168 )
+accepted connection from node 0 ( ip: 2.0.159.26 )
+accepted connection from node accepted connection from node1 ( ip:  12.0.227.26  )( ip:
+ 2.0.227.26 )
+accepted connection from node 0 ( ip: 2.0.167.224 )
+accepted connection from node 0 ( ip: 2.0.173.118 )
+accepted connection from node 1 ( ip: 2.0.173.118 )
+accepted connection from node 1 ( ip: 2.0.194.220 )
+accepted connection from node 1 ( ip: 2.0.234.244 )
+accepted connection from node 0 ( ip: 2.0.214.128 )
+accepted connection from node 1 ( ip: 2.0.162.124 )
+accepted connection from node 0 ( ip: 2.0.129.160 )
+accepted connection from node 1 ( ip: 2.0.131.114 )
+accepted connection from node 0 ( ip: 2.0.156.242 )
+accepted connection from node 0 ( ip: 2.0.156.242 )
+accepted connection from node 1 ( ip: 2.0.152.140 )
+accepted connection from node 1 ( ip: 2.0.231.186 )
+accepted connection from node 0 ( ip: 2.0.232.190 )
+accepted connection from node 1 ( ip: 2.0.129.148 )
+accepted connection from node 1 ( ip: 2.0.227.184 )
+accepted connection from node 0 ( ip: 2.0.170.66 )
+terminate called after throwing an instance of 'IOUringRecvError'
+  what():  Error receiving page -- Connection reset by peer
+Aborted (core dumped)

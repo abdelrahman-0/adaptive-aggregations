@@ -1,0 +1,162 @@
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=1
+opening 1 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.225.240
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,1,65536,100000,819100000,5501,9.530776
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=2
+opening 2 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.154.218
+accepted connection from  2.0.154.228
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,2,65536,100000,819100000,2768,18.941040
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=3
+opening 3 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.212.162
+accepted connection from  2.0.212.172
+accepted connection from  2.0.212.176
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,3,65536,100000,819100000,1893,27.696144
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=4
+opening 4 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.191.212
+accepted connection from  2.0.191.214
+accepted connection from  2.0.191.230
+accepted connection from  2.0.191.234
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,4,65536,100000,819100000,1541,34.022583
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=5
+opening 5 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.128.74
+accepted connection from  2.0.128.78
+accepted connection from  2.0.128.90
+accepted connection from  2.0.128.102
+accepted connection from  2.0.128.116
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,5,65536,100000,819100000,1131,46.356145
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=6
+opening 6 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.129.218
+accepted connection from  2.0.129.226
+accepted connection from  2.0.129.228
+accepted connection from  2.0.129.230
+accepted connection from  2.0.129.246
+accepted connection from  2.0.130.6
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,6,65536,100000,819100000,1243,42.179244
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=7
+opening 7 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.144.170
+accepted connection from  2.0.144.180
+accepted connection from  2.0.144.192
+accepted connection from  2.0.144.208
+accepted connection from  2.0.144.220
+accepted connection from  2.0.144.236
+accepted connection from  2.0.144.242
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,7,65536,100000,819100000,1018,51.501768
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=8
+opening 8 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.177.32
+accepted connection from  2.0.177.44
+accepted connection from  2.0.177.54
+accepted connection from  2.0.177.56
+accepted connection from  2.0.177.68
+accepted connection from  2.0.177.72
+accepted connection from  2.0.177.86
+accepted connection from  2.0.177.88
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,8,65536,100000,819100000,1014,51.704931
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=9
+opening 9 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.155.50
+accepted connection from  2.0.155.52
+accepted connection from  2.0.155.58
+accepted connection from  2.0.155.74
+accepted connection from  2.0.155.84
+accepted connection from  2.0.155.86
+accepted connection from  2.0.155.92
+accepted connection from  2.0.155.98
+accepted connection from  2.0.155.104
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,9,65536,100000,819100000,1027,51.050438
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=10
+opening 10 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.155.110
+accepted connection from  2.0.155.126
+accepted connection from  2.0.155.136
+accepted connection from  2.0.155.148
+accepted connection from  2.0.155.160
+accepted connection from  2.0.155.170
+accepted connection from  2.0.155.178
+accepted connection from  2.0.155.184
+accepted connection from  2.0.155.198
+accepted connection from  2.0.155.208
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,10,65536,100000,819100000,1000,52.428800
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=11
+opening 11 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.170.22
+accepted connection from  2.0.170.28
+accepted connection from  2.0.170.38
+accepted connection from  2.0.170.48
+accepted connection from  2.0.170.54
+accepted connection from  2.0.170.58
+accepted connection from  2.0.170.66
+accepted connection from  2.0.170.78
+accepted connection from  2.0.170.90
+accepted connection from  2.0.170.106
+accepted connection from  2.0.170.116
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,11,65536,100000,819100000,999,52.481281
+ubuntu@ip-10-0-0-5:~/grasshopper-db/build-release$ ./micro-benchmarks/protocol/ingress_singlethreaded_recv --connections=12
+opening 12 connections ...
+setting recv buff (excl. kernel bookkeeping): 536870912
+size of recv buff (incl. kernel bookkeeping): 1000000000
+listening for connections on 2.0.13.172 : 3500 ...
+accepted connection from  2.0.160.90
+accepted connection from  2.0.160.92
+accepted connection from  2.0.160.108
+accepted connection from  2.0.160.110
+accepted connection from  2.0.160.120
+accepted connection from  2.0.160.124
+accepted connection from  2.0.160.138
+accepted connection from  2.0.160.152
+accepted connection from  2.0.160.156
+accepted connection from  2.0.160.168
+accepted connection from  2.0.160.170
+accepted connection from  2.0.160.174
+traffic,primitive,implementation,threads,connections,page_size,pages,tuples,time (ms),throughput (Gb/s)
+ingress,recv,sync,1,12,65536,100000,819100000,1020,51.400784

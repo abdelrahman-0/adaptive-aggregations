@@ -1,0 +1,157 @@
+------------------------------------------------------------
+Server listening on TCP port 5001
+TCP window size:  128 KByte (default)
+------------------------------------------------------------
+[  1] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41746
+[ ID] Interval       Transfer     Bandwidth
+[  1] 0.0000-10.0031 sec  11.1 GBytes  9.53 Gbits/sec
+[  2] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53502
+[  3] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53498
+[ ID] Interval       Transfer     Bandwidth
+[  3] 0.0000-10.0031 sec  11.1 GBytes  9.53 Gbits/sec
+[  2] 0.0000-10.0036 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0036 sec  22.2 GBytes  19.1 Gbits/sec
+[  4] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 40560
+[  5] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 40562
+[  6] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 40572
+[ ID] Interval       Transfer     Bandwidth
+[  5] 0.0000-10.0020 sec  11.1 GBytes  9.53 Gbits/sec
+[  4] 0.0000-10.0030 sec  11.1 GBytes  9.53 Gbits/sec
+[  6] 0.0000-10.0016 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0024 sec  33.3 GBytes  28.6 Gbits/sec
+[  7] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54434
+[  8] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54440
+[  9] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54422
+[ 10] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54444
+[ ID] Interval       Transfer     Bandwidth
+[  8] 0.0000-10.0025 sec  11.1 GBytes  9.53 Gbits/sec
+[ 10] 0.0000-10.0018 sec  11.1 GBytes  9.53 Gbits/sec
+[  9] 0.0000-10.0028 sec  11.1 GBytes  9.53 Gbits/sec
+[  7] 0.0000-10.0034 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0034 sec  44.4 GBytes  38.1 Gbits/sec
+[ 11] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 48952
+[ 12] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 48986
+[ 13] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 48938
+[ 15] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 48958
+[ 14] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 48972
+[ ID] Interval       Transfer     Bandwidth
+[ 13] 0.0000-10.0023 sec  11.1 GBytes  9.53 Gbits/sec
+[ 11] 0.0000-10.0031 sec  11.1 GBytes  9.53 Gbits/sec
+[ 14] 0.0000-10.0027 sec  11.1 GBytes  9.53 Gbits/sec
+[ 12] 0.0000-10.0023 sec  11.1 GBytes  9.53 Gbits/sec
+[ 15] 0.0000-10.0021 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0029 sec  55.5 GBytes  47.6 Gbits/sec
+[ 16] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53192
+[ 18] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53206
+[ 17] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53222
+[ 19] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53228
+[ 21] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53244
+[ 20] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 53194
+[ ID] Interval       Transfer     Bandwidth
+[ 19] 0.0000-10.0022 sec  11.1 GBytes  9.53 Gbits/sec
+[ 21] 0.0000-10.0020 sec  11.1 GBytes  9.53 Gbits/sec
+[ 17] 0.0000-10.0029 sec  8.98 GBytes  7.72 Gbits/sec
+[ 20] 0.0000-10.0023 sec  11.1 GBytes  9.53 Gbits/sec
+[ 18] 0.0000-10.0030 sec  11.0 GBytes  9.47 Gbits/sec
+[ 16] 0.0000-10.0037 sec  10.4 GBytes  8.93 Gbits/sec
+[SUM] 0.0000-10.0037 sec  63.7 GBytes  54.7 Gbits/sec
+[ 22] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41424
+[ 23] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41438
+[ 24] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41412
+[ 25] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41440
+[ 26] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41400
+[ 27] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41444
+[ 28] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 41452
+[ ID] Interval       Transfer     Bandwidth
+[ 25] 0.0000-10.0022 sec  10.5 GBytes  9.03 Gbits/sec
+[ 27] 0.0000-10.0013 sec  11.1 GBytes  9.53 Gbits/sec
+[ 22] 0.0000-10.0030 sec  9.94 GBytes  8.54 Gbits/sec
+[ 23] 0.0000-10.0030 sec  11.1 GBytes  9.53 Gbits/sec
+[ 26] 0.0000-10.0022 sec  11.1 GBytes  9.53 Gbits/sec
+[ 24] 0.0000-10.0023 sec  11.0 GBytes  9.48 Gbits/sec
+[ 28] 0.0000-10.0020 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0033 sec  75.9 GBytes  65.2 Gbits/sec
+[ 29] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47690
+[ 30] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47688
+[ 31] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47692
+[ 32] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47734
+[ 33] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47694
+[ 34] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47702
+[ 36] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47756
+[ 35] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 47748
+[ ID] Interval       Transfer     Bandwidth
+[ 33] 0.0000-10.0024 sec  9.80 GBytes  8.41 Gbits/sec
+[ 35] 0.0000-10.0018 sec  11.1 GBytes  9.53 Gbits/sec
+[ 29] 0.0000-10.0030 sec  10.1 GBytes  8.65 Gbits/sec
+[ 30] 0.0000-10.0032 sec  11.1 GBytes  9.53 Gbits/sec
+[ 32] 0.0000-10.0021 sec  11.1 GBytes  9.50 Gbits/sec
+[ 36] 0.0000-10.0010 sec  11.1 GBytes  9.53 Gbits/sec
+[ 31] 0.0000-10.0026 sec  10.2 GBytes  8.79 Gbits/sec
+[ 34] 0.0000-10.0022 sec  10.8 GBytes  9.31 Gbits/sec
+[SUM] 0.0000-10.0035 sec  85.3 GBytes  73.2 Gbits/sec
+[ 37] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49622
+[ 38] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49624
+[ 39] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49632
+[ 40] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49630
+[ 41] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49634
+[ 42] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49640
+[ 43] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49660
+[ 44] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49682
+[ 45] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 49672
+[ ID] Interval       Transfer     Bandwidth
+[ 43] 0.0000-10.0010 sec  9.48 GBytes  8.14 Gbits/sec
+[ 45] 0.0000-10.0010 sec  11.0 GBytes  9.41 Gbits/sec
+[ 38] 0.0000-10.0029 sec  9.49 GBytes  8.15 Gbits/sec
+[ 40] 0.0000-10.0025 sec  11.1 GBytes  9.53 Gbits/sec
+[ 42] 0.0000-10.0016 sec  11.0 GBytes  9.46 Gbits/sec
+[ 37] 0.0000-10.0032 sec  11.1 GBytes  9.52 Gbits/sec
+[ 39] 0.0000-10.0023 sec  10.6 GBytes  9.10 Gbits/sec
+[ 44] 0.0000-10.0013 sec  10.5 GBytes  9.03 Gbits/sec
+[ 41] 0.0000-10.0016 sec  11.1 GBytes  9.52 Gbits/sec
+[SUM] 0.0000-10.0033 sec  95.3 GBytes  81.9 Gbits/sec
+[ 46] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54552
+[ 47] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54580
+[ 49] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54584
+[ 51] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54612
+[ 53] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54658
+[ 55] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54636
+[ 48] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54564
+[ 50] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54598
+[ 52] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54626
+[ 54] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 54644
+[ ID] Interval       Transfer     Bandwidth
+[ 49] 0.0000-10.0023 sec  10.7 GBytes  9.16 Gbits/sec
+[ 50] 0.0000-10.0016 sec  11.1 GBytes  9.53 Gbits/sec
+[ 55] 0.0000-10.0021 sec  10.6 GBytes  9.09 Gbits/sec
+[ 54] 0.0000-10.0018 sec  10.7 GBytes  9.16 Gbits/sec
+[ 47] 0.0000-10.0021 sec  11.1 GBytes  9.53 Gbits/sec
+[ 52] 0.0000-10.0019 sec  10.6 GBytes  9.09 Gbits/sec
+[ 53] 0.0000-10.0018 sec  10.2 GBytes  8.79 Gbits/sec
+[ 48] 0.0000-10.0024 sec  11.1 GBytes  9.52 Gbits/sec
+[ 46] 0.0000-10.0042 sec  11.0 GBytes  9.46 Gbits/sec
+[ 51] 0.0000-10.0022 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0038 sec   108 GBytes  92.9 Gbits/sec
+[ 56] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59514
+[ 57] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59524
+[ 58] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59560
+[ 59] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59582
+[ 61] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59580
+[ 62] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59552
+[ 64] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59550
+[ 65] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59596
+[ 60] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59574
+[ 63] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59540
+[ 66] local 10.0.0.5 port 5001 connected with 10.0.0.4 port 59598
+[ ID] Interval       Transfer     Bandwidth
+[ 61] 0.0000-10.0021 sec  9.86 GBytes  8.47 Gbits/sec
+[ 66] 0.0000-10.0020 sec  10.1 GBytes  8.67 Gbits/sec
+[ 65] 0.0000-10.0015 sec  11.1 GBytes  9.53 Gbits/sec
+[ 56] 0.0000-10.0039 sec  10.6 GBytes  9.14 Gbits/sec
+[ 57] 0.0000-10.0029 sec  10.4 GBytes  8.92 Gbits/sec
+[ 59] 0.0000-10.0023 sec  9.62 GBytes  8.26 Gbits/sec
+[ 62] 0.0000-10.0026 sec  11.1 GBytes  9.53 Gbits/sec
+[ 63] 0.0000-10.0014 sec  10.3 GBytes  8.88 Gbits/sec
+[ 58] 0.0000-10.0027 sec  11.1 GBytes  9.52 Gbits/sec
+[ 64] 0.0000-10.0026 sec  11.1 GBytes  9.53 Gbits/sec
+[ 60] 0.0000-10.0023 sec  11.1 GBytes  9.53 Gbits/sec
+[SUM] 0.0000-10.0042 sec   116 GBytes   100 Gbits/sec
