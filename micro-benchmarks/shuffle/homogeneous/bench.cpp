@@ -1,13 +1,13 @@
 #include "config.h"
+
 /* --------------------------------------- */
 int main(int argc, char* argv[])
 {
     gflags::ParseCommandLineFlags(&argc, &argv, true);
     /* --------------------------------------- */
-    auto subnet         = FLAGS_local ? defaults::LOCAL_subnet : defaults::AWS_subnet;
-    auto host_base      = FLAGS_local ? defaults::LOCAL_host_base : defaults::AWS_host_base;
-    auto local_node     = sys::Node{FLAGS_threads};
-    u16 node_id         = local_node.get_id();
+    adapt::Configuration config{FLAGS_config};
+    sys::Node node{FLAGS_threads};
+    u16 node_id         = node.get_id();
     /* --------------------------------------- */
     FLAGS_npages        = std::max(1u, FLAGS_npages);
     auto table          = Table{node_id};
@@ -34,139 +34,140 @@ int main(int argc, char* argv[])
     // create threads
     auto threads = std::vector<std::jthread>{};
     for (u16 thread_id : range(FLAGS_threads)) {
-        threads.emplace_back([=, &local_node, &current_swip, &swips, &table, &barrier_start, &barrier_end DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)] {
-            if (FLAGS_pin) {
-                local_node.pin_thread(thread_id);
-            }
-            /* --------------------------------------- */
-            // setup connections to each node, forming a logical clique topology
-            // note that connections need to be setup in a particular order to avoid deadlocks!
-            auto socket_fds = std::vector<int>{};
-            /* --------------------------------------- */
-            // accept from [0, node_id)
-            if (node_id) {
-                auto conn = Connection{node_id, FLAGS_threads, thread_id, node_id};
-                conn.setup_ingress();
-                socket_fds = std::move(conn.socket_file_descriptors);
-            }
-            /* --------------------------------------- */
-            // connect to [node_id + 1, FLAGS_nodes)
-            for (u16 peer : range(node_id + 1u, FLAGS_nodes)) {
-                auto destination_ip = std::string{subnet} + std::to_string(host_base + (FLAGS_local ? 0 : peer));
-                auto conn           = Connection{node_id, FLAGS_threads, thread_id, destination_ip, 1};
-                conn.setup_egress(peer);
-                socket_fds.emplace_back(conn.socket_file_descriptors[0]);
-            }
-            /* --------------------------------------- */
-            auto io_buffers = std::vector<PageTable>(defaults::local_io_depth);
-            DEBUGGING(u64 local_tuples_processed{0});
-            DEBUGGING(u64 local_tuples_sent{0});
-            DEBUGGING(u64 local_tuples_received{0});
-            /* --------------------------------------- */
-            auto recv_alloc               = BlockAlloc{npeers * 10, FLAGS_maxalloc};
-            auto manager_recv             = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            auto manager_send             = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
-            u32 peers_done                = 0;
-            /* --------------------------------------- */
-            auto ingress_page_consumer_fn = std::function{[&peers_done, &recv_alloc, &manager_recv](const PageResult* page, u32 dst) {
-                if (page->is_primary_bit_set()) {
-                    // recv sketch after last page
-                    peers_done++;
+        threads.emplace_back(
+            [=, &node, &current_swip, &swips, &table, &barrier_start, &barrier_end DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)]
+            {
+                if (FLAGS_pin) {
+                    node.pin_thread(thread_id);
                 }
-                else {
+                /* --------------------------------------- */
+                // setup connections to each node, forming a logical clique topology
+                // note that connections need to be setup in a particular order to avoid deadlocks!
+                auto socket_fds = std::vector<int>{};
+                /* --------------------------------------- */
+                // accept from [0, node_id)
+                if (node_id) {
+                    int port_base = std::stoi(config.get_worker_info(node_id).port);
+                    socket_fds    = Connection::setup_ingress(std::to_string(port_base + node_id * FLAGS_threads + thread_id), node_id);
+                }
+                /* --------------------------------------- */
+                // connect to [node_id + 1, FLAGS_nodes)
+                for (u16 peer : range(node_id + 1u, FLAGS_nodes)) {
+                    auto [ip, port_base] = config.get_worker_info(peer);
+                    auto port            = std::to_string(std::stoi(port_base) + peer * FLAGS_threads + thread_id);
+                    socket_fds.emplace_back(Connection::setup_egress(node_id, ip, port));
+                }
+                /* --------------------------------------- */
+                auto io_buffers = std::vector<PageTable>(defaults::local_io_depth);
+                DEBUGGING(u64 local_tuples_processed{0});
+                DEBUGGING(u64 local_tuples_sent{0});
+                DEBUGGING(u64 local_tuples_received{0});
+                /* --------------------------------------- */
+                auto recv_alloc               = BlockAlloc{npeers * 10, FLAGS_maxalloc};
+                auto manager_recv             = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+                auto manager_send             = EgressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
+                u32 peers_done                = 0;
+                /* --------------------------------------- */
+                auto ingress_page_consumer_fn = std::function{[&peers_done, &recv_alloc, &manager_recv](const PageResult* page, u32 dst)
+                                                              {
+                                                                  if (page->is_primary_bit_set()) {
+                                                                      // recv sketch after last page
+                                                                      peers_done++;
+                                                                  } else {
+                                                                      manager_recv.recv(dst, recv_alloc.get_object());
+                                                                  }
+                                                              }};
+                manager_recv.register_consumer_fn(ingress_page_consumer_fn);
+                /* --------------------------------------- */
+                // setup local uring manager
+                auto thread_io = IO_Manager{FLAGS_depthio, FLAGS_sqpoll};
+                if (not FLAGS_random and not FLAGS_path.empty()) {
+                    thread_io.register_files({table.get_file().get_file_descriptor()});
+                }
+                /* --------------------------------------- */
+                // dependency injection
+                u32 part_offset   = 0;
+                auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
+                for (u64 part_no : range(FLAGS_partitions)) {
+                    u16 dst                   = (part_no * FLAGS_nodes) / FLAGS_partitions;
+                    auto parts_per_dst        = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
+                    bool final_dst_partition  = ((part_no - part_offset + 1) % parts_per_dst) == 0;
+                    part_offset              += final_dst_partition ? parts_per_dst : 0;
+                    auto actual_dst           = dst - (dst > node_id);
+                    if (dst == node_id) {
+                        eviction_fns[part_no] = [](PageResult*, const bool) {};
+                    } else {
+                        eviction_fns[part_no] = [actual_dst, final_dst_partition, &manager_send](PageResult* page, const bool is_last = false)
+                        {
+                            if (not page->empty() or final_dst_partition) {
+                                page->retire();
+                                if (is_last and final_dst_partition) {
+                                    page->set_primary_bit();
+                                }
+                                manager_send.send(actual_dst, page);
+                            }
+                        };
+                    }
+                }
+                /* --------------------------------------- */
+                auto block_alloc                      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
+                auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
+                auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer};
+                /* --------------------------------------- */
+                std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_object(pg); };
+                manager_send.register_consumer_fn(egress_page_consumer_fn);
+                /* --------------------------------------- */
+                auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page)
+                {
+                    for (auto j{0u}; j < page.num_tuples; ++j) {
+                        inserter_loc.insert(page.get_tuple<TUPLE_IDXS>(j), page.get_tuple<KEY_IDXS>(j));
+                    }
+                    DEBUGGING(local_tuples_processed += page.num_tuples);
+                };
+                std::function process_local_page = insert_into_buffer;
+                /* --------------------------------------- */
+                // barrier
+                ::pthread_barrier_wait(&barrier_start);
+                for (u16 dst : range(npeers)) {
                     manager_recv.recv(dst, recv_alloc.get_object());
                 }
-            }};
-            manager_recv.register_consumer_fn(ingress_page_consumer_fn);
-            /* --------------------------------------- */
-            // setup local uring manager
-            auto thread_io = IO_Manager{FLAGS_depthio, FLAGS_sqpoll};
-            if (not FLAGS_random and not FLAGS_path.empty()) {
-                thread_io.register_files({table.get_file().get_file_descriptor()});
-            }
-            /* --------------------------------------- */
-            // dependency injection
-            u32 part_offset   = 0;
-            auto eviction_fns = std::vector<BufferLocal::EvictionFn>(FLAGS_partitions);
-            for (u64 part_no : range(FLAGS_partitions)) {
-                u16 dst                   = (part_no * FLAGS_nodes) / FLAGS_partitions;
-                auto parts_per_dst        = (FLAGS_partitions / FLAGS_nodes) + (dst < (FLAGS_partitions % FLAGS_nodes));
-                bool final_dst_partition  = ((part_no - part_offset + 1) % parts_per_dst) == 0;
-                part_offset              += final_dst_partition ? parts_per_dst : 0;
-                auto actual_dst           = dst - (dst > node_id);
-                if (dst == node_id) {
-                    eviction_fns[part_no] = [](PageResult*, const bool) {};
+                /* --------------------------------------- */
+                u64 morsel_begin, morsel_end;
+                auto nswips       = swips.size();
+                auto* swips_begin = swips.data();
+                while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
+                    morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
+                    // handle communication
+                    manager_send.try_drain_pending();
+                    if (peers_done < npeers) {
+                        manager_recv.consume_done();
+                    }
+                    // partition swips such that unswizzled swips are at the beginning of the morsel
+                    auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
+                    // submit io requests before processing in-memory pages to overlap I/O with computation
+                    thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
+                    while (swizzled_idx < morsel_end) {
+                        process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
+                    }
+                    while (thread_io.has_inflight_requests()) {
+                        process_local_page(*thread_io.get_next_page<PageTable>());
+                    }
                 }
-                else {
-                    eviction_fns[part_no] = [actual_dst, final_dst_partition, &manager_send](PageResult* page, const bool is_last = false) {
-                        if (not page->empty() or final_dst_partition) {
-                            page->retire();
-                            if (is_last and final_dst_partition) {
-                                page->set_primary_bit();
-                            }
-                            manager_send.send(actual_dst, page);
-                        }
-                    };
-                }
-            }
-            /* --------------------------------------- */
-            auto block_alloc                      = BlockAlloc{FLAGS_partitions * FLAGS_bump, FLAGS_maxalloc};
-            auto partition_buffer                 = BufferLocal{FLAGS_partitions, block_alloc, eviction_fns};
-            auto inserter_loc                     = InserterLocal{FLAGS_partitions, partition_buffer};
-            /* --------------------------------------- */
-            std::function egress_page_consumer_fn = [&block_alloc](PageResult* pg) -> void { block_alloc.return_object(pg); };
-            manager_send.register_consumer_fn(egress_page_consumer_fn);
-            /* --------------------------------------- */
-            auto insert_into_buffer = [&inserter_loc DEBUGGING(, &local_tuples_processed)](const PageTable& page) {
-                for (auto j{0u}; j < page.num_tuples; ++j) {
-                    inserter_loc.insert(page.get_tuple<TUPLE_IDXS>(j), page.get_tuple<KEY_IDXS>(j));
-                }
-                DEBUGGING(local_tuples_processed += page.num_tuples);
-            };
-            std::function process_local_page = insert_into_buffer;
-            /* --------------------------------------- */
-            // barrier
-            ::pthread_barrier_wait(&barrier_start);
-            for (u16 dst : range(npeers)) {
-                manager_recv.recv(dst, recv_alloc.get_object());
-            }
-            /* --------------------------------------- */
-            u64 morsel_begin, morsel_end;
-            auto nswips       = swips.size();
-            auto* swips_begin = swips.data();
-            while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
-                morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
-                // handle communication
-                manager_send.try_drain_pending();
-                if (peers_done < npeers) {
+                /* --------------------------------------- */
+                partition_buffer.finalize();
+                while (peers_done < npeers) {
                     manager_recv.consume_done();
+                    manager_send.try_drain_pending();
                 }
-                // partition swips such that unswizzled swips are at the beginning of the morsel
-                auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
-                // submit io requests before processing in-memory pages to overlap I/O with computation
-                thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
-                while (swizzled_idx < morsel_end) {
-                    process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
-                }
-                while (thread_io.has_inflight_requests()) {
-                    process_local_page(*thread_io.get_next_page<PageTable>());
-                }
-            }
-            /* --------------------------------------- */
-            partition_buffer.finalize();
-            while (peers_done < npeers) {
-                manager_recv.consume_done();
-                manager_send.try_drain_pending();
-            }
-            manager_send.wait_all();
-            // barrier
-            ::pthread_barrier_wait(&barrier_end);
-            /* --------------------------------------- */
-            DEBUGGING(tuples_sent += local_tuples_sent);
-            DEBUGGING(tuples_processed += local_tuples_processed);
-            DEBUGGING(tuples_received += local_tuples_received);
-            DEBUGGING(pages_recv += manager_recv.get_pages_recv());
-        });
+                manager_send.wait_all();
+                // barrier
+                ::pthread_barrier_wait(&barrier_end);
+                /* --------------------------------------- */
+                DEBUGGING(tuples_sent += local_tuples_sent);
+                DEBUGGING(tuples_processed += local_tuples_processed);
+                DEBUGGING(tuples_received += local_tuples_received);
+                DEBUGGING(pages_recv += manager_recv.get_pages_recv());
+            });
     }
     /* --------------------------------------- */
     Stopwatch swatch{};

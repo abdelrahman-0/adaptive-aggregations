@@ -2,6 +2,7 @@
 /* --------------------------------------- */
 #include <gflags/gflags.h>
 #include <thread>
+#include <utils/configuration.h>
 
 #include "bench/bench.h"
 #include "bench/common_flags.h"

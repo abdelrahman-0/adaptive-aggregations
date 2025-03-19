@@ -5,15 +5,18 @@
 #include <nlohmann/json.hpp>
 
 #include "bench/bench.h"
+#include "defaults.h"
 
 namespace adapt {
 
-struct NodeInfo {
+struct NodeInfo
+{
     std::string ip;
     std::string port;
 };
 
-class Configuration {
+class Configuration
+{
     nlohmann::json config;
 
   public:
@@ -28,14 +31,14 @@ class Configuration {
     }
 
     [[nodiscard]]
-    decltype(auto) get_coordinator_info() const
+    auto get_coordinator_info() const
     {
         auto info_json = config["coordinator"];
         return NodeInfo{info_json["ip"], info_json["port"]};
     }
 
     [[nodiscard]]
-    decltype(auto) get_worker_info(u16 worker_id) const
+    auto get_worker_info(u16 worker_id) const
     {
         auto info_json = config["workers"][worker_id];
         return NodeInfo{info_json["ip"], info_json["port"]};
