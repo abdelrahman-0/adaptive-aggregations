@@ -1,11 +1,10 @@
 #pragma once
 
-namespace adapt {
-namespace policy {
-
+namespace adapt::policy {
 enum PolicyType { STATIC, REGRESSION };
 
-struct Policy {
+struct Policy
+{
     PolicyType type;
     u32 time_out;
     u16 workers;
@@ -14,6 +13,4 @@ struct Policy {
     {
     }
 };
-
-} // namespace policy
-} // namespace adapt
+} // namespace adapt::policy
