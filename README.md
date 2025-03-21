@@ -1,7 +1,7 @@
 <div align="center">
 <h1> ⚡ Adaptive Aggregations </h1>
 
-<img src="dpe.png" alt="" width="250"/>
+<img src="dpe.png" alt="" width="350"/>
 
 <h6>
 This repo implements an aggregation operator capable of scaling out <i>on-the-fly</i>.
