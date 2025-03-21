@@ -1,7 +1,7 @@
 <div align="center">
 <h1> ⚡ Adaptive Aggregations </h1>
 
-<img src="pic.jpg" alt="" width="120"/>
+<img src="dpe.png" alt="" width="250"/>
 
 <h6>
 This repo implements an aggregation operator capable of scaling out <i>on-the-fly</i>.
@@ -36,10 +36,22 @@ make install
 
 ⚠️ Note that some libraries are installed from source and might overwrite local installations (e.g. <code>liburing</code>)
 
+After installing the dependencies, you build all 3 targets:
+using:
+```bash
+make all
+```
+or each target individually:
+```bash
+make shuffle
+make aggregation
+make adaptive
+```
+
 ---
 
 ### 🛠️ Usage
-
+HT + EC2 cluster/local + Entrypoint
 ```
 ```
 
