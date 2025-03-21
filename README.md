@@ -29,9 +29,12 @@ That is, as the query executes, the engine might scale out <i>mid-execution</i>.
 
 ### 🔧 Installation & Setup
 
+The repo's dependencies can be found in <code>install_deps.sh</code> and can be installed as follows: 
 ```bash
-
+make install
 ```
+
+⚠️ Note that some libraries are installed from source and might overwrite local installations (e.g. <code>liburing</code>)
 
 ---
 
