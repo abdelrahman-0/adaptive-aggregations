@@ -47,7 +47,7 @@ export NODE_ID=0
 ```
 
 Afterwards, a suitable configuration file must be set up to allow the nodes to communication with each other.
-Have a look at the <code>configs/</code> directory.
+Have a look at the <code>[configs/](https://github.com/abdelrahman-0/adaptive-aggregations/tree/master/configs)</code> directory.
 
 
 ---
