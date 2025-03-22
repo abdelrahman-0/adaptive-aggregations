@@ -141,6 +141,31 @@ This is necessary to avoid connection-deadlocks that arise when connecting nodes
 ---
 
 ### 🚩 Common Flags
+The following is a short list of command-line flags common between all targets:
+<br>
+<i>General Flags</i>
+<br>
+<code>--npages</code>: Number of 4kiB input pages to generate
+<br>
+<code>--groups</code>: Number of unique groups that the generated input should have
+<br>
+<code>--morselsz</code>: Number of input pages that represent 1 morsel
+<br>
+<code>--threads</code>: Number of threads to use (for homogeneous/local targets)
+<br>
+<code>--qthreads/--nthreads</code>: Number of query-procesing/networking threads to use (for heterogeneous targets)
+<br>
+<code>--partitions</code>: Number of partitions to use
+<br>
+<code>--pin</code>: Whether to pin threads or not (<code>--nopin</code>)
+<br>
+<code>--htfactor</code>: Growth factor for global hashtable
+<br>
+<i>Output Flags</i>
+<br>
+<code>--csv</code>: Whether to print CSV output or a human-readable columnar format (<code>--nocsv</code>)
+<br>
+<code>--print_header</code>: Whether to print CSV header row or not (<code>--noprint_header</code>). Only applicable when <code>--csv</code> is used. 
 
 
 ---
