@@ -5,13 +5,15 @@
 
 <h6>
 This repository contains the source code of my Master's Thesis titled:
-<div align="center">
-<i>"Efficient and Adaptive Aggregations For Cloud-Based Analytical Systems".</i>
-</div>
 </h6>
+<div align="center">
+<i>"Efficient and Adaptive Aggregations for Cloud-Based Analytical Systems".</i>
+</div>
 
+<h6>
 The core implementation is an aggregation operator capable of scaling out <i>on-the-fly</i>.
 That is, the query engine might scale out <i>mid-execution</i>.
+</h6>
 </div>
 
 ---
