@@ -11,7 +11,7 @@ This repository contains the source code of my Master's Thesis titled:
 </div>
 
 <h6>
-The core implementation is an aggregation operator capable of scaling out <i>on-the-fly</i>.
+The core implementation is an aggregation operator capable of scaling out <i>on-the-fly 🪽</i>.
 That is, the query engine might scale out <i>mid-execution</i>.
 </h6>
 </div>
@@ -145,7 +145,7 @@ The following is a short list of command-line flags common between all targets:
 <br>
 <i>General Flags</i>
 <br>
-<code>--npages</code>: Number of 4kiB input pages to generate
+<code>--npages</code>: Number of 4 KiB input pages to generate
 <br>
 <code>--groups</code>: Number of unique groups that the generated input should have
 <br>
@@ -171,5 +171,14 @@ The following is a short list of command-line flags common between all targets:
 ---
 
 ### ⚙️ Further Customization
+
+<i>Customize Hashtable</i>
+
+<i>Customize Input</i>
+
+<i>Customize Aggregation Query</i>
+<br>
+For the non-shuffle targets, the aggregation query can be customized.
+
 
 ---
