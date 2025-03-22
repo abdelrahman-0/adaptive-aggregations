@@ -4,9 +4,14 @@
 <img src="dpe.png" alt="" width="320"/>
 
 <h6>
-This repo implements an aggregation operator capable of scaling out <i>on-the-fly</i>.
-That is, as the query executes, the engine might scale out <i>mid-execution</i>.
+This repository contains the source code of my Master's Thesis titled:
+<div align="center">
+<i>"Efficient and Adaptive Aggregations For Cloud-Based Analytical Systems".</i>
+</div>
 </h6>
+
+The core implementation is an aggregation operator capable of scaling out <i>on-the-fly</i>.
+That is, the query engine might scale out <i>mid-execution</i>.
 </div>
 
 ---
