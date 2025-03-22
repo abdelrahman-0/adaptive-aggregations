@@ -1,7 +1,7 @@
 <div align="center">
 <h1> ⚡ Adaptive Aggregations </h1>
 
-<img src="dpe.png" alt="" width="350"/>
+<img src="dpe.png" alt="" width="320"/>
 
 <h6>
 This repo implements an aggregation operator capable of scaling out <i>on-the-fly</i>.
@@ -26,6 +26,23 @@ That is, as the query executes, the engine might scale out <i>mid-execution</i>.
 ```
 
 ---
+### 🏗️ Infrastructure
+
+The multi-node benchmarks in this repo can be run either on a single machine (e.g.: multiple terminals + loop-back interface) or in a distributed setting.
+An EC2 cluster in AWS can be setup using the following repo: [ec2-cluster](https://github.com/abdelrahman-0/ec2-cluster).  
+
+In what follows, we refer to a <b>node</b> as a terminal window (for both single/multiple machines).
+
+Each node should be assigned a serially-increasing <code>NODE_ID</code>, starting with id 0 for the first node, and so on:
+```bash
+export NODE_ID=0
+```
+
+Afterwards, a suitable configuration file must be set up to allow the nodes to communication with each other.
+Have a look at the <code>configs/</code> directory.
+
+
+---
 
 ### 🔧 Installation & Setup
 
@@ -34,10 +51,11 @@ The repo's dependencies can be found in <code>install_deps.sh</code> and can be 
 make install
 ```
 
-⚠️ Note that some libraries are installed from source and might overwrite local installations (e.g. <code>liburing</code>)
+⚠️ Note that some libraries are installed from source and might overwrite local installations (e.g. <code>liburing</code>).
 
-After installing the dependencies, you build all 3 targets:
-using:
+This repo contains <b>2 shuffle</b> µbenchmarks (homogeneous,heterogeneous), <b>3 aggregation</b> µbenchmarks (local,homogeneous,heterogeneous), and the final <b>adaptive</b> implementation (coordinator,worker).
+
+After installing the dependencies, you can build all targets using:
 ```bash
 make all
 ```
@@ -51,7 +69,75 @@ make adaptive
 ---
 
 ### 🛠️ Usage
-HT + EC2 cluster/local + Entrypoint
-```
+
+The following examples show how to run the different targets with their specific parameters:
+
+#### Shuffle
+
+<code>shuffle_homogeneous</code>:
+```bash
+cd build-release/micro-benchmarks/shuffle
+./shuffle_homogeneous --nodes=2 --config="../../../configs/local.json" --random --npages=100000 --groups=10 --partitions=64 --threads=8
 ```
 
+<code>shuffle_heterogeneous</code>:
+```bash
+cd build-release/micro-benchmarks/shuffle
+./shuffle_heterogeneous --nodes=4 --config="../../../configs/local.json" --random --npages=100000 --groups=10 --partitions=64 --nthreads=3 --qthreads=6
+```
+
+#### Aggregation (Single-Node)
+
+<code>aggregation_local</code>:
+```bash
+cd build-release/micro-benchmarks/aggregation
+./aggregation_local --random --npages=100000 --groups=10 --partitions=64 --threads=8
+```
+
+#### Aggregation (Multi-Node)
+
+<code>aggregation_homogeneous</code>:
+```bash
+cd build-release/micro-benchmarks/aggregation
+./aggregation_homogeneous --nodes=4 --config="../../../configs/local.json" --random --npages=100000 --groups=10 --partitions=64 --threads=8
+```
+
+<code>aggregation_heterogeneous</code>:
+```bash
+cd build-release/micro-benchmarks/aggregation
+./aggregation_heterogeneous --nodes=4 --config="../../../configs/local.json" --random --npages=100000 --groups=10 --partitions=64 --nthreads=3 --qthreads=6
+```
+
+#### Adaptive
+
+For the adaptive implementation, the coordinator node needs to be run first:
+```bash
+cd build-release/adaptive
+./coordinator --nodes=4 --config="../../configs/local.json" --npages=100000
+```
+and then the workers (launched in the order described below):
+```bash
+cd build-release/adaptive
+./worker --nodes=4 --config="../../configs/local.json" --npages=100000 --groups=100000 --threads=4 --policy="regression" --timeout=250
+```
+
+---
+
+⚠️ For all targets (except <code>aggregation_local</code>), the executables need to be launched on the nodes according to their <b>decreasing</b> <code>NODE_ID</code>.
+For instance, when running the <code>shuffle_homogeneous</code> target using a 4-node cluster, the target needs to be launched in the following order:
+<div align="center">
+<i>Launch <code>shuffle_homogeneous</code> on node 3, then node 2, then node 1, and finally node 0</i>.
+</div>
+
+This is necessary to avoid connection-deadlocks that arise when connecting nodes in a clique.
+
+---
+
+### 🚩 Common Flags
+
+
+---
+
+### ⚙️ Further Customization
+
+---
