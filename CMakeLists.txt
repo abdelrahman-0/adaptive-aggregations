@@ -38,4 +38,4 @@ add_compile_definitions(ENABLE_CART)
 #add_compile_definitions(ENABLE_PERFEVENT)
 
 add_subdirectory(micro-benchmarks)
-add_subdirectory(adaptive-aggregation)
+add_subdirectory(adaptive)
