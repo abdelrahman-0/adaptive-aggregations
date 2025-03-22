@@ -12,6 +12,7 @@ This repository contains the source code of my Master's Thesis titled:
 
 <h6>
 The core implementation is an aggregation operator capable of scaling out <i>on-the-fly 🪽</i>.
+<br>
 That is, the query engine might scale out <i>mid-execution</i>.
 </h6>
 </div>
