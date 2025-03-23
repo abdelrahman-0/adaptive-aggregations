@@ -168,18 +168,29 @@ The following is a short list of command-line flags common between all targets:
 <br>
 <code>--print_header</code>: Whether to print CSV header row or not (<code>--noprint_header</code>). Only applicable when <code>--csv</code> is used. 
 
+⚠️ Note that the query metrics are output to <code>stderr</code>; additional logging is output to <code>stdout</code> (pipe to <code>>/dev/null</code> to reduce clutter).
+
 
 ---
 
 ### ⚙️ Further Customization
 
-<i>Customize Hashtable</i>
+Each target mentioned in the above <b>Usage</b> section has its own <code>config.h</code> header file serving as an entry point for further customization.
 
-<i>Customize Input</i>
+<u><i>Customize Input</i>:</u>
+<br>
+The config header files contain a <code>TABLE_SCHEMA</code> macro definition that can be changed depending on the desired schema.
+Additional comments in the config file specify further input-related customization macros.
 
-<i>Customize Aggregation Query</i>
+<u><i>Customize Hashtable</i>:</u>
+<br>
+
+<u><i>Customize Aggregation Query</i>:</u>
 <br>
 For the non-shuffle targets, the aggregation query can be customized.
 
-
 ---
+
+### 📊 Results
+
+The results from the thesis can be found as CSV files in the <code>[analysis/](https://github.com/abdelrahman-0/adaptive-aggregations/tree/master/analysis)</code> directory.
