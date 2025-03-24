@@ -37,6 +37,7 @@ That is, the query engine might scale out <i>mid-execution</i>.
 ### 🏗️ Infrastructure
 
 The multi-node benchmarks in this repo can be run either on a single machine (e.g.: multiple terminals + loop-back interface) or in a distributed setting.
+<br>
 An EC2 cluster in AWS can be setup using the following repo: [ec2-cluster](https://github.com/abdelrahman-0/ec2-cluster).  
 
 In what follows, we refer to a <b>node</b> as a terminal window (for both single/multiple machines).
@@ -175,22 +176,25 @@ The following is a short list of command-line flags common between all targets:
 
 ### ⚙️ Further Customization
 
-Each target mentioned in the above <b>Usage</b> section has its own <code>config.h</code> header file serving as an entry point for further customization.
+Each target mentioned in the above <b>Usage</b> section has its own <code>definitions.h</code> header file serving as an entry point for further customization.
 
 <u><i>Customize Input</i>:</u>
 <br>
-The config header files contain a <code>TABLE_SCHEMA</code> macro definition that can be changed depending on the desired schema.
-Additional comments in the config file specify further input-related customization macros.
+The header files contain a <code>TABLE_SCHEMA</code> macro definition that can be changed depending on the desired schema.
+Additional comments in the definitions file specify further input-related customization macros.
+This includes changing the aggregation key/value columns.
 
 <u><i>Customize Hashtable</i>:</u>
 <br>
+The top-level [CMakeLists.txt](https://github.com/abdelrahman-0/adaptive-aggregations/blob/master/CMakeLists.txt#L32-L33) file contains two macros (<code>LOCAL_UNCHAINED_HT[16|32|64]</code> and <code>GLOBAL_UNCHAINED_HT</code>) that can be used to enable/disable unchained hashtables for both the local and global hashtables.
+When disabled, the implementation defaults to chaining hashtables.
 
 <u><i>Customize Aggregation Query</i>:</u>
 <br>
-For the non-shuffle targets, the aggregation query can be customized.
+For the non-shuffle targets, the aggregation query can be customized by changing the <code>fn_agg</code> and <code>fn_agg_concurrent</code> functions in the header files.
 
 ---
 
 ### 📊 Results
 
-The results from the thesis can be found as CSV files in the <code>[analysis/](https://github.com/abdelrahman-0/adaptive-aggregations/tree/master/analysis)</code> directory.
+The performance results from the thesis can be found as CSV files in the <code>[analysis/](https://github.com/abdelrahman-0/adaptive-aggregations/tree/master/analysis)</code> directory.
