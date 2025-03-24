@@ -1,1 +1,0 @@
-Global unified buffer

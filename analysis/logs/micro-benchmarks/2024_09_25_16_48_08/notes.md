@@ -1,2 +1,0 @@
-PG: cluster
-pin: float

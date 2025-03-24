@@ -1,1 +1,0 @@
-adaptive SF=100

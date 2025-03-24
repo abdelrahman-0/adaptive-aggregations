@@ -1,1 +1,0 @@
-node id,nodes,traffic,implementation,ht,network threads,query threads,partitions,slots,groups,total pages,local page size,tuples per local page,ht page size,tuples per ht page,morsel size,pin,cache (%),time (ms)

@@ -1,8 +1,0 @@
-node id,nodes,traffic,implementation,threads,page size,morsel size,cache (%),time (ms),tuple throughput (tuples/s),local throughput (Gb/s),network throughput (Gb/s)
-3,4,both,shuffle_homogeneous,1,131072,10,100,261,97642544,4.700388,14.073417
-3,4,both,shuffle_homogeneous,2,131072,10,100,181,140847055,6.779898,20.305298
-3,4,both,shuffle_homogeneous,4,131072,10,100,137,186119489,8.968865,26.842015
-3,4,both,shuffle_homogeneous,8,131072,10,100,62,411212870,19.817769,59.379844
-3,4,both,shuffle_homogeneous,16,131072,10,100,48,531441750,25.647104,77.070336
-3,4,both,shuffle_homogeneous,32,131072,10,100,58,439815827,21.164173,64.433187
-3,4,both,shuffle_homogeneous,64,131072,10,100,243,104941086,5.058948,15.629392
