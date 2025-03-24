@@ -169,7 +169,9 @@ The following is a short list of command-line flags common between all targets:
 <br>
 <code>--print_header</code>: Whether to print CSV header row or not (<code>--noprint_header</code>). Only applicable when <code>--csv</code> is used. 
 
-⚠️ Note that the query metrics are output to <code>stderr</code>; additional logging is output to <code>stdout</code> (pipe to <code>>/dev/null</code> to reduce clutter).
+⚠️ Note that the query metrics are output to <code>stderr</code>;
+<br>
+additional logging is output to <code>stdout</code> (pipe to <code>>/dev/null</code> to reduce clutter).
 
 
 ---
