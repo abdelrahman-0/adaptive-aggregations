@@ -29,8 +29,18 @@ if (NOT DEFINED NETWORK_PAGE_SIZE_POWER)
 endif ()
 add_compile_definitions(HT_PAGE_SIZE_POWER=${HT_PAGE_SIZE_POWER})
 add_compile_definitions(NETWORK_PAGE_SIZE_POWER=${NETWORK_PAGE_SIZE_POWER})
-add_compile_definitions(LOCAL_UNCHAINED_HT)
+
+################################################
+
+# Thread-Local Hashtable (enable at most 1 flag; if none are enabled a chaining hashtable will be used)
+add_compile_definitions(LOCAL_UNCHAINED_HT_16)
+#add_compile_definitions(LOCAL_UNCHAINED_HT_32)
+#add_compile_definitions(LOCAL_UNCHAINED_HT_64)
+
+# Global Hashtable (comment out the following line to use a global chaining hashtable)
 add_compile_definitions(GLOBAL_UNCHAINED_HT)
+
+################################################
 add_compile_definitions(ENABLE_PART_BLOCK)
 add_compile_definitions(ENABLE_RADIX)
 add_compile_definitions(ENABLE_PREAGG)
