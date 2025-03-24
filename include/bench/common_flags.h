@@ -2,7 +2,7 @@
 
 #include <gflags/gflags.h>
 
-DEFINE_bool(local, true, "run benchmark using loop-back interface");
+// DEFINE_bool(local, true, "run benchmark using loop-back interface");
 DEFINE_uint32(nodes, 1, "total number of num_nodes to use");
 DEFINE_uint32(depthio, 256, "submission queue size of storage uring");
 DEFINE_uint32(depthnw, 256, "submission queue size of network uring");

@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
     // prepare cache
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
     Cache<PageTable> cache{num_pages_cache};
-    table.populate_cache(cache, num_pages_cache, FLAGS_sequential_io);
+    table.populate_cache(cache, num_pages_cache);
     /* --------------------------------------- */
     FLAGS_partitions = next_power_2(FLAGS_partitions);
     FLAGS_slots      = next_power_2(FLAGS_slots);

@@ -22,7 +22,6 @@ DECLARE_string(path);
 static std::atomic<int> global_segment_id = 0;
 
 class Table {
-  private:
     std::vector<Swip> swips;
     File file;
 
@@ -70,7 +69,7 @@ class Table {
     }
 
     template <concepts::is_page CachePage>
-    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io)
+    void populate_cache(Cache<CachePage>& cache, u32 num_pages_cache, bool sequential_io = true)
     {
         std::vector<std::jthread> threads;
         if (FLAGS_random) {

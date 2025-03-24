@@ -291,8 +291,7 @@ int main(int argc, char* argv[])
             }
             else {
                 partition_buffer.finalize(false);
-                ++thread_grps[dedicated_network_thread].qthreads_added_last_page;
-                if (++thread_grps[dedicated_network_thread].qthreads_added_last_page != qthreads_per_nthread - 1) {
+                if (++thread_grps[dedicated_network_thread].qthreads_added_last_page == qthreads_per_nthread - 1) {
                     thread_grps[dedicated_network_thread].all_qthreads_added_last_page = true;
                     thread_grps[dedicated_network_thread].all_qthreads_added_last_page.notify_one();
                 }

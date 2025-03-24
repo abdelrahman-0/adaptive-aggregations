@@ -2,7 +2,7 @@ TARGET_PATH='../../build-release/micro-benchmarks/aggregation/aggregation_hetero
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --npages=1000000 --morselsz=10 --pin"
+FLAGS="--random --npages=100000 --morselsz=1000 --pin"
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do

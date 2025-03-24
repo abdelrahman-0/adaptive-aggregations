@@ -1,8 +1,8 @@
-TARGET_PATH='../../build-release/adaptive-aggregation/worker_homogeneous'
+TARGET_PATH='../../build-release/adaptive/worker'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../configs/config_aws_4_workers.json --policy=static --static_workers=4"
+FLAGS="--random --morselsz=1000 --pin --config=../../configs/config_aws_4_workers.json --policy=static --static_workers=4"
 PRINT_HEADER='--print_header'
 
 for TIMEOUT in 1000; do

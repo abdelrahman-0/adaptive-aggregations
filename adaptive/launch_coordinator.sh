@@ -1,4 +1,4 @@
-TARGET_PATH='../build-release/adaptive-aggregation/coordinator'
+TARGET_PATH='../build-release/adaptive/coordinator'
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4

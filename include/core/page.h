@@ -123,7 +123,7 @@ struct Page {
 static_assert(sizeof(Page<defaults::local_page_size, char>) == defaults::local_page_size);
 
 template <u64 page_size, typename Attribute, bool use_ptr = true>
-struct PageRowStore : public Page<page_size, Attribute> {
+struct PageRowStore : Page<page_size, Attribute> {
     using PageBase = Page<page_size, Attribute>;
     using PageBase::clear_tuples;
     using PageBase::columns;

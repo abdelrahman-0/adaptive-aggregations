@@ -23,9 +23,10 @@ using namespace std::chrono_literals;
 DEFINE_uint32(threads, 1, "number of threads to use");
 DEFINE_uint32(bump, 1, "bumping factor to use when allocating memory for partition pages");
 /* --------------------------------------- */
+// The table's schema. The first column needs to be a u64 and is populated with FLAGS_groups unique values.
 #define TABLE_SCHEMA u64, u64, u64, u64, double, double, double, double, char, char, s32, s32, s32, std::array<char, 25>, std::array<char, 10>, std::array<char, 44>
-#define KEY_IDXS 0
-#define TUPLE_IDXS 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
+#define KEY_IDXS 0 // index of partition key(s) from above TABLE_SCHEMA. Multiple keys can be passed as follows: 0,3,7
+#define TUPLE_IDXS 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 // index of result tuple's attributes from above TABLE_SCHEMA
 /* --------------------------------------- */
 using MemAlloc       = mem::JEMALLOCator<true>;
 using PageTable      = PageLocal<TABLE_SCHEMA>;

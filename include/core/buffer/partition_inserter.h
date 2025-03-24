@@ -18,7 +18,8 @@
 namespace buf {
 
 template <typename page_t, typename part_buf_t>
-struct PartitionedTupleInserter {
+struct PartitionedTupleInserter
+{
 
   private:
     part_buf_t& part_buffer;
@@ -58,9 +59,11 @@ struct PartitionedTupleInserter {
 };
 
 template <typename page_t, ht::IDX_MODE entry_mode, typename part_buf_t, concepts::is_sketch sketch_t, bool is_grouped>
-struct PartitionedAggregationInserter {
+struct PartitionedAggregationInserter
+{
     // partitions in the same group share the same sketch
-    struct PartitionGroup {
+    struct PartitionGroup
+    {
         sketch_t sketch;
     };
 
@@ -100,8 +103,7 @@ struct PartitionedAggregationInserter {
         }
         if constexpr (is_grouped) {
             group_data[part_no >> group_shift].sketch.update(key_hash);
-        }
-        else {
+        } else {
             group_data.sketch.update(key_hash);
         }
         return std::pair(part_page->emplace_back_grp(key, value), evicted);
@@ -116,12 +118,15 @@ struct PartitionedAggregationInserter {
             // evict if full
             part_page = part_buffer.evict(part_no, part_page);
             part_page->clear_tuples();
-            offset = reinterpret_cast<typename page_t::idx_t>(static_cast<u64>(EMPTY_OFFSET));
+            if constexpr (std::is_integral_v<decltype(EMPTY_OFFSET)>) {
+                offset = reinterpret_cast<typename page_t::idx_t>(static_cast<u64>(EMPTY_OFFSET));
+            } else {
+                offset = EMPTY_OFFSET;
+            }
         }
         if constexpr (is_grouped) {
             group_data[part_no >> group_shift].sketch.update(key_hash);
-        }
-        else {
+        } else {
             group_data.sketch.update(key_hash);
         }
         return std::pair(part_page->emplace_back_grp(key, value, offset), evicted);
@@ -135,8 +140,7 @@ struct PartitionedAggregationInserter {
         u64 part_no;
         if constexpr (single_part) {
             part_no = 0;
-        }
-        else {
+        } else {
             part_no = key_hash >> partition_shift;
         }
         auto* part_page = part_buffer.get_partition_page(part_no);

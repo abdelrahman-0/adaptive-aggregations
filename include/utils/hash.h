@@ -4,7 +4,7 @@
 #include <cstdint>
 #include <functional>
 
-inline uint64_t murmur_hash(std::integral auto k)
+uint64_t murmur_hash(std::integral auto k)
 {
     const uint64_t m = 0xc6a4a7935bd1e995ull;
     const int r = 47;
@@ -38,19 +38,18 @@ u64 hash_tuple(const std::array<Attribute, N>& tuple) noexcept
 
 template <typename T>
 requires requires(T t) { t.hash(); }
-inline u64 hash_key(T x)
+u64 hash_key(T x)
 {
     return x.hash();
 }
 
-template <typename T>
-inline u64 hash_key(T x)
+u64 hash_key(std::integral auto x)
 {
     return x;
 }
 
 template <typename T, typename... Args>
-inline u64 hash_key(T first, Args... args)
+u64 hash_key(T first, Args... args)
 {
     u64 acc = hash_key(args...);
     acc ^= (hash_key(first) + 0x517cc1b727220a95ul + (acc << 6) + (acc >> 2));
@@ -58,7 +57,7 @@ inline u64 hash_key(T first, Args... args)
 }
 
 template <u16 idx = 0, typename... Ts>
-inline u64 hash_tuple(const std::tuple<Ts...>& tup)
+u64 hash_tuple(const std::tuple<Ts...>& tup)
 {
     u64 acc;
     if constexpr (idx < sizeof...(Ts) - 1) {

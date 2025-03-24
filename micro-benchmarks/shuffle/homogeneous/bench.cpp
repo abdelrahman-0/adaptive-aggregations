@@ -1,4 +1,4 @@
-#include "config.h"
+#include "definitions.h"
 
 /* --------------------------------------- */
 int main(int argc, char* argv[])
@@ -10,7 +10,7 @@ int main(int argc, char* argv[])
     u16 node_id         = node.get_id();
     /* --------------------------------------- */
     FLAGS_npages        = std::max(1u, FLAGS_npages);
-    auto table          = Table{node_id};
+    auto table          = Table{FLAGS_npages / FLAGS_nodes};
     auto& swips         = table.get_swips();
     /* --------------------------------------- */
     u32 num_pages_cache = ((FLAGS_random ? 100 : FLAGS_cache) * swips.size()) / 100u;
@@ -27,15 +27,13 @@ int main(int argc, char* argv[])
     FLAGS_partitions  = next_power_2(FLAGS_partitions) * FLAGS_nodes;
     auto npeers       = u32{FLAGS_nodes - 1};
     DEBUGGING(auto tuples_processed = std::atomic{0ul});
-    DEBUGGING(auto tuples_sent = std::atomic{0ul});
-    DEBUGGING(auto tuples_received = std::atomic{0ul});
     DEBUGGING(auto pages_recv = std::atomic{0ul});
     /* --------------------------------------- */
     // create threads
     auto threads = std::vector<std::jthread>{};
     for (u16 thread_id : range(FLAGS_threads)) {
         threads.emplace_back(
-            [=, &node, &current_swip, &swips, &table, &barrier_start, &barrier_end DEBUGGING(, &tuples_processed, &tuples_sent, &tuples_received, &pages_recv)]
+            [=, &node, &current_swip, &swips, &table, &barrier_start, &barrier_end DEBUGGING(, &tuples_processed, &pages_recv)]
             {
                 if (FLAGS_pin) {
                     node.pin_thread(thread_id);
@@ -59,9 +57,7 @@ int main(int argc, char* argv[])
                 }
                 /* --------------------------------------- */
                 auto io_buffers = std::vector<PageTable>(defaults::local_io_depth);
-                DEBUGGING(u64 local_tuples_processed{0});
-                DEBUGGING(u64 local_tuples_sent{0});
-                DEBUGGING(u64 local_tuples_received{0});
+                u64 local_tuples_processed{0};
                 /* --------------------------------------- */
                 auto recv_alloc               = BlockAlloc{npeers * 10, FLAGS_maxalloc};
                 auto manager_recv             = IngressManager{npeers, FLAGS_depthnw, FLAGS_sqpoll, socket_fds};
@@ -133,8 +129,7 @@ int main(int argc, char* argv[])
                 }
                 /* --------------------------------------- */
                 u64 morsel_begin, morsel_end;
-                auto nswips       = swips.size();
-                auto* swips_begin = swips.data();
+                auto nswips = swips.size();
                 while ((morsel_begin = current_swip.fetch_add(FLAGS_morselsz)) < swips.size()) {
                     morsel_end = std::min(morsel_begin + FLAGS_morselsz, nswips);
                     // handle communication
@@ -142,15 +137,8 @@ int main(int argc, char* argv[])
                     if (peers_done < npeers) {
                         manager_recv.consume_done();
                     }
-                    // partition swips such that unswizzled swips are at the beginning of the morsel
-                    auto swizzled_idx = std::stable_partition(swips_begin + morsel_begin, swips_begin + morsel_end, [](const Swip& swip) { return !swip.is_pointer(); }) - swips_begin;
-                    // submit io requests before processing in-memory pages to overlap I/O with computation
-                    thread_io.batch_async_io<READ>(table.segment_id, std::span{swips_begin + morsel_begin, swips_begin + swizzled_idx}, io_buffers, true);
-                    while (swizzled_idx < morsel_end) {
-                        process_local_page(*swips[swizzled_idx++].get_pointer<PageTable>());
-                    }
-                    while (thread_io.has_inflight_requests()) {
-                        process_local_page(*thread_io.get_next_page<PageTable>());
+                    while (morsel_begin < morsel_end) {
+                        process_local_page(*swips[morsel_begin++].get_pointer<PageTable>());
                     }
                 }
                 /* --------------------------------------- */
@@ -163,9 +151,7 @@ int main(int argc, char* argv[])
                 // barrier
                 ::pthread_barrier_wait(&barrier_end);
                 /* --------------------------------------- */
-                DEBUGGING(tuples_sent += local_tuples_sent);
                 DEBUGGING(tuples_processed += local_tuples_processed);
-                DEBUGGING(tuples_received += local_tuples_received);
                 DEBUGGING(pages_recv += manager_recv.get_pages_recv());
             });
     }
@@ -178,9 +164,7 @@ int main(int argc, char* argv[])
     /* --------------------------------------- */
     ::pthread_barrier_destroy(&barrier_start);
     ::pthread_barrier_destroy(&barrier_end);
-    /* --------------------------------------- */
-    DEBUGGING(print("tuples received:", tuples_received.load()));                                                          //
-    DEBUGGING(print("tuples sent:", tuples_sent.load()));                                                                  //
+    /* --------------------------------------- */                                                            //
     DEBUGGING(u64 pages_local = (tuples_processed + PageTable::max_tuples_per_page - 1) / PageTable::max_tuples_per_page); //
     DEBUGGING(u64 local_sz = pages_local * defaults::local_page_size);                                                     //
     DEBUGGING(u64 recv_sz = pages_recv * defaults::network_page_size);                                                     //

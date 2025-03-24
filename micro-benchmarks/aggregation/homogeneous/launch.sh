@@ -2,8 +2,7 @@ TARGET_PATH='../../../build-release/micro-benchmarks/aggregation/aggregation_hom
 LOCAL_NODE_ID="${NODE_ID:-0}"
 
 MAX_NODES=4
-FLAGS="--nolocal --random --morselsz=1000 --pin --config=../../../configs/config_aws_4_workers.json"
-# --seed=${LOCAL_NODE_ID}
+FLAGS="--random --morselsz=1000 --pin --config=../../../configs/config_aws_4_workers.json"
 PRINT_HEADER='--print_header'
 
 for NODES in $(seq $MAX_NODES -1 $(($LOCAL_NODE_ID + 1))); do

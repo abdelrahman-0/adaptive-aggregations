@@ -13,8 +13,10 @@
 namespace mem {
 
 template <typename object_t, concepts::is_mem_allocator Alloc = JEMALLOCator<true>, bool is_concurrent = false>
-class BlockAllocator {
-    struct BlockAllocation {
+class BlockAllocator
+{
+    struct BlockAllocation
+    {
         u64 nobjects{0};
         std::conditional_t<is_concurrent, std::atomic<u64>, u64> used{0};
         object_t* ptr{nullptr}; // pointer bumping
@@ -28,8 +30,7 @@ class BlockAllocator {
             nobjects = other.nobjects;
             if constexpr (is_concurrent) {
                 used = other.used.load();
-            }
-            else {
+            } else {
                 used = other.used;
             }
             ptr = other.ptr;
@@ -85,7 +86,8 @@ class BlockAllocator {
 };
 
 template <typename object_t, concepts::is_mem_allocator Alloc>
-class BlockAllocatorNonConcurrent : public BlockAllocator<object_t, Alloc, false> {
+class BlockAllocatorNonConcurrent : public BlockAllocator<object_t, Alloc, false>
+{
     using base_t = BlockAllocator<object_t, Alloc, false>;
     using base_t::allocate;
     using base_t::allocation_budget;
@@ -129,7 +131,8 @@ class BlockAllocatorNonConcurrent : public BlockAllocator<object_t, Alloc, false
 };
 
 template <typename object_t, concepts::is_mem_allocator Alloc = MMapAllocator<true>>
-class BlockAllocatorConcurrent : public BlockAllocator<object_t, Alloc, true> {
+class BlockAllocatorConcurrent : public BlockAllocator<object_t, Alloc, true>
+{
     using base_t = BlockAllocator<object_t, Alloc, true>;
     using base_t::allocate;
     using base_t::allocation_budget;
@@ -147,6 +150,12 @@ class BlockAllocatorConcurrent : public BlockAllocator<object_t, Alloc, true> {
 
     BlockAllocatorConcurrent(u32 part_no, u32 block_sz, u64 max_allocations) : base_t(block_sz, max_allocations)
     {
+    }
+
+    [[nodiscard]]
+    object_t* get_object(u32)
+    {
+        return get_object();
     }
 
     [[nodiscard]]

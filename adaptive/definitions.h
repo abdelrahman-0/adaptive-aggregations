@@ -45,10 +45,31 @@ void fn_agg_concurrent(Aggregates& aggs_grp, const Aggregates& aggs_tup)
     __sync_fetch_and_add(&std::get<0>(aggs_grp), std::get<0>(aggs_tup));
 }
 /* --------------------------------------- */
-static constexpr ht::IDX_MODE idx_mode_slots   = ht::INDIRECT_16;
+#if defined(LOCAL_UNCHAINED_HT_16)
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_16;
+static constexpr bool is_ht_loc_salted       = false;
+#elif defined(LOCAL_UNCHAINED_HT_32)
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_32;
+static constexpr bool is_ht_loc_salted       = true;
+#elif defined(LOCAL_UNCHAINED_HT_64)
+static constexpr ht::IDX_MODE idx_mode_slots = ht::INDIRECT_64;
+static constexpr bool is_ht_loc_salted       = true;
+#else
+static constexpr ht::IDX_MODE idx_mode_slots = ht::DIRECT;
+static constexpr bool is_ht_loc_salted       = false;
+#endif
+// --------------------------------
+#if (defined(LOCAL_UNCHAINED_HT_16) or defined(LOCAL_UNCHAINED_HT_32) or defined(LOCAL_UNCHAINED_HT_64)) and defined(GLOBAL_UNCHAINED_HT)
 static constexpr ht::IDX_MODE idx_mode_entries = ht::NO_IDX;
-static constexpr bool is_ht_loc_salted         = false;
-static constexpr bool is_ht_glob_salted        = true;
+#else
+static constexpr ht::IDX_MODE idx_mode_entries = ht::DIRECT;
+#endif
+// --------------------------------
+#if defined(GLOBAL_UNCHAINED_HT)
+static constexpr bool is_ht_glob_salted = true;
+#else
+static constexpr bool is_ht_glob_salted = false;
+#endif
 /* --------------------------------------- */
 using MemAlloc                                 = mem::JEMALLOCator<true>;
 using Sketch                                   = ht::HLLSketch<true>;
@@ -62,7 +83,7 @@ using InserterLocal                            = buf::PartitionedAggregationInse
 using EgressManager                            = network::HomogeneousEgressNetworkManager<PageResult, Sketch>;
 using IngressManager                           = network::HomogeneousIngressNetworkManager<PageResult, Sketch>;
 /* --------------------------------------- */
-#if defined(LOCAL_UNCHAINED_HT)
+#if defined(LOCAL_UNCHAINED_HT_16) or defined(LOCAL_UNCHAINED_HT_32) or defined(LOCAL_UNCHAINED_HT_64)
 using HashtableLocal = ht::PartitionedOpenAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, BlockAlloc, Sketch, is_ht_loc_salted, true, false>;
 #else
 using HashtableLocal = ht::PartitionedChainedAggregationHashtable<Groups, Aggregates, idx_mode_entries, idx_mode_slots, fn_agg, MemAlloc, SketchLocal, true, false>;
